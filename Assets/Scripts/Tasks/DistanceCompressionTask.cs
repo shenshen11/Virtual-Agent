@@ -306,12 +306,18 @@ namespace VRPerception.Tasks
             catch { /* ignore */ }
         }
 
-        private static void Shuffle<T>(IList<T> list)
+        /// <summary>
+        /// 使用当前任务内的有种子随机源 _rand 对列表做 Fisher-Yates 洗牌。
+        /// 这样 trial 顺序完全由 BuildTrials(seed) 传入的 seed 决定，可复现。
+        /// </summary>
+        private void Shuffle<T>(IList<T> list)
         {
-            var rand = new System.Random();
+            if (list == null || list.Count <= 1) return;
+
+            // 确保 _rand 已经在 BuildTrials(seed) 中初始化
             for (int i = list.Count - 1; i > 0; i--)
             {
-                int j = rand.Next(i + 1);
+                int j = _rand.Next(i + 1);
                 (list[i], list[j]) = (list[j], list[i]);
             }
         }
