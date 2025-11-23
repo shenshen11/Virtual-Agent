@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d9226b6e9cc43a142a7a33d891354665, type: 3}
+  m_Name: TaskPlaylist
+  m_EditorClassIdentifier: 
+  playlistId: 147aa67f5d9c4d3b89d15b1dce1500f7
+  displayName: 
+  description: 
+  entries:
+  - taskId: distance_compression
+    legacyMode: 0
+    displayName: 
+    description: "\u8DDD\u79BB\u611F\u77E5\u4EFB\u52A1"
+    subjectMode: 1
+    randomSeed: 12345
+    maxTrials: 5
+    enableActionPlanLoop: 1
+    actionPlanLoopTimeoutMs: 20000
+    requireHumanInput: 1
+    scenePreset: 
+    preTaskMessage: "\u6B22\u8FCE\u53C2\u52A0\u8DDD\u79BB\u4F30\u8BA1\u4EFB\u52A1\uFF01\n\u8BF7\u4ED4\u7EC6\u89C2\u5BDF\u573A\u666F\u4E2D\u7684\u7269\u4F53\uFF0C\u5E76\u4F30\u8BA1\u60A8\u4E0E\u7269\u4F53\u4E4B\u95F4\u7684\u8DDD\u79BB\u3002"
+    postTaskMessage: "\u8DDD\u79BB\u4F30\u8BA1\u4EFB\u52A1\u5DF2\u5B8C\u6210"
+    restSeconds: 2
+    operatorNotes: 
+    humanInputPrompt: "\u8BF7\u8F93\u5165\u7269\u4F53\u7684\u8DDD\u79BB"
+  - taskId: semantic_size_bias
+    legacyMode: 1
+    displayName: 
+    description: "\u5927\u5C0F\u6BD4\u8F83\u4EFB\u52A1"
+    subjectMode: 1
+    randomSeed: 12345
+    maxTrials: 5
+    enableActionPlanLoop: 1
+    actionPlanLoopTimeoutMs: 20000
+    requireHumanInput: 1
+    scenePreset: 
+    preTaskMessage: "\u63A5\u4E0B\u6765\u662F\u5927\u5C0F\u6BD4\u8F83\u4EFB\u52A1\u3002\n\u8BF7\u9009\u62E9\u60A8\u8BA4\u4E3A\u66F4\u5927\u7684\u5BF9\u8C61\u3002"
+    postTaskMessage: "\u60A8\u5DF2\u5B8C\u6210\u6240\u6709\u4EFB\u52A1\uFF0C\u8C22\u8C22\u53C2\u4E0E"
+    restSeconds: -1
+    operatorNotes: 
+    humanInputPrompt: "\u8BF7\u9009\u62E9\u66F4\u5927\u7684\u4E00\u4E2A\u7269\u4F53"
+  defaultParticipantId: 
+  defaultRestSeconds: 0
+  defaultRandomSeed: 12345

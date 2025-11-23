@@ -1,0 +1,101 @@
+# === Unity 默认推荐忽略项（基于官方模板，略有扩展） ===
+
+# Unity 生成的库、缓存、临时文件
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+[Bb]uildPlayerData/
+
+# 资源包缓存（Addressables / StreamingAssets 等常见情况，可按需调整）
+[Aa]ssets/**/StreamingAssets/aa.meta
+[Aa]ssets/**/StreamingAssets/aa/*
+[Aa]ssets/**/AddressableAssetsData/*/*.bin*
+[Aa]ssets/**/AddressableAssetsData/*/*.buildlayout
+[Aa]ssets/**/AddressableAssetsData/*/*/catalog_*.json
+
+# 自动生成的代码或项目文件（可再按需调整）
+/*.csproj
+/*.sln
+/*.suo
+/*.tmp
+/*.user
+/*.userprefs
+/*.pidb
+/*.booproj
+/*.svd
+/*.pdb
+/*.mdb
+/*.opendb
+/*.VC.db
+
+# Rider / VS / VSCode 等 IDE 相关
+.vs/
+.idea/
+*.unityproj
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Rider 插件缓存
+*.csproj.DotSettings
+
+# 操作系统级忽略
+# Windows
+[Tt]humbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Linux
+*~
+.nfs*
+
+# 打包 / 导出文件
+*.apk
+*.aab
+*.xcodeproj/
+*.xcworkspace/
+*.xcuserstate
+*.ipa
+*.unitypackage
+
+# Unity 崩溃转储 / 性能分析等
+sysinfo.txt
+crashlytics-build.properties
+
+# 日志与其他临时文件
+*.log
+*.stacktrace
+*.playback
+*.pid
+
+# 本地用户设置
+UserSettings/
+*.local
+
+# ---- 项目特定可选忽略（结合你当前结构做了一点额外适配） ----
+
+# 研究与外部资料（如果你希望托管也可删除这些规则）
+external_research/steamvr_github.html
+
+# 临时锁文件（Unity 运行中产生）
+Temp/
+Temp.meta
