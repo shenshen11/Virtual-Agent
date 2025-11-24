@@ -62,6 +62,27 @@ namespace VRPerception.Tasks
             set => autoRun = value;
         }
 
+        /// <summary>
+        /// 当前用于 BuildTrials 的随机种子（可能由 Playlist/Orchestrator 覆写）。
+        /// </summary>
+        public int CurrentRandomSeed => randomSeed;
+
+        /// <summary>
+        /// 当前最大试次数（0 表示使用任务默认值）。
+        /// </summary>
+        public int CurrentMaxTrials => maxTrials;
+
+        /// <summary>
+        /// 当前配置的任务 ID（如有 Playlist/Orchestrator，则通常为其传入的 taskId）。
+        /// </summary>
+        public string CurrentConfiguredTaskId =>
+            !string.IsNullOrWhiteSpace(_overrideTaskId) ? _overrideTaskId : TaskModeToTaskId(taskMode);
+
+        /// <summary>
+        /// 当前配置的 TaskMode（用于调试与导出工具）。
+        /// </summary>
+        public TaskMode CurrentTaskMode => taskMode;
+
         public bool IsRunning => _runCts != null;
 
         private void Awake()

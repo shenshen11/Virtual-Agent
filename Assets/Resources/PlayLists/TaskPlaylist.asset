@@ -22,7 +22,7 @@ MonoBehaviour:
     description: "\u8DDD\u79BB\u611F\u77E5\u4EFB\u52A1"
     subjectMode: 1
     randomSeed: 12345
-    maxTrials: 30
+    maxTrials: 25
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
@@ -38,7 +38,7 @@ MonoBehaviour:
     description: "\u5927\u5C0F\u6BD4\u8F83\u4EFB\u52A1"
     subjectMode: 1
     randomSeed: 12345
-    maxTrials: 30
+    maxTrials: 25
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1

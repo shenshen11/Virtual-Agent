@@ -4439,6 +4439,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1119791763}
   - component: {fileID: 1119791762}
+  - component: {fileID: 1119791764}
   m_Layer: 0
   m_Name: Bridge
   m_TagString: Untagged
@@ -4467,6 +4468,7 @@ MonoBehaviour:
   allowKeyboardAInEditor: 1
   defaultDistanceMeters: 10
   defaultConfidence: 0.9
+  minTriggerIntervalSeconds: 1
 --- !u!4 &1119791763
 Transform:
   m_ObjectHideFlags: 0
@@ -4482,6 +4484,23 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1119791764
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1119791761}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 52bd87562410e3042bfe0be79fbd42a3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  taskId: distance_compression
+  seed: 12345
+  maxTrials: 0
+  outputDirectory: Docs\TrialPlan
+  fileNamePrefix: TrialPlan_
 --- !u!1 &1147251934
 GameObject:
   m_ObjectHideFlags: 0
@@ -6979,7 +6998,7 @@ MonoBehaviour:
   autoRun: 1
   taskMode: 0
   randomSeed: 12345
-  maxTrials: 0
+  maxTrials: 20
   enableActionPlanLoop: 1
   actionPlanLoopTimeoutMs: 20000
   humanInputTimeoutMs: 0

@@ -48,51 +48,97 @@ namespace VRPerception.Tasks
 
         public TrialSpec[] BuildTrials(int seed)
         {
+            // 使用 seed 只控制 trial 顺序，试次集合本身为固定的均衡设计
             _rand = new System.Random(seed);
 
             var envs = new[] { "open_field", "corridor" };
             var fovs = new[] { 50f, 60f, 90f };
             var kinds = new[] { "cube", "sphere", "human" };
-            var dists = new[] { 2f, 5f, 10f, 15f, 20f, 25f, 30f };
+            // 选择 5 个代表性距离，覆盖 2–30 m 区间
+            var dists = new[] { 2f, 5f, 10f, 20f, 30f };
             var textures = new[] { 0.5f, 1.0f, 1.5f };
             var lightings = new[] { "bright", "dim" };
 
-            var candidates = new List<TrialSpec>();
-
-            // 采样组合（避免全笛卡尔爆炸，随机挑选）
+            // 先构造 (env, fov, kind) 的所有组合
+            var triples = new List<(string env, float fov, string kind)>();
             foreach (var env in envs)
             {
                 foreach (var f in fovs)
                 {
                     foreach (var k in kinds)
                     {
-                        // 每种目标取若干距离
-                        for (int i = 0; i < 3; i++)
-                        {
-                            var dist = dists[_rand.Next(dists.Length)];
-                            var tex = textures[_rand.Next(textures.Length)];
-                            var light = lightings[_rand.Next(lightings.Length)];
-
-                            candidates.Add(new TrialSpec
-                            {
-                                taskId = TaskId,
-                                environment = env,
-                                fovDeg = f,
-                                targetKind = k,
-                                trueDistanceM = dist,
-                                textureDensity = tex,
-                                lighting = light,
-                                occlusion = false
-                            });
-                        }
+                        triples.Add((env, f, k));
                     }
                 }
             }
 
-            // 打乱并限制数量（例如 24 条）
+            var candidates = new List<TrialSpec>();
+
+            int textureIndex = 0;
+            int lightingIndex = 0;
+
+            // 第 1 轮：每个 (env, fov, kind) 组合分配一个最近距离 dists[0]
+            foreach (var t in triples)
+            {
+                var tex = textures[textureIndex % textures.Length];
+                var light = lightings[lightingIndex % lightings.Length];
+
+                candidates.Add(new TrialSpec
+                {
+                    taskId = TaskId,
+                    environment = t.env,
+                    fovDeg = t.fov,
+                    targetKind = t.kind,
+                    trueDistanceM = dists[0],
+                    textureDensity = tex,
+                    lighting = light,
+                    occlusion = false
+                });
+
+                textureIndex++;
+                lightingIndex++;
+            }
+
+            // 现在有 18 条；补充到 30 条：为部分组合分配第二个距离（从 dists[1..] 轮流取）
+            int targetCount = 30;
+            int remaining = targetCount - candidates.Count; // 12
+            int distanceIndex = 1; // 从第二个距离开始，避免与首轮重复
+            int tripleIndex = 0;
+
+            while (remaining > 0)
+            {
+                var t = triples[tripleIndex % triples.Count];
+                var tex = textures[textureIndex % textures.Length];
+                var light = lightings[lightingIndex % lightings.Length];
+
+                candidates.Add(new TrialSpec
+                {
+                    taskId = TaskId,
+                    environment = t.env,
+                    fovDeg = t.fov,
+                    targetKind = t.kind,
+                    trueDistanceM = dists[distanceIndex],
+                    textureDensity = tex,
+                    lighting = light,
+                    occlusion = false
+                });
+
+                textureIndex++;
+                lightingIndex++;
+                remaining--;
+
+                tripleIndex++;
+                distanceIndex++;
+                if (distanceIndex >= dists.Length)
+                {
+                    // 仅在 [1..dists.Length-1] 之间循环，避免重复使用 dists[0]
+                    distanceIndex = 1;
+                }
+            }
+
+            // 使用 seed 控制试次顺序，试次集合本身保持不变
             Shuffle(candidates);
-            var max = Mathf.Min(24, candidates.Count);
-            return candidates.GetRange(0, max).ToArray();
+            return candidates.ToArray();
         }
 
         public string GetSystemPrompt()

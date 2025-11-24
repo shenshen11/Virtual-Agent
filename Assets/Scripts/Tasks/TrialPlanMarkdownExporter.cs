@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using VRPerception.Orchestration;
 using VRPerception.Infra.EventBus;
 using VRPerception.Perception;
 
@@ -15,6 +16,29 @@ namespace VRPerception.Tasks
     /// </summary>
     public class TrialPlanMarkdownExporter : MonoBehaviour
     {
+        public enum ConfigSource
+        {
+            // 手动指定 taskId/seed/maxTrials（适合快速导出对比）
+            Manual,
+            // 从场景中的 TaskRunner 读取当前配置（taskId/seed/maxTrials）
+            FromTaskRunner,
+            // 从某个 TaskPlaylist 的条目读取配置（推荐在使用 Playlist/Orchestrator 做实验时使用）
+            FromPlaylistEntry
+        }
+
+        [Header("Config Source")]
+        [Tooltip("导出配置来源：手动 / TaskRunner / Playlist 条目")]
+        public ConfigSource configSource = ConfigSource.Manual;
+
+        [Tooltip("当选择 FromTaskRunner 时（可选）：显式指定 TaskRunner；为空则自动查找场景中第一个 TaskRunner")]
+        public TaskRunner taskRunnerOverride;
+
+        [Tooltip("当选择 FromPlaylistEntry 时：指定要导出的 TaskPlaylist 资产")]
+        public TaskPlaylist playlist;
+
+        [Tooltip("当选择 FromPlaylistEntry 时：要导出的条目索引（0-based）")]
+        public int playlistEntryIndex = 0;
+
         [Header("Task Config")]
         [Tooltip("任务标识，例如 distance_compression / semantic_size_bias")]
         public string taskId = "distance_compression";
@@ -38,21 +62,21 @@ namespace VRPerception.Tasks
         [ContextMenu("Export Trial Plan (Markdown)")]
         public void ExportTrialPlanMarkdown()
         {
-            if (string.IsNullOrWhiteSpace(taskId))
-            {
-                Debug.LogError("[TrialPlanMarkdownExporter] taskId is empty.");
+            // 记录“请求的”taskId 字符串，仅用于文档展示
+            var requestedTaskId = taskId;
+
+            if (!TryResolveConfig(out var resolvedTaskId, out var usedSeed, out var usedMaxTrials))
                 return;
-            }
 
             // 构造 TaskRunner 上下文，以便 TaskRegistry 中的任务可以访问必要引用
             var ctx = BuildContext();
 
-            if (!TaskRegistry.Instance.TryCreate(taskId, ctx, out var task))
+            if (!TaskRegistry.Instance.TryCreate(resolvedTaskId, ctx, out var task))
             {
                 // 尝试使用 TaskMode 的名称兼容（例如 DistanceCompression）
-                if (!TryCreateBuiltinTask(taskId, ctx, out task))
+                if (!TryCreateBuiltinTask(resolvedTaskId, ctx, out task))
                 {
-                    Debug.LogError($"[TrialPlanMarkdownExporter] Failed to create task for taskId='{taskId}'.");
+                    Debug.LogError($"[TrialPlanMarkdownExporter] Failed to create task for taskId='{resolvedTaskId}'.");
                     return;
                 }
             }
@@ -70,11 +94,11 @@ namespace VRPerception.Tasks
             TrialSpec[] trials;
             try
             {
-                trials = task.BuildTrials(seed) ?? Array.Empty<TrialSpec>();
+                trials = task.BuildTrials(usedSeed) ?? Array.Empty<TrialSpec>();
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[TrialPlanMarkdownExporter] BuildTrials(seed={seed}) failed: {ex.Message}");
+                Debug.LogError($"[TrialPlanMarkdownExporter] BuildTrials(seed={usedSeed}) failed: {ex.Message}");
                 return;
             }
 
@@ -89,18 +113,18 @@ namespace VRPerception.Tasks
                 }
             }
 
-            if (maxTrials > 0 && trials.Length > maxTrials)
+            if (usedMaxTrials > 0 && trials.Length > usedMaxTrials)
             {
-                Array.Resize(ref trials, maxTrials);
+                Array.Resize(ref trials, usedMaxTrials);
             }
 
             var scene = SceneManager.GetActiveScene();
 
-            var md = BuildMarkdown(task, trials, seed, scene);
+            var md = BuildMarkdown(task, trials, usedSeed, scene, requestedTaskId, resolvedTaskId);
 
             try
             {
-                var fullPath = WriteMarkdownToFile(task.TaskId, seed, md);
+                var fullPath = WriteMarkdownToFile(task.TaskId, usedSeed, md);
                 Debug.Log($"[TrialPlanMarkdownExporter] Exported {trials.Length} trials to: {fullPath}");
 
 #if UNITY_EDITOR
@@ -110,6 +134,83 @@ namespace VRPerception.Tasks
             catch (Exception ex)
             {
                 Debug.LogError($"[TrialPlanMarkdownExporter] Failed to write markdown file: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 根据配置来源解析最终用于导出的 taskId/seed/maxTrials。
+        /// - Manual: 使用本组件上的 taskId/seed/maxTrials 字段
+        /// - FromTaskRunner: 读取 TaskRunner 当前配置
+        /// - FromPlaylistEntry: 读取指定 TaskPlaylist 条目的配置
+        /// </summary>
+        private bool TryResolveConfig(out string resolvedTaskId, out int usedSeed, out int usedMaxTrials)
+        {
+            resolvedTaskId = taskId;
+            usedSeed = seed;
+            usedMaxTrials = maxTrials;
+
+            switch (configSource)
+            {
+                case ConfigSource.Manual:
+                    if (string.IsNullOrWhiteSpace(resolvedTaskId))
+                    {
+                        Debug.LogError("[TrialPlanMarkdownExporter] taskId is empty in Manual mode.");
+                        return false;
+                    }
+                    return true;
+
+                case ConfigSource.FromTaskRunner:
+                {
+                    var runner = taskRunnerOverride != null ? taskRunnerOverride : FindObjectOfType<TaskRunner>();
+                    if (runner == null)
+                    {
+                        Debug.LogError("[TrialPlanMarkdownExporter] No TaskRunner found in scene for FromTaskRunner mode.");
+                        return false;
+                    }
+
+                    resolvedTaskId = runner.CurrentConfiguredTaskId;
+                    usedSeed = runner.CurrentRandomSeed;
+                    usedMaxTrials = runner.CurrentMaxTrials;
+
+                    if (string.IsNullOrWhiteSpace(resolvedTaskId))
+                    {
+                        Debug.LogError("[TrialPlanMarkdownExporter] TaskRunner.CurrentConfiguredTaskId is empty.");
+                        return false;
+                    }
+
+                    return true;
+                }
+
+                case ConfigSource.FromPlaylistEntry:
+                {
+                    if (playlist == null)
+                    {
+                        Debug.LogError("[TrialPlanMarkdownExporter] Playlist is not assigned for FromPlaylistEntry mode.");
+                        return false;
+                    }
+
+                    if (!playlist.TryGetEntry(playlistEntryIndex, out var entry))
+                    {
+                        Debug.LogError($"[TrialPlanMarkdownExporter] Invalid playlistEntryIndex={playlistEntryIndex} for playlist '{playlist.name}'.");
+                        return false;
+                    }
+
+                    resolvedTaskId = entry.ResolveTaskId();
+                    usedSeed = entry.ResolveRandomSeed(playlist.DefaultRandomSeed);
+                    usedMaxTrials = entry.maxTrials;
+
+                    if (string.IsNullOrWhiteSpace(resolvedTaskId))
+                    {
+                        Debug.LogError("[TrialPlanMarkdownExporter] ResolvedTaskId from playlist entry is empty.");
+                        return false;
+                    }
+
+                    return true;
+                }
+
+                default:
+                    Debug.LogError($"[TrialPlanMarkdownExporter] Unknown ConfigSource: {configSource}");
+                    return false;
             }
         }
 
@@ -160,7 +261,7 @@ namespace VRPerception.Tasks
             return false;
         }
 
-        private string BuildMarkdown(ITask task, TrialSpec[] trials, int usedSeed, Scene scene)
+        private string BuildMarkdown(ITask task, TrialSpec[] trials, int usedSeed, Scene scene, string requestedTaskId, string resolvedTaskId)
         {
             var sb = new StringBuilder(4096);
 
@@ -169,7 +270,8 @@ namespace VRPerception.Tasks
 
             sb.AppendLine("# Trial Plan");
             sb.AppendLine();
-            sb.AppendLine($"- Task: `{task.TaskId}` (requested: `{taskId}`)");
+            var requested = string.IsNullOrWhiteSpace(requestedTaskId) ? "(none)" : requestedTaskId;
+            sb.AppendLine($"- Task: `{task.TaskId}` (requested: `{requested}`, resolved: `{resolvedTaskId}`)");
             sb.AppendLine($"- Seed: `{usedSeed}`");
             sb.AppendLine($"- Scene: `{sceneName}`");
             sb.AppendLine($"- Scene Path: `{scenePath}`");
@@ -288,4 +390,3 @@ namespace VRPerception.Tasks
         }
     }
 }
-

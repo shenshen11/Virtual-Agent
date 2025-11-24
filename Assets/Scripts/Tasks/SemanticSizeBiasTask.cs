@@ -61,6 +61,7 @@ namespace VRPerception.Tasks
 
         public TrialSpec[] BuildTrials(int seed)
         {
+            // 使用 seed 仅控制 trial 顺序，试次集合本身为固定的均衡设计
             _rand = new System.Random(seed);
 
             var pairs = new (string A, string B)[] {
@@ -68,18 +69,21 @@ namespace VRPerception.Tasks
                 ("toy_car","apple"),
                 ("cube","sphere")
             };
-            var relations = new[] { "equal", "reversed" };
             var bgs = new[] { "none", "indoor", "street" };
 
             var trials = new List<TrialSpec>();
 
-            // 每个配对生成若干 trial
-            foreach (var p in pairs)
+            // 设计：每个物体对生成 10 个试次（5 个 equal, 5 个 reversed），共 30 条
+            for (int pairIndex = 0; pairIndex < pairs.Length; pairIndex++)
             {
-                for (int i = 0; i < 4; i++)
+                var p = pairs[pairIndex];
+
+                for (int i = 0; i < 10; i++)
                 {
-                    var relation = relations[_rand.Next(relations.Length)];
-                    var bg = bgs[_rand.Next(bgs.Length)];
+                    // 交替生成 equal / reversed（每个 pair 各 5 条）
+                    var relation = (i % 2 == 0) ? "equal" : "reversed";
+                    // 背景轮换分配，避免完全随机导致分布不均
+                    var bg = bgs[(pairIndex + i) % bgs.Length];
 
                     trials.Add(new TrialSpec
                     {
@@ -97,6 +101,8 @@ namespace VRPerception.Tasks
                 }
             }
 
+            // 使用 seed 控制试次顺序
+            Shuffle(trials);
             return trials.ToArray();
         }
 
@@ -192,6 +198,20 @@ namespace VRPerception.Tasks
         }
 
         // =============== Helpers ===============
+
+        /// <summary>
+        /// 使用当前任务内的有种子随机源 _rand 对列表做 Fisher-Yates 洗牌，保持顺序可复现。
+        /// </summary>
+        private void Shuffle<T>(IList<T> list)
+        {
+            if (list == null || list.Count <= 1) return;
+
+            for (int i = list.Count - 1; i > 0; i--)
+            {
+                int j = _rand.Next(i + 1);
+                (list[i], list[j]) = (list[j], list[i]);
+            }
+        }
 
         private void TryBindHelpers(TaskRunnerContext ctx)
         {
