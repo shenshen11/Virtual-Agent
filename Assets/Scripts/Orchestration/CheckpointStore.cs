@@ -140,8 +140,6 @@ namespace VRPerception.Orchestration
         private class TaskRunnerSnapshotDTO
         {
             public string taskId;
-            public int legacyMode;
-            public bool legacyModeHasValue;
             public int subjectMode;
             public bool subjectModeHasValue;
             public bool forceHumanInput;
@@ -186,8 +184,6 @@ namespace VRPerception.Orchestration
                 runner = new TaskRunnerSnapshotDTO
                 {
                     taskId = src.runner?.taskId,
-                    legacyMode = src.runner?.legacyMode.HasValue == true ? (int)src.runner.legacyMode.Value : 0,
-                    legacyModeHasValue = src.runner?.legacyMode.HasValue == true,
                     subjectMode = src.runner?.subjectMode.HasValue == true ? (int)src.runner.subjectMode.Value : 0,
                     subjectModeHasValue = src.runner?.subjectMode.HasValue == true,
                     forceHumanInput = src.runner?.forceHumanInput ?? false,
@@ -220,7 +216,6 @@ namespace VRPerception.Orchestration
                 runner = new TaskRunnerSnapshot
                 {
                     taskId = dto.runner?.taskId,
-                    legacyMode = (dto.runner != null && dto.runner.legacyModeHasValue) ? (TaskMode?)dto.runner.legacyMode : null,
                     subjectMode = (dto.runner != null && dto.runner.subjectModeHasValue) ? (SubjectMode?)dto.runner.subjectMode : null,
                     forceHumanInput = dto.runner?.forceHumanInput ?? false,
                     randomSeed = dto.runner?.randomSeed ?? 0,

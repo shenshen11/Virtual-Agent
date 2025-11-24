@@ -60,11 +60,22 @@ namespace VRPerception.Tasks
         public string targetKind;         // "cube"|"sphere"|"human"
         public float trueDistanceM;       // 真值（米）
 
+        // Relative Depth Ordering 字段
+        public float depthA;              // 对象 A 距离（米）
+        public float depthB;              // 对象 B 距离（米）
+        public float scaleA = 1f;         // 对象 A 缩放（统一比例）
+        public float scaleB = 1f;         // 对象 B 缩放（统一比例）
+        public string trueCloser;         // 真值：更近者 "A"|"B"
+
         // Semantic Size Bias 可能用到
         public string objectA;
         public string objectB;
         public string sizeRelation;       // "equal"|"reversed"
         public string background;         // "none"|"indoor"|"street"
+
+        // Change Detection 可能用到
+        public bool changed;              // 场景是否发生变化（A->B）
+        public string changeCategory;     // "appearance"|"disappearance"|"movement"|"replacement"|"none"
     }
 
     /// <summary>
@@ -87,9 +98,19 @@ namespace VRPerception.Tasks
         public float absError;
         public float relError;
 
-        // Size Bias 指标
+        // Size Bias / 二选一 A/B 任务指标
         public string predictedLarger; // "A"|"B"
         public bool isCorrect;
+
+        // Relative Depth Ordering 指标（更近者 A/B）
+        public string predictedCloser; // "A"|"B"
+        public string trueCloser;      // "A"|"B"
+
+        // Change Detection 指标
+        public bool predictedChanged;
+        public bool trueChanged;
+        public string predictedChangeCategory;
+        public string trueChangeCategory;
 
         // 其他扩展指标（键值对）
         public string extraJson;

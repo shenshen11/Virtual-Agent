@@ -108,26 +108,14 @@ namespace VRPerception.Orchestration.Editor
                     menu.AddItem(new GUIContent($"From Registry/{id}"), false, () => AddEntry(entry =>
                     {
                         entry.FindPropertyRelative("taskId").stringValue = id;
-                        entry.FindPropertyRelative("legacyMode").enumValueIndex = (int)TaskMode.DistanceCompression;
                     }));
                 }
-            }
-
-            foreach (TaskMode mode in Enum.GetValues(typeof(TaskMode)))
-            {
-                var label = $"Legacy Mode/{mode}";
-                menu.AddItem(new GUIContent(label), false, () => AddEntry(entry =>
-                {
-                    entry.FindPropertyRelative("taskId").stringValue = string.Empty;
-                    entry.FindPropertyRelative("legacyMode").enumValueIndex = (int)mode;
-                }));
             }
 
             menu.AddSeparator(string.Empty);
             menu.AddItem(new GUIContent("Custom Entry"), false, () => AddEntry(entry =>
             {
                 entry.FindPropertyRelative("taskId").stringValue = string.Empty;
-                entry.FindPropertyRelative("legacyMode").enumValueIndex = (int)TaskMode.DistanceCompression;
             }));
 
             menu.DropDown(buttonRect);
@@ -159,7 +147,6 @@ namespace VRPerception.Orchestration.Editor
         private static void ResetEntry(SerializedProperty entry)
         {
             entry.FindPropertyRelative("taskId").stringValue = string.Empty;
-            entry.FindPropertyRelative("legacyMode").enumValueIndex = (int)TaskMode.DistanceCompression;
             entry.FindPropertyRelative("displayName").stringValue = string.Empty;
             entry.FindPropertyRelative("description").stringValue = string.Empty;
             entry.FindPropertyRelative("subjectMode").enumValueIndex = (int)SubjectMode.MLLM;

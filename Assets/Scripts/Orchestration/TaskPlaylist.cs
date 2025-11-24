@@ -112,13 +112,10 @@ namespace VRPerception.Orchestration
     [Serializable]
     public class TaskPlaylistEntry
     {
-        [Tooltip("TaskRegistry 注册的任务 ID，留空则使用 legacyMode 推导。")]
+        [Tooltip("TaskRegistry 注册的任务 ID，用于创建具体任务。")]
         public string taskId;
 
-        [Tooltip("向后兼容 TaskMode 枚举，当 taskId 为空时生效。")]
-        public TaskMode legacyMode = TaskMode.DistanceCompression;
-
-        [Tooltip("UI 展示名称，留空则使用 taskId/legacyMode。")]
+        [Tooltip("UI 展示名称，留空则使用 taskId。")]
         public string displayName;
 
         [Tooltip("对参与者/操作员的描述说明。")]
@@ -166,7 +163,7 @@ namespace VRPerception.Orchestration
         public string humanInputPrompt;
 
         /// <summary>
-        /// 解析最终任务 ID（taskId 优先，fallback legacyMode）。
+        /// 解析最终任务 ID。
         /// </summary>
         public string ResolveTaskId()
         {
@@ -175,12 +172,7 @@ namespace VRPerception.Orchestration
                 return taskId;
             }
 
-            return legacyMode switch
-            {
-                TaskMode.DistanceCompression => "distance_compression",
-                TaskMode.SemanticSizeBias => "semantic_size_bias",
-                _ => null
-            };
+            return null;
         }
 
         /// <summary>

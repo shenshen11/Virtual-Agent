@@ -23,6 +23,8 @@ namespace VRPerception.Tasks
             // 默认注册内置任务，确保旧任务在未显式注册时仍可创建
             TryRegisterInternal("distance_compression", ctx => new DistanceCompressionTask(ctx));
             TryRegisterInternal("semantic_size_bias", ctx => new SemanticSizeBiasTask(ctx));
+            TryRegisterInternal("relative_depth_order", ctx => new RelativeDepthOrderTask(ctx));
+            TryRegisterInternal("change_detection", ctx => new ChangeDetectionTask(ctx));
         }
 
         /// <summary>

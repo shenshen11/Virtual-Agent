@@ -18,7 +18,6 @@ namespace VRPerception.Tasks
         public class TaskRunConfig
         {
             public string taskId;
-            public TaskMode? legacyMode;
             public SubjectMode? subjectMode;
             public bool forceHumanInput;
             public int? randomSeed;
@@ -337,38 +336,29 @@ namespace VRPerception.Tasks
             }
 
             var resolvedTaskId = config.taskId;
-            TaskMode? modeToUse = config.legacyMode;
 
             if (!string.IsNullOrWhiteSpace(resolvedTaskId))
             {
+                _overrideTaskId = resolvedTaskId;
+
+                // 尝试同步 TaskMode 以便 UI / 导出工具展示（仅对已知任务生效）
                 if (string.Equals(resolvedTaskId, "distance_compression", StringComparison.OrdinalIgnoreCase))
                 {
-                    modeToUse ??= TaskMode.DistanceCompression;
+                    taskMode = TaskMode.DistanceCompression;
                 }
                 else if (string.Equals(resolvedTaskId, "semantic_size_bias", StringComparison.OrdinalIgnoreCase))
                 {
-                    modeToUse ??= TaskMode.SemanticSizeBias;
+                    taskMode = TaskMode.SemanticSizeBias;
                 }
                 else if (Enum.TryParse(resolvedTaskId, true, out TaskMode parsedMode))
                 {
-                    modeToUse ??= parsedMode;
+                    taskMode = parsedMode;
                 }
-
-                _overrideTaskId = resolvedTaskId;
             }
             else
             {
+                // 未传入 taskId 时，不修改当前 taskMode/_overrideTaskId，由场景内配置决定
                 _overrideTaskId = null;
-            }
-
-            if (modeToUse.HasValue)
-            {
-                taskMode = modeToUse.Value;
-
-                if (string.IsNullOrWhiteSpace(_overrideTaskId))
-                {
-                    _overrideTaskId = TaskModeToTaskId(taskMode);
-                }
             }
         }
 

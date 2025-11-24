@@ -375,6 +375,8 @@ namespace VRPerception.Perception
             {
                 "distance_compression" => PromptTemplates.BuildDistanceCompressionPrompt("unknown", 0f, "open_field"),
                 "semantic_size_bias" => PromptTemplates.BuildSemanticSizeBiasPrompt("A", "B", "equal", "none"),
+                "relative_depth_order" => PromptTemplates.BuildRelativeDepthOrderPrompt("none", "equal", false, 60f),
+                "change_detection" => PromptTemplates.BuildChangeDetectionPrompt("none", 60f),
                 _ => "Analyze the image and respond with appropriate JSON."
             };
         }
@@ -389,6 +391,8 @@ namespace VRPerception.Perception
             {
                 "distance_compression" => PromptTemplates.GetToolsForDistanceCompression(),
                 "semantic_size_bias" => PromptTemplates.GetToolsForSemanticSizeBias(),
+                "relative_depth_order" => PromptTemplates.GetToolsForRelativeDepthOrder(),
+                "change_detection" => PromptTemplates.GetToolsForChangeDetection(),
                 _ => null
             };
         }

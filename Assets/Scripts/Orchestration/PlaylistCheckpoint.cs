@@ -11,7 +11,6 @@ namespace VRPerception.Orchestration
     public sealed class TaskRunnerSnapshot
     {
         public string taskId;
-        public TaskMode? legacyMode;
         public SubjectMode? subjectMode;
         public bool forceHumanInput;
         public int randomSeed;

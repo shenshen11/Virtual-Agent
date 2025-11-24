@@ -322,7 +322,6 @@ namespace VRPerception.Orchestration
             var config = new TaskRunner.TaskRunConfig
             {
                 taskId = entry.ResolveTaskId(),
-                legacyMode = entry.legacyMode,
                 subjectMode = entry.subjectMode,
                 forceHumanInput = entry.requireHumanInput,
                 randomSeed = entry.ResolveRandomSeed(_currentPlaylist.DefaultRandomSeed),
@@ -389,7 +388,6 @@ namespace VRPerception.Orchestration
                 runner = new TaskRunnerSnapshot
                 {
                     taskId = _lastRunConfig?.taskId,
-                    legacyMode = _lastRunConfig?.legacyMode,
                     subjectMode = _lastRunConfig?.subjectMode,
                     forceHumanInput = _lastRunConfig?.forceHumanInput ?? false,
                     randomSeed = _lastRunConfig?.randomSeed ?? 0,
