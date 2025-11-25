@@ -17,12 +17,11 @@ MonoBehaviour:
   description: 
   entries:
   - taskId: distance_compression
-    legacyMode: 0
     displayName: 
     description: "\u8DDD\u79BB\u611F\u77E5\u4EFB\u52A1"
     subjectMode: 1
     randomSeed: 12345
-    maxTrials: 25
+    maxTrials: 15
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
@@ -33,7 +32,6 @@ MonoBehaviour:
     operatorNotes: 
     humanInputPrompt: "\u8BF7\u8F93\u5165\u7269\u4F53\u7684\u8DDD\u79BB"
   - taskId: semantic_size_bias
-    legacyMode: 1
     displayName: 
     description: "\u5927\u5C0F\u6BD4\u8F83\u4EFB\u52A1"
     subjectMode: 1
@@ -48,6 +46,36 @@ MonoBehaviour:
     restSeconds: -1
     operatorNotes: 
     humanInputPrompt: "\u8BF7\u9009\u62E9\u66F4\u5927\u7684\u4E00\u4E2A\u7269\u4F53"
+  - taskId: relative_depth_order
+    displayName: 
+    description: 
+    subjectMode: 1
+    randomSeed: 12345
+    maxTrials: 15
+    enableActionPlanLoop: 1
+    actionPlanLoopTimeoutMs: 20000
+    requireHumanInput: 0
+    scenePreset: 
+    preTaskMessage: 
+    postTaskMessage: 
+    restSeconds: -1
+    operatorNotes: 
+    humanInputPrompt: 
+  - taskId: change_detection
+    displayName: 
+    description: 
+    subjectMode: 1
+    randomSeed: 12345
+    maxTrials: 15
+    enableActionPlanLoop: 1
+    actionPlanLoopTimeoutMs: 20000
+    requireHumanInput: 0
+    scenePreset: 
+    preTaskMessage: 
+    postTaskMessage: 
+    restSeconds: -1
+    operatorNotes: 
+    humanInputPrompt: 
   defaultParticipantId: 
   defaultRestSeconds: 0
   defaultRandomSeed: 12345
