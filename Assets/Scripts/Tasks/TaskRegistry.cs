@@ -25,6 +25,8 @@ namespace VRPerception.Tasks
             TryRegisterInternal("semantic_size_bias", ctx => new SemanticSizeBiasTask(ctx));
             TryRegisterInternal("relative_depth_order", ctx => new RelativeDepthOrderTask(ctx));
             TryRegisterInternal("change_detection", ctx => new ChangeDetectionTask(ctx));
+            TryRegisterInternal("occlusion_reasoning", ctx => new OcclusionReasoningTask(ctx));
+            TryRegisterInternal("color_constancy", ctx => new ColorConstancyTask(ctx));
         }
 
         /// <summary>

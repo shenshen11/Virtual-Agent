@@ -5,6 +5,7 @@ using System.Linq;
 using UnityEngine;
 using VRPerception.Infra.EventBus;
 using VRPerception.Perception;
+using VRPerception.Tasks;
 
 namespace VRPerception.AvatarAction
 {
@@ -508,8 +509,45 @@ namespace VRPerception.AvatarAction
         }
         
         // 其他命令的实现方法...
-        private IEnumerator ExecuteSetTextureDensity(ActionCommand cmd) { yield return null; }
-        private IEnumerator ExecuteSetLighting(ActionCommand cmd) { yield return null; }
+
+        private IEnumerator ExecuteSetTextureDensity(ActionCommand cmd)
+        {
+            var parameters = JsonUtility.FromJson<SetTextureDensityParams>(JsonUtility.ToJson(cmd.parameters));
+            float scale = Mathf.Max(0.1f, parameters.scale);
+
+            var sceneManager = FindObjectOfType<ExperimentSceneManager>();
+            if (sceneManager != null)
+            {
+                sceneManager.SetTextureDensity(scale);
+                Debug.Log($"[ActionExecutor] Set texture density to {scale}");
+            }
+            else
+            {
+                Debug.LogWarning("[ActionExecutor] No ExperimentSceneManager found for set_texture_density");
+            }
+
+            yield return null;
+        }
+
+        private IEnumerator ExecuteSetLighting(ActionCommand cmd)
+        {
+            var parameters = JsonUtility.FromJson<SetLightingParams>(JsonUtility.ToJson(cmd.parameters));
+            var preset = string.IsNullOrEmpty(parameters.preset) ? "default" : parameters.preset;
+
+            var sceneManager = FindObjectOfType<ExperimentSceneManager>();
+            if (sceneManager != null)
+            {
+                sceneManager.SetLighting(preset);
+                Debug.Log($"[ActionExecutor] Set lighting preset to '{preset}'");
+            }
+            else
+            {
+                Debug.LogWarning("[ActionExecutor] No ExperimentSceneManager found for set_lighting");
+            }
+
+            yield return null;
+        }
+
         private IEnumerator ExecutePlaceObject(ActionCommand cmd) { yield return null; }
         private IEnumerator ExecuteFocusTarget(ActionCommand cmd) { yield return null; }
         
@@ -751,4 +789,6 @@ namespace VRPerception.AvatarAction
     [Serializable] public class StrafeParams { public float meters; public string direction; public float speed; }
     [Serializable] public class TurnYawParams { public float deg; public float speed; }
     [Serializable] public class SnapshotParams { public string label; }
+    [Serializable] public class SetTextureDensityParams { public float scale; }
+    [Serializable] public class SetLightingParams { public string preset; }
 }

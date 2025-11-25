@@ -76,6 +76,21 @@ namespace VRPerception.Tasks
         // Change Detection 可能用到
         public bool changed;              // 场景是否发生变化（A->B）
         public string changeCategory;     // "appearance"|"disappearance"|"movement"|"replacement"|"none"
+
+        // Occlusion Reasoning & Counting 可能用到
+        public float occlusionRatio;      // 遮挡率（0..0.8）
+        public string occluderType;       // 遮挡体类型："wall"|"plant"|"human"
+        public string targetCategory;     // 目标类别（与 targetKind/objectA/B 语义靠近）
+        public bool targetPresent;        // 真值：视野内是否存在至少一个目标
+        public int trueCount;             // 真值：可见目标数量（>=0）
+
+        // Color Constancy 可能用到
+        public string colorName;          // 真值：表面颜色类别（如 "red"|"green"|"blue"|"yellow"|"white"|"gray"）
+        public int trueR;                 // 真值：RGB 0-255
+        public int trueG;
+        public int trueB;
+        public string material;           // 目标材质标签（如 "matte"|"glossy"），目前仅用于日志
+        public bool hasShadow;            // 是否存在明显阴影
     }
 
     /// <summary>
@@ -111,6 +126,14 @@ namespace VRPerception.Tasks
         public bool trueChanged;
         public string predictedChangeCategory;
         public string trueChangeCategory;
+
+        // Occlusion Reasoning & Counting 指标
+        public bool predictedPresent;
+        public bool truePresent;
+        public int predictedCount;
+        public int trueCount;
+        public float countAbsError;
+        public float countRelError;
 
         // 其他扩展指标（键值对）
         public string extraJson;

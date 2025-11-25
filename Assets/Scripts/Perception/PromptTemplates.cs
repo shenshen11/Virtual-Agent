@@ -25,6 +25,10 @@ namespace VRPerception.Perception
                     return RelativeDepthOrderSystem();
                 case "change_detection":
                     return ChangeDetectionSystem();
+                case "occlusion_reasoning":
+                    return OcclusionReasoningSystem();
+                case "color_constancy":
+                    return ColorConstancySystem();
                 default:
                     return GenericSystem();
             }
@@ -77,6 +81,27 @@ namespace VRPerception.Perception
                    "Do NOT output any extra text.";
         }
 
+        private static string OcclusionReasoningSystem()
+        {
+            return "You are a vision agent for Occlusion Reasoning & Counting. ONLY output JSON. " +
+                   "Your goal is to decide whether target objects of a specified category are present in the view under partial occlusion, " +
+                   "and, if present, estimate how many are visible. " +
+                   "Inference format: {\"type\":\"inference\",\"taskId\":\"occlusion_reasoning\",\"trialId\":<int>," +
+                   "\"answer\":{\"present\":true|false,\"count\":<int>},\"confidence\":<0..1>} " +
+                   "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with the provided tools. " +
+                   "Do NOT output any extra text.";
+        }
+
+        private static string ColorConstancySystem()
+        {
+            return "You are a vision agent for Color Constancy. ONLY output JSON. " +
+                   "Your goal is to infer the perceived surface color of the main target object, discounting lighting color and brightness. " +
+                   "Inference format: {\"type\":\"inference\",\"taskId\":\"color_constancy\",\"trialId\":<int>," +
+                   "\"answer\":{\"color_name\":\"red|green|blue|yellow|white|gray\",\"rgb\":[R,G,B]},\"confidence\":<0..1>} " +
+                   "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with the provided tools. " +
+                   "Do NOT output any extra text.";
+        }
+
         // ============ Task Prompts ============
 
         public static string BuildDistanceCompressionPrompt(string targetKind, float fovDeg, string environment)
@@ -124,6 +149,50 @@ namespace VRPerception.Perception
             sb.AppendLine("Possible change categories: 'none', 'appearance', 'disappearance', 'movement', 'replacement'.");
             sb.Append("Output ONLY JSON with fields: type=inference, answer.changed (true/false), ");
             sb.Append("answer.category ('none'|'appearance'|'disappearance'|'movement'|'replacement'), confidence (0..1).");
+            return sb.ToString();
+        }
+
+        public static string BuildOcclusionReasoningPrompt(string targetCategory, string occluderType, float occlusionRatio, string background, float fovDeg)
+        {
+            var bg = string.IsNullOrEmpty(background) ? "none" : background;
+            var rawOcc = string.IsNullOrEmpty(occluderType) ? "wall" : occluderType;
+            var occLower = rawOcc.ToLowerInvariant();
+            var occLabel =
+                occLower.Contains("plant") ? "plant" :
+                occLower.Contains("pedestrian") ? "pedestrian" :
+                occLower.Contains("wall") ? "wall" :
+                occLower.Contains("fence") ? "fence" :
+                rawOcc;
+
+            var clampedRatio = Mathf.Clamp01(occlusionRatio);
+            var fov = fovDeg > 0 ? fovDeg : 60f;
+            var target = string.IsNullOrEmpty(targetCategory) ? "cube" : targetCategory;
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Task: Decide whether the target objects are present in the scene and estimate their visible count under partial occlusion.");
+            sb.AppendLine($"Target category: {target}.");
+            sb.AppendLine($"Scene conditions: background={bg}, occluder_type={occLabel}, occlusion_ratio≈{clampedRatio:0.00}, FOV={fov} deg.");
+            sb.AppendLine("If no target of the requested category is visible, set present=false and count=0.");
+            sb.Append("Output ONLY JSON with fields: type=inference, answer.present (true/false), answer.count (integer ≥0), confidence (0..1).");
+            return sb.ToString();
+        }
+
+        public static string BuildColorConstancyPrompt(string targetKind, string background, string lighting, string material, bool hasShadow, float fovDeg)
+        {
+            var kind = string.IsNullOrEmpty(targetKind) ? "color_patch" : targetKind;
+            var bg = string.IsNullOrEmpty(background) ? "none" : background;
+            var light = string.IsNullOrEmpty(lighting) ? "bright" : lighting;
+            var mat = string.IsNullOrEmpty(material) ? "matte" : material;
+            var shadow = hasShadow ? "with noticeable shadows" : "without strong shadows";
+            var fov = fovDeg > 0 ? fovDeg : 60f;
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Task: Estimate the perceived surface color of the main target patch/object while discounting lighting color and brightness.");
+            sb.AppendLine($"Target kind: {kind}.");
+            sb.AppendLine($"Scene conditions: background={bg}, lighting={light}, material={mat}, shadows={shadow}, FOV={fov} deg.");
+            sb.AppendLine("Focus on the inherent surface color (as a human would describe the object under neutral white light).");
+            sb.Append("Output ONLY JSON with fields: type=inference, answer.color_name (string, e.g. 'red','green','blue','yellow','white','gray'), ");
+            sb.Append("answer.rgb (array [R,G,B] with integer values 0-255), confidence (0..1).");
             return sb.ToString();
         }
 
@@ -179,6 +248,28 @@ namespace VRPerception.Perception
                 MakeTool("snapshot", "Request a frame capture.", new string[] { }),
                 MakeTool("head_look_at", "Look at a target by name or position.", new [] { "target" }),
                 MakeTool("focus_target", "Focus on a specific region or object.", new [] { "name" })
+            };
+        }
+
+        public static ToolSpec[] GetToolsForOcclusionReasoning()
+        {
+            return new[]
+            {
+                MakeTool("head_look_at", "Look at a target by name or position.", new [] { "target" }),
+                MakeTool("turn_yaw", "Turn yaw in degrees.", new [] { "deg" }),
+                MakeTool("snapshot", "Request a frame capture.", Array.Empty<string>()),
+                MakeTool("focus_target", "Focus on a target by name.", new [] { "name" })
+            };
+        }
+
+        public static ToolSpec[] GetToolsForColorConstancy()
+        {
+            return new[]
+            {
+                MakeTool("set_lighting", "Adjust global lighting preset for the scene.", new [] { "preset" }),
+                MakeTool("camera_set_fov", "Set camera field-of-view (degrees).", new [] { "fov_deg" }),
+                MakeTool("head_look_at", "Look at a target by name or position.", new [] { "target" }),
+                MakeTool("snapshot", "Request a frame capture.", Array.Empty<string>())
             };
         }
 
