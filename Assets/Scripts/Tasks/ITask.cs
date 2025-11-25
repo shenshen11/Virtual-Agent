@@ -91,6 +91,11 @@ namespace VRPerception.Tasks
         public int trueB;
         public string material;           // 目标材质标签（如 "matte"|"glossy"），目前仅用于日志
         public bool hasShadow;            // 是否存在明显阴影
+
+        // Material Perception 可能用到
+        public float objectYawDeg;        // 物体自身绕 Y 轴旋转（度）
+        public float lightYawDeg;         // 主光源方位（度）
+        public float lightPitchDeg;       // 主光源俯仰角（度）
     }
 
     /// <summary>

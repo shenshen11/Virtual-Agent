@@ -27,6 +27,7 @@ namespace VRPerception.Tasks
             TryRegisterInternal("change_detection", ctx => new ChangeDetectionTask(ctx));
             TryRegisterInternal("occlusion_reasoning", ctx => new OcclusionReasoningTask(ctx));
             TryRegisterInternal("color_constancy", ctx => new ColorConstancyTask(ctx));
+            TryRegisterInternal("material_perception", ctx => new MaterialPerceptionTask(ctx));
         }
 
         /// <summary>

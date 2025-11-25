@@ -29,6 +29,8 @@ namespace VRPerception.Perception
                     return OcclusionReasoningSystem();
                 case "color_constancy":
                     return ColorConstancySystem();
+                case "material_perception":
+                    return MaterialPerceptionSystem();
                 default:
                     return GenericSystem();
             }
@@ -98,6 +100,16 @@ namespace VRPerception.Perception
                    "Your goal is to infer the perceived surface color of the main target object, discounting lighting color and brightness. " +
                    "Inference format: {\"type\":\"inference\",\"taskId\":\"color_constancy\",\"trialId\":<int>," +
                    "\"answer\":{\"color_name\":\"red|green|blue|yellow|white|gray\",\"rgb\":[R,G,B]},\"confidence\":<0..1>} " +
+                   "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with the provided tools. " +
+                   "Do NOT output any extra text.";
+        }
+
+        private static string MaterialPerceptionSystem()
+        {
+            return "You are a vision agent for Material Perception. ONLY output JSON. " +
+                   "Your goal is to classify the dominant material of the main target object using cues such as specular highlights, reflections, and surface roughness. " +
+                   "Inference format: {\"type\":\"inference\",\"taskId\":\"material_perception\",\"trialId\":<int>," +
+                   "\"answer\":{\"material\":\"metal|glass|wood|plastic|fabric\"},\"confidence\":<0..1>} " +
                    "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with the provided tools. " +
                    "Do NOT output any extra text.";
         }
@@ -196,6 +208,21 @@ namespace VRPerception.Perception
             return sb.ToString();
         }
 
+        public static string BuildMaterialPerceptionPrompt(string targetKind, string background, string lighting, float yawDeg)
+        {
+            var kind = string.IsNullOrEmpty(targetKind) ? "object" : targetKind;
+            var bg = string.IsNullOrEmpty(background) ? "none" : background;
+            var light = string.IsNullOrEmpty(lighting) ? "bright" : lighting;
+            var yaw = Math.Abs(yawDeg) > 0.01f ? yawDeg : 0f;
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Task: Identify the dominant material of the target object.");
+            sb.AppendLine($"Target shape: {kind}. Scene background: {bg}. Lighting preset: {light}.");
+            sb.AppendLine($"Object is oriented at yaw ≈ {yaw:0} degrees to expose specular cues.");
+            sb.Append("Output ONLY JSON with fields: type=inference, answer.material ('metal'|'glass'|'wood'|'plastic'|'fabric'), confidence (0..1).");
+            return sb.ToString();
+        }
+
         // ============ Tool Specifications (for action_plan) ============
 
         // 注：ParameterSpec.PropertySpec 是占位结构，JsonUtility 对匿名结构支持有限；
@@ -268,6 +295,17 @@ namespace VRPerception.Perception
             {
                 MakeTool("set_lighting", "Adjust global lighting preset for the scene.", new [] { "preset" }),
                 MakeTool("camera_set_fov", "Set camera field-of-view (degrees).", new [] { "fov_deg" }),
+                MakeTool("head_look_at", "Look at a target by name or position.", new [] { "target" }),
+                MakeTool("snapshot", "Request a frame capture.", Array.Empty<string>())
+            };
+        }
+
+        public static ToolSpec[] GetToolsForMaterialPerception()
+        {
+            return new[]
+            {
+                MakeTool("set_lighting", "Adjust global lighting preset for the scene.", new [] { "preset" }),
+                MakeTool("turn_yaw", "Turn yaw in degrees to change specular highlights.", new [] { "deg" }),
                 MakeTool("head_look_at", "Look at a target by name or position.", new [] { "target" }),
                 MakeTool("snapshot", "Request a frame capture.", Array.Empty<string>())
             };
