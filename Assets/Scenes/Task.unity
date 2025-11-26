@@ -4508,7 +4508,7 @@ MonoBehaviour:
   configSource: 2
   taskRunnerOverride: {fileID: 1824977593}
   playlist: {fileID: 11400000, guid: 5747fed546c2f754780bc0e773e054b5, type: 2}
-  playlistEntryIndex: 3
+  playlistEntryIndex: 4
   taskId: distance_compression
   seed: 12345
   maxTrials: 0

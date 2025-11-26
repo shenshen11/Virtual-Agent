@@ -76,6 +76,36 @@ MonoBehaviour:
     restSeconds: -1
     operatorNotes: 
     humanInputPrompt: 
+  - taskId: occlusion_reasoning
+    displayName: 
+    description: 
+    subjectMode: 1
+    randomSeed: 12345
+    maxTrials: 25
+    enableActionPlanLoop: 1
+    actionPlanLoopTimeoutMs: 20000
+    requireHumanInput: 0
+    scenePreset: 
+    preTaskMessage: 
+    postTaskMessage: 
+    restSeconds: -1
+    operatorNotes: 
+    humanInputPrompt: 
+  - taskId: material_perception
+    displayName: 
+    description: 
+    subjectMode: 1
+    randomSeed: 12345
+    maxTrials: 20
+    enableActionPlanLoop: 1
+    actionPlanLoopTimeoutMs: 20000
+    requireHumanInput: 0
+    scenePreset: 
+    preTaskMessage: 
+    postTaskMessage: 
+    restSeconds: -1
+    operatorNotes: 
+    humanInputPrompt: 
   defaultParticipantId: 
   defaultRestSeconds: 0
   defaultRandomSeed: 12345
