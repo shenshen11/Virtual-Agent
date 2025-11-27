@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using UnityEngine;
 using VRPerception.Infra.EventBus;
+using VRPerception.Tasks;
 
 namespace VRPerception.Perception
 {
@@ -29,6 +30,7 @@ namespace VRPerception.Perception
         [SerializeField] private EventBusManager eventBus;
         
         private int _activeCaptureCount = 0;
+        private ExperimentSceneManager _sceneManager;
         
         public Camera HeadCamera => headCamera;
         public bool IsCapturing => _activeCaptureCount > 0;
@@ -42,6 +44,8 @@ namespace VRPerception.Perception
             {
                 FindHeadCamera();
             }
+
+            TryBindSceneManager();
         }
         
         private void Start()
@@ -260,13 +264,26 @@ namespace VRPerception.Perception
         /// </summary>
         private ConditionInfo CollectConditionInfo()
         {
-            // 这里可以根据场景中的组件收集更多信息
+            TryBindSceneManager();
+
+            if (_sceneManager == null)
+            {
+                // 回退：使用保守默认值
+                return new ConditionInfo
+                {
+                    textureDensity = 1.0f,
+                    lighting = "default",
+                    occlusion = false,
+                    environment = "unknown"
+                };
+            }
+
             return new ConditionInfo
             {
-                textureDensity = 1.0f, // 默认值，可以从场景管理器获取
-                lighting = "default",   // 默认值，可以从光照管理器获取
-                occlusion = false,      // 默认值，可以从遮挡检测器获取
-                environment = "unknown" // 默认值，可以从场景标识器获取
+                textureDensity = _sceneManager.CurrentTextureDensity,
+                lighting = _sceneManager.CurrentLightingPreset,
+                occlusion = _sceneManager.CurrentOcclusionEnabled,
+                environment = _sceneManager.CurrentEnvironment ?? "unknown"
             };
         }
         
@@ -336,6 +353,15 @@ namespace VRPerception.Perception
                 headCamera.fieldOfView = fov;
                 Debug.Log($"[StimulusCapture] Camera FOV set to: {fov}");
             }
+        }
+
+        /// <summary>
+        /// 绑定场景管理器（ExperimentSceneManager），以便在元数据中记录真实环境条件。
+        /// </summary>
+        private void TryBindSceneManager()
+        {
+            if (_sceneManager != null) return;
+            _sceneManager = FindObjectOfType<ExperimentSceneManager>();
         }
     }
 }

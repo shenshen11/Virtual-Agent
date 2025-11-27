@@ -47,15 +47,27 @@ namespace VRPerception.Tasks
         };
         [SerializeField] private Vector3 occluderSize = new Vector3(0.5f, 2.0f, 0.5f);
 
+        [Header("Lighting Runtime")]
+        [Tooltip("主方向光（可选）。如未指定，将在运行时尝试查找场景中的第一个 Directional Light。")]
+        [SerializeField] private Light mainDirectionalLight;
+
         private readonly List<GameObject> _spawned = new List<GameObject>();
         private readonly List<GameObject> _occluders = new List<GameObject>();
         private string _currentEnvironment = null;
+        private string _currentLightingPreset = "default";
+        private float _currentTextureDensity = 1f;
+        private bool _currentOcclusionEnabled = false;
+        private bool _currentShadowEnabled = false;
 
         // 公开走廊参数，供其他脚本查询
         public float CorridorHalfWidth => corridorHalfWidth;
         public float CorridorLength => corridorLength;
         public float CorridorWallHeight => corridorWallHeight;
         public string CurrentEnvironment => _currentEnvironment;
+        public string CurrentLightingPreset => _currentLightingPreset;
+        public float CurrentTextureDensity => _currentTextureDensity;
+        public bool CurrentOcclusionEnabled => _currentOcclusionEnabled;
+        public bool CurrentShadowEnabled => _currentShadowEnabled;
 
         private void Awake()
         {
@@ -98,9 +110,13 @@ namespace VRPerception.Tasks
                     break;
             }
 
-            SetTextureDensity(textureDensity);
-            SetLighting(lightingPreset);
-            SetOcclusion(occlusion);
+            _currentTextureDensity = Mathf.Max(0.1f, textureDensity);
+            _currentLightingPreset = (lightingPreset ?? "default").ToLower();
+            _currentOcclusionEnabled = occlusion;
+
+            SetTextureDensity(_currentTextureDensity);
+            SetLighting(_currentLightingPreset);
+            SetOcclusion(_currentOcclusionEnabled);
 
             PublishSceneEvent("environment_setup");
         }
@@ -108,34 +124,88 @@ namespace VRPerception.Tasks
         public void SetLighting(string preset)
         {
             var p = (preset ?? "default").ToLower();
-            if (p == "bright")
+            _currentLightingPreset = p;
+
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+
+            // 默认值
+            Color ambient;
+            Color? dirColor = null;
+            float? dirIntensity = null;
+
+            switch (p)
             {
-                RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-                RenderSettings.ambientLight = brightAmbient;
-            }
-            else if (p == "dim")
-            {
-                RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-                RenderSettings.ambientLight = dimAmbient;
-            }
-            else if (p == "hdr")
-            {
-                RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-                RenderSettings.ambientLight = hdrAmbient;
-            }
-            else
-            {
-                // default
-                RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-                RenderSettings.ambientLight = new Color(0.5f, 0.5f, 0.5f);
+                case "bright":
+                    ambient = brightAmbient;
+                    dirColor = Color.white;
+                    dirIntensity = 1.2f;
+                    break;
+                case "dim":
+                    ambient = dimAmbient;
+                    dirColor = Color.white;
+                    dirIntensity = 0.6f;
+                    break;
+                case "hdr":
+                    ambient = hdrAmbient;
+                    dirColor = Color.white;
+                    dirIntensity = 1.5f;
+                    break;
+                // 颜色恒常实验用：色温 + 强度组合
+                case "bright_neutral":
+                    ambient = new Color(0.80f, 0.80f, 0.80f);
+                    dirColor = Color.white;
+                    dirIntensity = 1.3f;
+                    break;
+                case "dim_neutral":
+                    ambient = new Color(0.35f, 0.35f, 0.35f);
+                    dirColor = Color.white;
+                    dirIntensity = 0.7f;
+                    break;
+                case "bright_warm":
+                    ambient = new Color(0.90f, 0.80f, 0.70f);
+                    dirColor = new Color(1.00f, 0.90f, 0.80f);
+                    dirIntensity = 1.3f;
+                    break;
+                case "dim_warm":
+                    ambient = new Color(0.45f, 0.35f, 0.30f);
+                    dirColor = new Color(0.95f, 0.80f, 0.70f);
+                    dirIntensity = 0.7f;
+                    break;
+                case "bright_cool":
+                    ambient = new Color(0.70f, 0.80f, 0.95f);
+                    dirColor = new Color(0.80f, 0.90f, 1.00f);
+                    dirIntensity = 1.3f;
+                    break;
+                case "dim_cool":
+                    ambient = new Color(0.30f, 0.35f, 0.50f);
+                    dirColor = new Color(0.65f, 0.75f, 0.95f);
+                    dirIntensity = 0.7f;
+                    break;
+                default:
+                    // default 中性灰
+                    ambient = new Color(0.5f, 0.5f, 0.5f);
+                    dirColor = Color.white;
+                    dirIntensity = 1.0f;
+                    break;
             }
 
-            PublishSceneEvent("lighting_changed", new { preset = preset });
+            RenderSettings.ambientLight = ambient;
+
+            // 尝试同步主方向光的颜色与强度（若存在）
+            EnsureMainDirectionalLight();
+            if (mainDirectionalLight != null)
+            {
+                if (dirColor.HasValue) mainDirectionalLight.color = dirColor.Value;
+                if (dirIntensity.HasValue) mainDirectionalLight.intensity = dirIntensity.Value;
+            }
+
+            PublishSceneEvent("lighting_changed", new { preset = p });
         }
 
         public void SetTextureDensity(float scale)
         {
             scale = Mathf.Max(0.1f, scale);
+            _currentTextureDensity = scale;
 
             foreach (var go in _spawned)
             {
@@ -157,6 +227,8 @@ namespace VRPerception.Tasks
 
         public void SetOcclusion(bool enable)
         {
+            _currentOcclusionEnabled = enable;
+
             if (enable && _occluders.Count == 0 && createDefaultOccluders)
             {
                 CreateOccluders();
@@ -168,6 +240,24 @@ namespace VRPerception.Tasks
             }
 
             PublishSceneEvent("occlusion_changed", new { enabled = enable });
+        }
+
+        /// <summary>
+        /// 控制主方向光阴影开关（供颜色恒常等任务使用）。
+        /// </summary>
+        public void SetShadowMode(bool enable)
+        {
+            _currentShadowEnabled = enable;
+
+            EnsureMainDirectionalLight();
+            if (mainDirectionalLight != null)
+            {
+                mainDirectionalLight.shadows = enable
+                    ? LightShadows.Soft
+                    : LightShadows.None;
+            }
+
+            PublishSceneEvent("shadow_changed", new { enabled = enable });
         }
 
         public void ClearCurrent()
@@ -258,6 +348,24 @@ namespace VRPerception.Tasks
             if (r != null && mat != null)
             {
                 r.sharedMaterial = mat;
+            }
+        }
+
+        /// <summary>
+        /// 确保 mainDirectionalLight 已绑定；如未显式指定则尝试在场景中查找一个 Directional Light。
+        /// </summary>
+        private void EnsureMainDirectionalLight()
+        {
+            if (mainDirectionalLight != null) return;
+
+            var lights = FindObjectsOfType<Light>();
+            foreach (var light in lights)
+            {
+                if (light != null && light.type == LightType.Directional)
+                {
+                    mainDirectionalLight = light;
+                    break;
+                }
             }
         }
 
