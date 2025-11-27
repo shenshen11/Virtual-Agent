@@ -307,12 +307,14 @@ namespace VRPerception.Tasks
                 if (!string.IsNullOrWhiteSpace(t.lighting))
                     sb.AppendLine($"- lighting: `{t.lighting}`");
                 sb.AppendLine($"- occlusion: `{t.occlusion}`");
+                if (!string.IsNullOrWhiteSpace(t.background))
+                    sb.AppendLine($"- background: `{t.background}`");
 
-                // Distance Compression 专用字段
-                if (!string.IsNullOrWhiteSpace(t.targetKind) || t.trueDistanceM > 0f)
+                // Distance Compression & 通用 target 字段
+                if (!string.IsNullOrWhiteSpace(t.targetKind))
+                    sb.AppendLine($"- targetKind: `{t.targetKind}`");
+                if (t.trueDistanceM > 0f)
                 {
-                    if (!string.IsNullOrWhiteSpace(t.targetKind))
-                        sb.AppendLine($"- targetKind: `{t.targetKind}`");
                     sb.AppendLine($"- trueDistanceM: `{t.trueDistanceM}`");
                 }
 
@@ -325,8 +327,60 @@ namespace VRPerception.Tasks
                         sb.AppendLine($"- objectB: `{t.objectB}`");
                     if (!string.IsNullOrWhiteSpace(t.sizeRelation))
                         sb.AppendLine($"- sizeRelation: `{t.sizeRelation}`");
-                    if (!string.IsNullOrWhiteSpace(t.background))
-                        sb.AppendLine($"- background: `{t.background}`");
+                }
+
+                // Relative Depth Ordering 字段
+                if (t.depthA > 0f || t.depthB > 0f || !string.IsNullOrWhiteSpace(t.trueCloser))
+                {
+                    sb.AppendLine($"- depthA: `{t.depthA}`");
+                    sb.AppendLine($"- depthB: `{t.depthB}`");
+                    sb.AppendLine($"- scaleA: `{t.scaleA}`");
+                    sb.AppendLine($"- scaleB: `{t.scaleB}`");
+                    if (!string.IsNullOrWhiteSpace(t.trueCloser))
+                        sb.AppendLine($"- trueCloser: `{t.trueCloser}`");
+                }
+
+                // Change Detection 字段
+                if (t.changed || !string.IsNullOrWhiteSpace(t.changeCategory))
+                {
+                    sb.AppendLine($"- changed: `{t.changed}`");
+                    if (!string.IsNullOrWhiteSpace(t.changeCategory))
+                        sb.AppendLine($"- changeCategory: `{t.changeCategory}`");
+                }
+
+                // Occlusion Reasoning & Counting 字段
+                if (t.occlusionRatio > 0f || !string.IsNullOrWhiteSpace(t.occluderType) ||
+                    !string.IsNullOrWhiteSpace(t.targetCategory) || t.trueCount > 0 || t.targetPresent)
+                {
+                    sb.AppendLine($"- occlusionRatio: `{t.occlusionRatio}`");
+                    if (!string.IsNullOrWhiteSpace(t.occluderType))
+                        sb.AppendLine($"- occluderType: `{t.occluderType}`");
+                    if (!string.IsNullOrWhiteSpace(t.targetCategory))
+                        sb.AppendLine($"- targetCategory: `{t.targetCategory}`");
+                    sb.AppendLine($"- targetPresent: `{t.targetPresent}`");
+                    sb.AppendLine($"- trueCount: `{t.trueCount}`");
+                }
+
+                // Color Constancy 字段
+                if (!string.IsNullOrWhiteSpace(t.colorName) || t.trueR != 0 || t.trueG != 0 || t.trueB != 0 || t.hasShadow)
+                {
+                    if (!string.IsNullOrWhiteSpace(t.colorName))
+                        sb.AppendLine($"- colorName: `{t.colorName}`");
+                    sb.AppendLine($"- trueRGB: `({t.trueR}, {t.trueG}, {t.trueB})`");
+                    sb.AppendLine($"- hasShadow: `{t.hasShadow}`");
+                }
+
+                // Material Perception / 材质相关字段
+                if (!string.IsNullOrWhiteSpace(t.material) ||
+                    Math.Abs(t.objectYawDeg) > 0.001f ||
+                    Math.Abs(t.lightYawDeg) > 0.001f ||
+                    Math.Abs(t.lightPitchDeg) > 0.001f)
+                {
+                    if (!string.IsNullOrWhiteSpace(t.material))
+                        sb.AppendLine($"- material: `{t.material}`");
+                    sb.AppendLine($"- objectYawDeg: `{t.objectYawDeg}`");
+                    sb.AppendLine($"- lightYawDeg: `{t.lightYawDeg}`");
+                    sb.AppendLine($"- lightPitchDeg: `{t.lightPitchDeg}`");
                 }
 
                 // 任务提示词（有助于理解每个 trial 的实际文案）
