@@ -106,6 +106,21 @@ MonoBehaviour:
     restSeconds: -1
     operatorNotes: 
     humanInputPrompt: 
+  - taskId: color_constancy
+    displayName: 
+    description: 
+    subjectMode: 0
+    randomSeed: 0
+    maxTrials: 0
+    enableActionPlanLoop: 1
+    actionPlanLoopTimeoutMs: 20000
+    requireHumanInput: 0
+    scenePreset: 
+    preTaskMessage: 
+    postTaskMessage: 
+    restSeconds: -1
+    operatorNotes: 
+    humanInputPrompt: 
   defaultParticipantId: 
   defaultRestSeconds: 0
   defaultRandomSeed: 12345

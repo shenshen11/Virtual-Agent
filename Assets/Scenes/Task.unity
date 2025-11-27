@@ -3160,6 +3160,18 @@ MonoBehaviour:
     prefab: {fileID: 4579664689298264504, guid: 63e7430ccc71d3e45bceae581607c495, type: 3}
   - kind: cup
     prefab: {fileID: 4085708669981710425, guid: bfd936ed9697e9142b2e6afbb08cbe5c, type: 3}
+  - kind: color_patch_gray
+    prefab: {fileID: 929801547413229506, guid: 9f4a7295db13b834ab9d5e2a75aa7b54, type: 3}
+  - kind: color_patch_red
+    prefab: {fileID: 6562135747012676229, guid: 59fec0940d40044458c7c0c6c53cd466, type: 3}
+  - kind: color_patch_green
+    prefab: {fileID: 8728246312570846078, guid: 77b138be9bab9c24d8e2b28349112b39, type: 3}
+  - kind: color_patch_blue
+    prefab: {fileID: 929801547413229506, guid: 9f4a7295db13b834ab9d5e2a75aa7b54, type: 3}
+  - kind: color_patch_yellow
+    prefab: {fileID: 5004163051785660691, guid: 3862c10fb9ea59245a1f7762fad125dc, type: 3}
+  - kind: color_patch_white
+    prefab: {fileID: 4453660623063111605, guid: b640b4d14eddf8545a3369b6474304c5, type: 3}
 --- !u!114 &899712887
 MonoBehaviour:
   m_ObjectHideFlags: 0
