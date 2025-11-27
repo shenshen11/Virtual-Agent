@@ -11,9 +11,9 @@ namespace VRPerception.Tasks
 {
     /// <summary>
     /// 材质识别任务（Material Perception）
-    /// - 目标：基于高光/反射/粗糙度等线索判断对象材质（metal/glass/wood/plastic/fabric）
+    /// - 目标：基于高光/反射/粗糙度等线索判断对象材质（metal/glass/wood/fabric/sand/rock）
     /// - 变量：光照预设、背景、几何形状、视角/主光源方向
-    /// - 输出：{"type":"inference","answer":{"material":"metal|glass|wood|plastic|fabric"},"confidence":0..1}
+    /// - 输出：{"type":"inference","answer":{"material":"metal|glass|wood|fabric|sand|rock"},"confidence":0..1}
     /// </summary>
     public class MaterialPerceptionTask : ITask
     {
@@ -26,7 +26,8 @@ namespace VRPerception.Tasks
         private ObjectPlacer _placer;
         private Light _keyLight;
 
-        private readonly string[] _materials = { "metal", "glass", "wood", "plastic", "fabric" };
+        // 当前使用的材质类别标签；需与 PromptTemplates 和 NormalizeMaterial 保持一致
+        private readonly string[] _materials = { "metal", "glass", "wood", "fabric", "sand", "rock" };
         private readonly string[] _backgrounds = { "none", "indoor", "street" };
         private readonly string[] _lightings = { "bright", "dim", "hdr" };
         private readonly string[] _shapes = { "sphere", "cube", "cylinder" };
@@ -338,42 +339,70 @@ namespace VRPerception.Tasks
                 return cached;
             }
 
-            var shader = Shader.Find("Standard");
-            var mat = new Material(shader) { name = "mp_mat_" + key };
-
-            switch (key)
+            // 优先从 Resources 中加载用户配置的材质球：
+            // 期望路径：Assets/Resources/MaterialsPerception/<key>/*.mat
+            // 例如 key = "metal" 时，对应 Resources.LoadAll<Material>("MaterialsPerception/metal")
+            Material mat = null;
+            try
             {
-                case "metal":
-                    mat.color = new Color(0.7f, 0.72f, 0.75f);
-                    mat.SetFloat("_Metallic", 1f);
-                    mat.SetFloat("_Glossiness", 0.9f);
-                    break;
-                case "glass":
-                    mat.color = new Color(0.8f, 0.9f, 1f, 0.25f);
-                    mat.SetFloat("_Metallic", 0f);
-                    mat.SetFloat("_Glossiness", 0.95f);
-                    ApplyTransparentSettings(mat);
-                    break;
-                case "wood":
-                    mat.color = new Color(0.55f, 0.37f, 0.2f);
-                    mat.SetFloat("_Metallic", 0f);
-                    mat.SetFloat("_Glossiness", 0.35f);
-                    break;
-                case "plastic":
-                    mat.color = new Color(0.9f, 0.1f, 0.1f);
-                    mat.SetFloat("_Metallic", 0.05f);
-                    mat.SetFloat("_Glossiness", 0.55f);
-                    break;
-                case "fabric":
-                    mat.color = new Color(0.7f, 0.7f, 0.78f);
-                    mat.SetFloat("_Metallic", 0f);
-                    mat.SetFloat("_Glossiness", 0.18f);
-                    break;
-                default:
-                    mat.color = Color.gray;
-                    mat.SetFloat("_Metallic", 0.2f);
-                    mat.SetFloat("_Glossiness", 0.5f);
-                    break;
+                var loaded = Resources.LoadAll<Material>($"MaterialsPerception/{key}");
+                if (loaded != null && loaded.Length > 0)
+                {
+                    var idx = _rand.Next(loaded.Length);
+                    mat = loaded[idx];
+                }
+            }
+            catch
+            {
+                // 忽略 Resources 相关异常，退回默认材质逻辑
+            }
+
+            // 若 Resources 中未配置该类别，则退回到程序生成的默认材质，
+            // 保证任务在缺少自定义材质时仍然可用。
+            if (mat == null)
+            {
+                var shader = Shader.Find("Standard");
+                mat = new Material(shader) { name = "mp_mat_" + key };
+
+                switch (key)
+                {
+                    case "metal":
+                        mat.color = new Color(0.7f, 0.72f, 0.75f);
+                        mat.SetFloat("_Metallic", 1f);
+                        mat.SetFloat("_Glossiness", 0.9f);
+                        break;
+                    case "glass":
+                        mat.color = new Color(0.8f, 0.9f, 1f, 0.25f);
+                        mat.SetFloat("_Metallic", 0f);
+                        mat.SetFloat("_Glossiness", 0.95f);
+                        ApplyTransparentSettings(mat);
+                        break;
+                    case "wood":
+                        mat.color = new Color(0.55f, 0.37f, 0.2f);
+                        mat.SetFloat("_Metallic", 0f);
+                        mat.SetFloat("_Glossiness", 0.35f);
+                        break;
+                    case "fabric":
+                        mat.color = new Color(0.7f, 0.7f, 0.78f);
+                        mat.SetFloat("_Metallic", 0f);
+                        mat.SetFloat("_Glossiness", 0.18f);
+                        break;
+                    case "sand":
+                        mat.color = new Color(0.86f, 0.82f, 0.70f);
+                        mat.SetFloat("_Metallic", 0f);
+                        mat.SetFloat("_Glossiness", 0.25f);
+                        break;
+                    case "rock":
+                        mat.color = new Color(0.45f, 0.46f, 0.50f);
+                        mat.SetFloat("_Metallic", 0.1f);
+                        mat.SetFloat("_Glossiness", 0.35f);
+                        break;
+                    default:
+                        mat.color = Color.gray;
+                        mat.SetFloat("_Metallic", 0.2f);
+                        mat.SetFloat("_Glossiness", 0.5f);
+                        break;
+                }
             }
 
             _materialCache[key] = mat;
@@ -479,8 +508,9 @@ namespace VRPerception.Tasks
                     if (Regex.IsMatch(text, "metallic|steel|iron|aluminum", RegexOptions.IgnoreCase)) material = "metal";
                     else if (Regex.IsMatch(text, "glass|transparent|translucent", RegexOptions.IgnoreCase)) material = "glass";
                     else if (Regex.IsMatch(text, "wood|wooden", RegexOptions.IgnoreCase)) material = "wood";
-                    else if (Regex.IsMatch(text, "plastic|polymer|resin", RegexOptions.IgnoreCase)) material = "plastic";
                     else if (Regex.IsMatch(text, "fabric|cloth|textile", RegexOptions.IgnoreCase)) material = "fabric";
+                    else if (Regex.IsMatch(text, "sand|sandy", RegexOptions.IgnoreCase)) material = "sand";
+                    else if (Regex.IsMatch(text, "rock|stone|rocky", RegexOptions.IgnoreCase)) material = "rock";
                 }
             }
 
@@ -495,8 +525,9 @@ namespace VRPerception.Tasks
             if (s.Contains("metal") || s.Contains("steel") || s.Contains("iron") || s.Contains("aluminum")) return "metal";
             if (s.Contains("glass") || s.Contains("transparent") || s.Contains("translucent")) return "glass";
             if (s.Contains("wood")) return "wood";
-            if (s.Contains("plastic") || s.Contains("polymer") || s.Contains("resin")) return "plastic";
             if (s.Contains("fabric") || s.Contains("cloth") || s.Contains("textile")) return "fabric";
+            if (s.Contains("sand") || s.Contains("sandy")) return "sand";
+            if (s.Contains("rock") || s.Contains("stone") || s.Contains("rocky")) return "rock";
 
             return s;
         }

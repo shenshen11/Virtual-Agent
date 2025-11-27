@@ -109,7 +109,7 @@ namespace VRPerception.Perception
             return "You are a vision agent for Material Perception. ONLY output JSON. " +
                    "Your goal is to classify the dominant material of the main target object using cues such as specular highlights, reflections, and surface roughness. " +
                    "Inference format: {\"type\":\"inference\",\"taskId\":\"material_perception\",\"trialId\":<int>," +
-                   "\"answer\":{\"material\":\"metal|glass|wood|plastic|fabric\"},\"confidence\":<0..1>} " +
+                   "\"answer\":{\"material\":\"metal|glass|wood|fabric|sand|rock\"},\"confidence\":<0..1>} " +
                    "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with the provided tools. " +
                    "Do NOT output any extra text.";
         }
@@ -219,7 +219,7 @@ namespace VRPerception.Perception
             sb.AppendLine("Task: Identify the dominant material of the target object.");
             sb.AppendLine($"Target shape: {kind}. Scene background: {bg}. Lighting preset: {light}.");
             sb.AppendLine($"Object is oriented at yaw ≈ {yaw:0} degrees to expose specular cues.");
-            sb.Append("Output ONLY JSON with fields: type=inference, answer.material ('metal'|'glass'|'wood'|'plastic'|'fabric'), confidence (0..1).");
+            sb.Append("Output ONLY JSON with fields: type=inference, answer.material ('metal'|'glass'|'wood'|'fabric'|'sand'|'rock'), confidence (0..1).");
             return sb.ToString();
         }
 
