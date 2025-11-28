@@ -68,7 +68,6 @@ namespace VRPerception.Tasks
             {
                 "color_patch_red",
                 "color_patch_green",
-                "color_patch_blue",
                 "color_patch_yellow",
                 "color_patch_white",
                 "color_patch_gray"
