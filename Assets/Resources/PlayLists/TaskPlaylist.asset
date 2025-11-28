@@ -109,9 +109,9 @@ MonoBehaviour:
   - taskId: color_constancy
     displayName: 
     description: 
-    subjectMode: 0
-    randomSeed: 0
-    maxTrials: 0
+    subjectMode: 1
+    randomSeed: 12345
+    maxTrials: 10
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 0

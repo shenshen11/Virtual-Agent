@@ -3201,6 +3201,7 @@ MonoBehaviour:
   - {x: -1, y: 1, z: 8}
   - {x: 0.5, y: 1, z: 12}
   occluderSize: {x: 0.5, y: 2, z: 0.5}
+  mainDirectionalLight: {fileID: 0}
 --- !u!4 &899712889
 Transform:
   m_ObjectHideFlags: 0
@@ -4520,7 +4521,7 @@ MonoBehaviour:
   configSource: 2
   taskRunnerOverride: {fileID: 1824977593}
   playlist: {fileID: 11400000, guid: 5747fed546c2f754780bc0e773e054b5, type: 2}
-  playlistEntryIndex: 4
+  playlistEntryIndex: 6
   taskId: distance_compression
   seed: 12345
   maxTrials: 0
