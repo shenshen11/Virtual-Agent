@@ -90,6 +90,11 @@ namespace VRPerception.Tasks
         public string similarityLevel;    // 目标-干扰项相似度标签：easy/hard
         public int targetCount;           // 目标数量（通常 0 或 1）
 
+        // Object Counting / Density Estimation
+        public string layoutPattern;      // "grid"|"random"|"clustered"
+        public float areaSize;            // 场景布置区域的尺度（半径或边长，米）
+        public string countingMode;       // "count"|"density"（当前实现以 count 为主）
+
         // Color Constancy 可能用到
         public string colorName;          // 真值：表面颜色类别（如 "red"|"green"|"blue"|"yellow"|"white"|"gray"）
         public int trueR;                 // 真值：RGB 0-255

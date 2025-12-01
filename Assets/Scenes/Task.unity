@@ -3173,6 +3173,10 @@ MonoBehaviour:
     prefab: {fileID: 5004163051785660691, guid: 3862c10fb9ea59245a1f7762fad125dc, type: 3}
   - kind: color_patch_white
     prefab: {fileID: 4453660623063111605, guid: b640b4d14eddf8545a3369b6474304c5, type: 3}
+  - kind: occluder_wall
+    prefab: {fileID: 7156330612129983795, guid: b6f001f94f94849439586a62ef556990, type: 3}
+  - kind: occluder_plant
+    prefab: {fileID: 4984904401169270224, guid: b86a855f5f2676144b5bc7cb2dcca950, type: 3}
 --- !u!114 &899712887
 MonoBehaviour:
   m_ObjectHideFlags: 0

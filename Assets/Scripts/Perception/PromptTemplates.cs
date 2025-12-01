@@ -33,6 +33,8 @@ namespace VRPerception.Perception
                     return MaterialPerceptionSystem();
                 case "visual_search":
                     return VisualSearchSystem();
+                case "object_counting":
+                    return ObjectCountingSystem();
                 default:
                     return GenericSystem();
             }
@@ -126,6 +128,16 @@ namespace VRPerception.Perception
                    "Never output extra text.";
         }
 
+        private static string ObjectCountingSystem()
+        {
+            return "You are a vision agent for Object Counting. ONLY output JSON. " +
+                   "Your goal is to estimate how many target objects of the specified category are visible in the scene. " +
+                   "Inference format: {\"type\":\"inference\",\"taskId\":\"object_counting\",\"trialId\":<int>," +
+                   "\"answer\":{\"count\":<int>},\"confidence\":<0..1>} " +
+                   "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with the provided tools. " +
+                   "Do NOT output any extra text.";
+        }
+
         // ============ Task Prompts ============
 
         public static string BuildDistanceCompressionPrompt(string targetKind, float fovDeg, string environment)
@@ -214,6 +226,23 @@ namespace VRPerception.Perception
             sb.AppendLine($"Target category: {target}. Distractors: {distractor}. Set size: {setSize}. Similarity level: {sim}.");
             sb.AppendLine($"Scene conditions: background={bg}, FOV={fov} deg.");
             sb.Append("Output ONLY JSON with fields: type=inference, answer.found (true/false), optional answer.target (string), confidence (0..1).");
+            return sb.ToString();
+        }
+
+        public static string BuildObjectCountingPrompt(string targetCategory, string layoutPattern, float occlusionRatio, string background, float fovDeg)
+        {
+            var target = string.IsNullOrEmpty(targetCategory) ? "count_ball" : targetCategory;
+            var layout = string.IsNullOrEmpty(layoutPattern) ? "random" : layoutPattern;
+            var bg = string.IsNullOrEmpty(background) ? "none" : background;
+            var fov = fovDeg > 0 ? fovDeg : 60f;
+            var occ = Mathf.Clamp01(occlusionRatio);
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Task: Estimate how many target objects are visible in the current view.");
+            sb.AppendLine($"Target category: {target}. Expected count range covers small to dense sets.");
+            sb.AppendLine($"Scene conditions: layout={layout}, background={bg}, occlusion_ratio≈{occ:0.00}, FOV={fov} deg.");
+            sb.AppendLine("If unsure, provide your best estimate in an integer count.");
+            sb.Append("Output ONLY JSON with fields: type=inference, answer.count (integer ≥0), confidence (0..1).");
             return sb.ToString();
         }
 
@@ -347,6 +376,17 @@ namespace VRPerception.Perception
                 MakeTool("head_look_at", "Look at a target by name or position.", new [] { "target" }),
                 MakeTool("turn_yaw", "Turn yaw in degrees to sweep the scene.", new [] { "deg" }),
                 MakeTool("focus_target", "Focus on a suspected target by name.", new [] { "name" })
+            };
+        }
+
+        public static ToolSpec[] GetToolsForObjectCounting()
+        {
+            return new[]
+            {
+                MakeTool("snapshot", "Request an additional frame capture.", Array.Empty<string>()),
+                MakeTool("turn_yaw", "Turn yaw in degrees to scan wider area.", new [] { "deg" }),
+                MakeTool("head_look_at", "Look at a region or target by name/position.", new [] { "target" }),
+                MakeTool("camera_set_fov", "Adjust camera FOV (degrees) to encompass large sets.", new [] { "fov_deg" })
             };
         }
 

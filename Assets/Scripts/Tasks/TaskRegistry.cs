@@ -29,6 +29,7 @@ namespace VRPerception.Tasks
             TryRegisterInternal("color_constancy", ctx => new ColorConstancyTask(ctx));
             TryRegisterInternal("material_perception", ctx => new MaterialPerceptionTask(ctx));
             TryRegisterInternal("visual_search", ctx => new VisualSearchTask(ctx));
+            TryRegisterInternal("object_counting", ctx => new ObjectCountingTask(ctx));
         }
 
         /// <summary>

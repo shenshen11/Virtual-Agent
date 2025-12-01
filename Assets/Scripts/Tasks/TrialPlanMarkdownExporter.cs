@@ -361,6 +361,17 @@ namespace VRPerception.Tasks
                     sb.AppendLine($"- trueCount: `{t.trueCount}`");
                 }
 
+                // Object Counting / Density Estimation 字段
+                if (!string.IsNullOrWhiteSpace(t.countingMode) || !string.IsNullOrWhiteSpace(t.layoutPattern) || t.areaSize > 0f)
+                {
+                    if (!string.IsNullOrWhiteSpace(t.countingMode))
+                        sb.AppendLine($"- countingMode: `{t.countingMode}`");
+                    if (!string.IsNullOrWhiteSpace(t.layoutPattern))
+                        sb.AppendLine($"- layoutPattern: `{t.layoutPattern}`");
+                    if (t.areaSize > 0f)
+                        sb.AppendLine($"- areaSize: `{t.areaSize}`");
+                }
+
                 // Color Constancy 字段
                 if (!string.IsNullOrWhiteSpace(t.colorName) || t.trueR != 0 || t.trueG != 0 || t.trueB != 0 || t.hasShadow)
                 {
