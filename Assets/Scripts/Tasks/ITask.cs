@@ -84,6 +84,12 @@ namespace VRPerception.Tasks
         public bool targetPresent;        // 真值：视野内是否存在至少一个目标
         public int trueCount;             // 真值：可见目标数量（>=0）
 
+        // Visual Search 相关
+        public int setSize;               // 场景中对象总数量（含目标与干扰项）
+        public string distractorCategory; // 干扰项类别（如 blue_cup/green_cup）
+        public string similarityLevel;    // 目标-干扰项相似度标签：easy/hard
+        public int targetCount;           // 目标数量（通常 0 或 1）
+
         // Color Constancy 可能用到
         public string colorName;          // 真值：表面颜色类别（如 "red"|"green"|"blue"|"yellow"|"white"|"gray"）
         public int trueR;                 // 真值：RGB 0-255
@@ -139,6 +145,10 @@ namespace VRPerception.Tasks
         public int trueCount;
         public float countAbsError;
         public float countRelError;
+
+        // Visual Search 指标
+        public bool predictedFound;
+        public string predictedTarget;
 
         // 其他扩展指标（键值对）
         public string extraJson;

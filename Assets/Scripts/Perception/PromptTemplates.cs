@@ -31,6 +31,8 @@ namespace VRPerception.Perception
                     return ColorConstancySystem();
                 case "material_perception":
                     return MaterialPerceptionSystem();
+                case "visual_search":
+                    return VisualSearchSystem();
                 default:
                     return GenericSystem();
             }
@@ -114,6 +116,16 @@ namespace VRPerception.Perception
                    "Do NOT output any extra text.";
         }
 
+        private static string VisualSearchSystem()
+        {
+            return "You are a vision agent for Visual Search in clutter. ONLY output JSON. " +
+                   "Your goal is to decide whether the target object is present among distractors. " +
+                   "Inference format: {\"type\":\"inference\",\"taskId\":\"visual_search\",\"trialId\":<int>," +
+                   "\"answer\":{\"found\":true|false,\"target\":\"<name>\"},\"confidence\":<0..1>} " +
+                   "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with the provided tools. " +
+                   "Never output extra text.";
+        }
+
         // ============ Task Prompts ============
 
         public static string BuildDistanceCompressionPrompt(string targetKind, float fovDeg, string environment)
@@ -186,6 +198,22 @@ namespace VRPerception.Perception
             sb.AppendLine($"Scene conditions: background={bg}, occluder_type={occLabel}, occlusion_ratio≈{clampedRatio:0.00}, FOV={fov} deg.");
             sb.AppendLine("If no target of the requested category is visible, set present=false and count=0.");
             sb.Append("Output ONLY JSON with fields: type=inference, answer.present (true/false), answer.count (integer ≥0), confidence (0..1).");
+            return sb.ToString();
+        }
+
+        public static string BuildVisualSearchPrompt(string targetCategory, string distractorCategory, int setSize, string similarityLevel, string background, float fovDeg)
+        {
+            var target = string.IsNullOrEmpty(targetCategory) ? "red_cup" : targetCategory;
+            var distractor = string.IsNullOrEmpty(distractorCategory) ? "blue_cup" : distractorCategory;
+            var bg = string.IsNullOrEmpty(background) ? "none" : background;
+            var sim = string.IsNullOrEmpty(similarityLevel) ? "easy" : similarityLevel;
+            var fov = fovDeg > 0 ? fovDeg : 60f;
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Task: Decide whether the specified target object is present among distractors.");
+            sb.AppendLine($"Target category: {target}. Distractors: {distractor}. Set size: {setSize}. Similarity level: {sim}.");
+            sb.AppendLine($"Scene conditions: background={bg}, FOV={fov} deg.");
+            sb.Append("Output ONLY JSON with fields: type=inference, answer.found (true/false), optional answer.target (string), confidence (0..1).");
             return sb.ToString();
         }
 
@@ -308,6 +336,17 @@ namespace VRPerception.Perception
                 MakeTool("turn_yaw", "Turn yaw in degrees to change specular highlights.", new [] { "deg" }),
                 MakeTool("head_look_at", "Look at a target by name or position.", new [] { "target" }),
                 MakeTool("snapshot", "Request a frame capture.", Array.Empty<string>())
+            };
+        }
+
+        public static ToolSpec[] GetToolsForVisualSearch()
+        {
+            return new[]
+            {
+                MakeTool("snapshot", "Request a frame capture.", Array.Empty<string>()),
+                MakeTool("head_look_at", "Look at a target by name or position.", new [] { "target" }),
+                MakeTool("turn_yaw", "Turn yaw in degrees to sweep the scene.", new [] { "deg" }),
+                MakeTool("focus_target", "Focus on a suspected target by name.", new [] { "name" })
             };
         }
 
