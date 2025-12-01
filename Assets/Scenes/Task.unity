@@ -3177,6 +3177,12 @@ MonoBehaviour:
     prefab: {fileID: 7156330612129983795, guid: b6f001f94f94849439586a62ef556990, type: 3}
   - kind: occluder_plant
     prefab: {fileID: 4984904401169270224, guid: b86a855f5f2676144b5bc7cb2dcca950, type: 3}
+  - kind: red_cup
+    prefab: {fileID: 3092257180468673392, guid: 173263c5806914c4eaefb69dd6aaa52c, type: 3}
+  - kind: blue_cup
+    prefab: {fileID: 8234219177423958863, guid: c6472300078742a499d27f7c088baf8c, type: 3}
+  - kind: green_cup
+    prefab: {fileID: 1784606716156342530, guid: 0ecbf421ac549824485b51a2ea0c3dbc, type: 3}
 --- !u!114 &899712887
 MonoBehaviour:
   m_ObjectHideFlags: 0
