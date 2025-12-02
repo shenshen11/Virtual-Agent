@@ -16,6 +16,8 @@ namespace VRPerception.UI
         [Header("References")]
         [SerializeField] private TaskOrchestrator orchestrator;
         [SerializeField] private EventBusManager eventBus;
+        [Tooltip("可选：若指定，则在开始时优先使用 PlaylistSelector 中选定的 Playlist。")]
+        [SerializeField] private VRPerception.Orchestration.PlaylistSelector playlistSelector;
         [SerializeField] private Text stateText;
         [SerializeField] private Button startButton;
         [SerializeField] private Button pauseButton;
@@ -68,10 +70,19 @@ namespace VRPerception.UI
 
         private async void OnStartClicked()
         {
-            if (orchestrator != null && !orchestrator.IsRunning)
+            if (orchestrator == null || orchestrator.IsRunning)
             {
-                await orchestrator.StartPlaylistAsync();
+                return;
             }
+
+            // 如有 PlaylistSelector，则优先使用其返回的 Playlist；否则退回默认 Playlist
+            TaskPlaylist playlist = null;
+            if (playlistSelector != null)
+            {
+                playlist = playlistSelector.GetSelectedPlaylist();
+            }
+
+            await orchestrator.StartPlaylistAsync(playlist);
         }
 
         private void OnPauseClicked()
