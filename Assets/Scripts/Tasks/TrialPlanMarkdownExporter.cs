@@ -372,6 +372,21 @@ namespace VRPerception.Tasks
                         sb.AppendLine($"- areaSize: `{t.areaSize}`");
                 }
 
+                // Visual Search 字段
+                if (t.setSize > 0 ||
+                    !string.IsNullOrWhiteSpace(t.distractorCategory) ||
+                    !string.IsNullOrWhiteSpace(t.similarityLevel) ||
+                    t.targetCount != 0)
+                {
+                    if (t.setSize > 0)
+                        sb.AppendLine($"- setSize: `{t.setSize}`");
+                    if (!string.IsNullOrWhiteSpace(t.distractorCategory))
+                        sb.AppendLine($"- distractorCategory: `{t.distractorCategory}`");
+                    if (!string.IsNullOrWhiteSpace(t.similarityLevel))
+                        sb.AppendLine($"- similarityLevel: `{t.similarityLevel}`");
+                    sb.AppendLine($"- targetCount: `{t.targetCount}`");
+                }
+
                 // Color Constancy 字段
                 if (!string.IsNullOrWhiteSpace(t.colorName) || t.trueR != 0 || t.trueG != 0 || t.trueB != 0 || t.hasShadow)
                 {
