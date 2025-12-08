@@ -55,14 +55,14 @@ PrefabInstance:
     - target: {fileID: -7511558181221131132, guid: 730417d022afba349aa3b5ff29714553, type: 3}
       propertyPath: m_Materials.Array.data[0]
       value: 
-      objectReference: {fileID: 2100000, guid: 2ee21f1dd1f340649af217924c05bc94, type: 2}
+      objectReference: {fileID: 2100000, guid: 9a0e0442a01f5ff4ebe3e87b8ac02316, type: 2}
     - target: {fileID: -7511558181221131132, guid: 730417d022afba349aa3b5ff29714553, type: 3}
       propertyPath: m_Materials.Array.data[1]
       value: 
       objectReference: {fileID: 2100000, guid: 2ee21f1dd1f340649af217924c05bc94, type: 2}
     - target: {fileID: 919132149155446097, guid: 730417d022afba349aa3b5ff29714553, type: 3}
       propertyPath: m_Name
-      value: cup 1
+      value: Blue_cup
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

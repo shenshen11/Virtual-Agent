@@ -35,7 +35,7 @@ namespace VRPerception.Tasks
             { "apple",   0.25f },
             { "human",   1.8f },
             { "cube",    1.0f },
-            { "sphere",  1.0f }
+            { "sphere",  0.8f }
         };
 
         public SemanticSizeBiasTask(TaskRunnerContext ctx)
