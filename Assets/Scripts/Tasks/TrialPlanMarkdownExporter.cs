@@ -409,6 +409,23 @@ namespace VRPerception.Tasks
                     sb.AppendLine($"- lightPitchDeg: `{t.lightPitchDeg}`");
                 }
 
+                // Numerosity Comparison 字段
+                if (t.baseCountN > 0 || t.ratioR > 0 || t.leftCount > 0 || t.rightCount > 0)
+                {
+                    if (t.baseCountN > 0)
+                        sb.AppendLine($"- baseCountN: `{t.baseCountN}`");
+                    if (t.ratioR > 0)
+                        sb.AppendLine($"- ratioR: `{t.ratioR:F2}`");
+                    sb.AppendLine($"- leftCount: `{t.leftCount}`");
+                    sb.AppendLine($"- rightCount: `{t.rightCount}`");
+                    if (!string.IsNullOrWhiteSpace(t.trueMoreSide))
+                        sb.AppendLine($"- trueMoreSide: `{t.trueMoreSide}`");
+                    if (t.exposureDurationMs > 0)
+                        sb.AppendLine($"- exposureDurationMs: `{t.exposureDurationMs}`");
+                    if (t.dotRadius > 0)
+                        sb.AppendLine($"- dotRadius: `{t.dotRadius}`");
+                }
+
                 // 任务提示词（有助于理解每个 trial 的实际文案）
                 var taskPrompt = SafeBuildTaskPrompt(task, t);
                 if (!string.IsNullOrWhiteSpace(taskPrompt))

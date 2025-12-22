@@ -3514,7 +3514,7 @@ MonoBehaviour:
   minEyeTextureScale: 0.7
   maxEyeTextureScale: 1.26
   enableSuperResolution: 0
-  useRecommendedAntiAliasingLevel: 0
+  useRecommendedAntiAliasingLevel: 1
   usePremultipliedAlpha: 0
   useLayerBlend: 0
   srcColor: 1
@@ -4249,6 +4249,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   eventBus: {fileID: 719105663}
   playlist: {fileID: 11400000, guid: 5747fed546c2f754780bc0e773e054b5, type: 2}
+  orchestrator: {fileID: 0}
   autoFindEventBus: 1
   panelRoot: {fileID: 809179789}
   titleText: {fileID: 0}
@@ -4665,7 +4666,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   orchestrator: {fileID: 1824977592}
   eventBus: {fileID: 719105663}
-  playlistSelector: {fileID: 0}
+  playlistSelector: {fileID: 1077309829}
   stateText: {fileID: 1417223492}
   startButton: {fileID: 415299307}
   pauseButton: {fileID: 2016511259}
@@ -4688,6 +4689,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   explicitPlaylists:
   - {fileID: 11400000, guid: 5747fed546c2f754780bc0e773e054b5, type: 2}
+  - {fileID: 11400000, guid: f5b3b04837c20314f95fcb294eccb9ca, type: 2}
   autoLoadFromResources: 1
   playlistDropdown: {fileID: 121212280}
 --- !u!1 &1087635477
@@ -7874,7 +7876,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   disableRunnerAutoRun: 1
-  autoRestoreCheckpoint: 1
+  autoRestoreCheckpoint: 0
   deleteCheckpointOnPlaylistCompleted: 1
   saveCheckpointOnPause: 1
   saveCheckpointOnError: 1

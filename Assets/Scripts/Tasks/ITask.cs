@@ -57,6 +57,7 @@ namespace VRPerception.Tasks
         public float fovDeg = 60f;        // 50/60/90
 
         // Distance Compression 专用字段
+        public bool isAnchor;             // 是否为锚定试次（不计入正式拟合）
         public string targetKind;         // "cube"|"sphere"|"human"
         public float trueDistanceM;       // 真值（米）
 
@@ -107,6 +108,15 @@ namespace VRPerception.Tasks
         public float objectYawDeg;        // 物体自身绕 Y 轴旋转（度）
         public float lightYawDeg;         // 主光源方位（度）
         public float lightPitchDeg;       // 主光源俯仰角（度）
+
+        // Numerosity Comparison 专用字段
+        public float baseCountN;                  // 基准数量（较少一侧）：10/50/100/200/500
+        public float ratioR;                      // 比例：1.1-2.0
+        public int leftCount;                     // 左侧实际数量
+        public int rightCount;                    // 右侧实际数量
+        public string trueMoreSide;               // 真值："left" | "right"
+        public float exposureDurationMs = 500f;   // 曝光时长（默认 500ms）
+        public float dotRadius = 0.2f;            // 点的半径
     }
 
     /// <summary>
@@ -154,6 +164,12 @@ namespace VRPerception.Tasks
         // Visual Search 指标
         public bool predictedFound;
         public string predictedTarget;
+
+        // Numerosity Comparison 指标
+        public string predictedMoreSide;          // "left" | "right"
+        public string trueMoreSide;               // "left" | "right"
+        public bool isMoreSideCorrect;            // 是否判断正确
+        public long humanReactionTimeMs;          // 人类反应时（从 mask 出现到提交）
 
         // 其他扩展指标（键值对）
         public string extraJson;

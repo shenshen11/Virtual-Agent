@@ -29,7 +29,21 @@ namespace VRPerception.UI
 
         private void EnsureEventSystem()
         {
+            // 1) 优先拿当前激活的 EventSystem
             var eventSystem = EventSystem.current;
+
+            // 2) 若 current 为空，再尝试在场景中查找（包含未激活）并启用
+            if (eventSystem == null)
+            {
+                eventSystem = FindObjectOfType<EventSystem>(includeInactive: true);
+                if (eventSystem != null)
+                {
+                    if (!eventSystem.gameObject.activeSelf) eventSystem.gameObject.SetActive(true);
+                    if (!eventSystem.enabled) eventSystem.enabled = true;
+                }
+            }
+
+            // 3) 仍然没有则按需创建
             if (eventSystem == null && createEventSystemIfMissing)
             {
                 var go = new GameObject("EventSystem");

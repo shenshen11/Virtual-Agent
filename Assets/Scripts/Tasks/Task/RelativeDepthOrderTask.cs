@@ -116,8 +116,8 @@ namespace VRPerception.Tasks
                                 occlusion = occ,
 
                                 // A/B 对象：使用简单几何体
-                                objectA = "cube",
-                                objectB = "cube",
+                                objectA = "sphere",
+                                objectB = "sphere",
                                 sizeRelation = sizeCond, // 在该任务中表示“等大/不同”
 
                                 // 相对深度参数

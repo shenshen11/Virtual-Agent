@@ -35,6 +35,8 @@ namespace VRPerception.Perception
                     return VisualSearchSystem();
                 case "object_counting":
                     return ObjectCountingSystem();
+                case "numerosity_comparison":
+                    return NumerosityComparisonSystem();
                 default:
                     return GenericSystem();
             }
@@ -136,6 +138,15 @@ namespace VRPerception.Perception
                    "\"answer\":{\"count\":<int>},\"confidence\":<0..1>} " +
                    "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with the provided tools. " +
                    "Do NOT output any extra text.";
+        }
+
+        private static string NumerosityComparisonSystem()
+        {
+            return "You are a vision agent for Numerosity Comparison. ONLY output JSON. " +
+                   "Determine which side (left or right) has MORE dots/objects. " +
+                   "Inference format: {\"type\":\"inference\",\"taskId\":\"numerosity_comparison\",\"trialId\":<int>," +
+                   "\"answer\":{\"more_side\":\"left\"|\"right\"},\"confidence\":<0..1>} " +
+                   "Do NOT output any extra text or action_plan.";
         }
 
         // ============ Task Prompts ============
