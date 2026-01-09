@@ -41,6 +41,16 @@ namespace VRPerception.Tasks
     }
 
     /// <summary>
+    /// 可选：任务级生命周期钩子（每次 RunAsync 调用一次）。
+    /// 用于在任务开始/结束时创建与销毁临时场景/对象，避免污染其他场景。
+    /// </summary>
+    public interface ITaskRunLifecycle
+    {
+        Task OnRunBeginAsync(CancellationToken ct);
+        Task OnRunEndAsync(CancellationToken ct);
+    }
+
+    /// <summary>
     /// 通用试次规格（不同任务可扩展其字段）
     /// </summary>
     [Serializable]
@@ -60,6 +70,11 @@ namespace VRPerception.Tasks
         public bool isAnchor;             // 是否为锚定试次（不计入正式拟合）
         public string targetKind;         // "cube"|"sphere"|"human"
         public float trueDistanceM;       // 真值（米）
+
+        // Horizon Cue Integration 字段
+        public float horizonAngleDeg;     // 地平线偏移角（度）：-6/-3/0/+3/+6
+        public int repetitionIndex;       // 重复序号（1..N）
+        public float sphereScreenY01;     // 运行时记录：球体屏幕 Y（0..1），用于校验“屏幕静止”
 
         // Relative Depth Ordering 字段
         public float depthA;              // 对象 A 距离（米）

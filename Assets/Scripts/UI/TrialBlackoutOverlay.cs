@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.XR;
+using UnityEngine.UI;
 using VRPerception.Infra.EventBus;
 using VRPerception.Perception;
 
@@ -32,9 +34,9 @@ namespace VRPerception.UI
         private bool _visible;
         private Texture2D _tex;
         private Coroutine _pending;
-        private GameObject _quad;
-        private Renderer _quadRenderer;
-        private Material _quadMaterial;
+        private GameObject _overlayRoot;
+        private Canvas _overlayCanvas;
+        private Image _overlayImage;
 
         public bool IsVisible => _visible;
 
@@ -60,7 +62,7 @@ namespace VRPerception.UI
             try { eventBus?.TrialLifecycle?.Unsubscribe(OnTrialLifecycle); } catch { }
             CancelPending();
             Hide();
-            DestroyQuad();
+            DestroyOverlay();
         }
 
         private void OnDestroy()
@@ -71,20 +73,20 @@ namespace VRPerception.UI
                 Destroy(_tex);
                 _tex = null;
             }
-            DestroyQuad();
+            DestroyOverlay();
         }
 
         public void Hide()
         {
             _visible = false;
-            if (_quad != null) _quad.SetActive(false);
+            if (_overlayRoot != null) _overlayRoot.SetActive(false);
         }
 
         public void Show()
         {
             _visible = true;
-            EnsureQuadIfNeeded();
-            if (_quad != null) _quad.SetActive(true);
+            EnsureOverlayIfNeeded();
+            if (_overlayRoot != null) _overlayRoot.SetActive(true);
         }
 
         public void BeginBlackoutAfterMs(int delayMs)
@@ -137,7 +139,7 @@ namespace VRPerception.UI
 
         private void LateUpdate()
         {
-            UpdateQuadTransform();
+            UpdateOverlayPlacement();
         }
 
         private void OnGUI()
@@ -159,12 +161,12 @@ namespace VRPerception.UI
             _tex.Apply();
         }
 
-        private void EnsureQuadIfNeeded()
+        private void EnsureOverlayIfNeeded()
         {
             if (!useWorldSpaceQuadForBlackout) return;
-            if (_quad != null)
+            if (_overlayRoot != null)
             {
-                UpdateQuadTransform();
+                UpdateOverlayPlacement();
                 return;
             }
 
@@ -190,73 +192,94 @@ namespace VRPerception.UI
                 if (headCamera == null) headCamera = FindObjectOfType<Camera>();
             }
 
+            // XR/头显环境下常见多相机（UI/镜像/采集）。若当前相机不是立体渲染相机，遮罩会只出现在电脑端镜像。
+            if (XRSettings.isDeviceActive && headCamera != null && headCamera.stereoTargetEye == StereoTargetEyeMask.None)
+            {
+                var cams = Camera.allCameras;
+                for (int i = 0; i < cams.Length; i++)
+                {
+                    var cam = cams[i];
+                    if (cam != null && cam.stereoTargetEye != StereoTargetEyeMask.None)
+                    {
+                        headCamera = cam;
+                        break;
+                    }
+                }
+            }
+
             if (headCamera == null) return;
 
-            _quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            _quad.name = "trial_blackout_quad";
-            var col = _quad.GetComponent<Collider>();
-            if (col != null) Destroy(col);
+            _overlayRoot = new GameObject("trial_blackout_overlay");
+            _overlayRoot.transform.SetParent(headCamera.transform, worldPositionStays: false);
+            SetLayerRecursively(_overlayRoot, headCamera.gameObject.layer);
 
-            _quadRenderer = _quad.GetComponent<Renderer>();
-            if (_quadRenderer != null)
-            {
-                var shader =
-                    Shader.Find("Universal Render Pipeline/Unlit") ??
-                    Shader.Find("Unlit/Color") ??
-                    Shader.Find("Sprites/Default");
+            _overlayCanvas = _overlayRoot.AddComponent<Canvas>();
+            _overlayCanvas.renderMode = RenderMode.ScreenSpaceCamera;
+            _overlayCanvas.worldCamera = headCamera;
+            _overlayCanvas.overrideSorting = true;
+            _overlayCanvas.sortingOrder = short.MaxValue;
 
-                if (shader != null)
-                {
-                    _quadMaterial = new Material(shader);
-                    if (_quadMaterial.HasProperty("_BaseColor")) _quadMaterial.SetColor("_BaseColor", Color.black);
-                    else if (_quadMaterial.HasProperty("_Color")) _quadMaterial.SetColor("_Color", Color.black);
-                    else _quadMaterial.color = Color.black;
+            // Do not add GraphicRaycaster; this overlay should never block UI input.
+            var scaler = _overlayRoot.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
 
-                    // Render late; still relies on distance to camera for occlusion ordering.
-                    _quadMaterial.renderQueue = 5000;
-                    _quadMaterial.SetInt("_ZWrite", 0);
-                    _quadMaterial.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
-                    _quadRenderer.material = _quadMaterial;
-                }
-                if (_quadRenderer != null)
-                {
-                    _quadRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                    _quadRenderer.receiveShadows = false;
-                }
-            }
+            var imageGo = new GameObject("BlackImage", typeof(RectTransform), typeof(Image));
+            imageGo.transform.SetParent(_overlayRoot.transform, worldPositionStays: false);
+            SetLayerRecursively(imageGo, headCamera.gameObject.layer);
 
-            _quad.transform.SetParent(headCamera.transform, worldPositionStays: false);
-            _quad.SetActive(_visible);
-            UpdateQuadTransform();
+            _overlayImage = imageGo.GetComponent<Image>();
+            _overlayImage.color = Color.black;
+            _overlayImage.raycastTarget = false;
+
+            var rt = (RectTransform)imageGo.transform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = Vector2.zero;
+
+            _overlayRoot.SetActive(_visible);
+            UpdateOverlayPlacement();
         }
 
-        private void UpdateQuadTransform()
+        private void UpdateOverlayPlacement()
         {
-            if (_quad == null || headCamera == null) return;
+            if (_overlayCanvas == null || headCamera == null) return;
 
             float dist = Mathf.Max(0.01f, headCamera.nearClipPlane + Mathf.Max(0f, quadNearOffset));
-            float halfH = Mathf.Tan(headCamera.fieldOfView * Mathf.Deg2Rad * 0.5f) * dist;
-            float height = 2f * halfH;
-            float width = height * Mathf.Max(0.1f, headCamera.aspect);
+            _overlayCanvas.planeDistance = dist;
 
-            _quad.transform.localPosition = new Vector3(0f, 0f, dist);
-            _quad.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
-            _quad.transform.localScale = new Vector3(width * quadOverscan, height * quadOverscan, 1f);
+            var overlayRt = _overlayRoot != null ? _overlayRoot.GetComponent<RectTransform>() : null;
+            if (overlayRt != null)
+            {
+                overlayRt.localPosition = Vector3.zero;
+                overlayRt.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                overlayRt.localScale = Vector3.one;
+                // For ScreenSpaceCamera + stretched anchors, sizeDelta=0 means full viewport.
+                overlayRt.sizeDelta = Vector2.zero;
+            }
         }
 
-        private void DestroyQuad()
+        private void DestroyOverlay()
         {
-            if (_quad != null)
+            if (_overlayRoot != null)
             {
-                Destroy(_quad);
-                _quad = null;
+                Destroy(_overlayRoot);
+                _overlayRoot = null;
             }
-            if (_quadMaterial != null)
+            _overlayCanvas = null;
+            _overlayImage = null;
+        }
+
+        private static void SetLayerRecursively(GameObject root, int layer)
+        {
+            if (root == null) return;
+            root.layer = layer;
+            var t = root.transform;
+            for (int i = 0; i < t.childCount; i++)
             {
-                Destroy(_quadMaterial);
-                _quadMaterial = null;
+                var c = t.GetChild(i);
+                if (c != null) SetLayerRecursively(c.gameObject, layer);
             }
-            _quadRenderer = null;
         }
     }
 }

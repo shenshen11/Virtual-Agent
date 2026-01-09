@@ -147,6 +147,7 @@ namespace VRPerception.Tasks
             }
 
             _runCts = new CancellationTokenSource();
+            bool runLifecycleBegun = false;
 
             // Wait briefly for EventBus channels to be created by EventBusBootstrap (handles late initialization)
             var ebDeadline = DateTime.UtcNow.AddMilliseconds(2000);
@@ -154,6 +155,12 @@ namespace VRPerception.Tasks
             {
                 await Task.Yield();
                 if (_runCts.IsCancellationRequested) throw new OperationCanceledException();
+            }
+
+            if (_task is ITaskRunLifecycle lifecycle)
+            {
+                await lifecycle.OnRunBeginAsync(_runCts.Token);
+                runLifecycleBegun = true;
             }
 
             for (int i = 0; i < trials.Length; i++)
@@ -296,6 +303,11 @@ namespace VRPerception.Tasks
                     eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
                         new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "failed" });
                 }
+            }
+
+            if (runLifecycleBegun && _task is ITaskRunLifecycle lifecycleEnd)
+            {
+                try { await lifecycleEnd.OnRunEndAsync(CancellationToken.None); } catch { }
             }
 
             // 运行结束后请求一次日志刷盘（与 Orchestrator 的 checkpoint 刷盘相互独立，二者兼容）

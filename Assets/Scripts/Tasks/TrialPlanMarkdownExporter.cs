@@ -258,6 +258,12 @@ namespace VRPerception.Tasks
                 return true;
             }
 
+            if (string.Equals(id, "horizon_cue_integration", StringComparison.OrdinalIgnoreCase))
+            {
+                task = new HorizonCueIntegrationTask(ctx);
+                return true;
+            }
+
             return false;
         }
 
@@ -286,6 +292,28 @@ namespace VRPerception.Tasks
                 sb.AppendLine("```text");
                 sb.AppendLine(systemPrompt.TrimEnd());
                 sb.AppendLine("```");
+                sb.AppendLine();
+            }
+
+            // Adaptive staircase tasks: BuildTrials 仅能导出“计划结构”，核心刺激参数会在运行时自适应变化。
+            if (string.Equals(task.TaskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase))
+            {
+                var cfg = GetDepthJndStaircaseConfig(task);
+
+                sb.AppendLine("## Staircase Notes");
+                sb.AppendLine();
+                sb.AppendLine("- Note: `depthA/depthB/trueCloser` are generated online (adaptive).");
+                sb.AppendLine("- Note: This exporter calls `BuildTrials(seed)` only; it does not simulate staircase updates.");
+                sb.AppendLine($"- defaultMaxTrials: `{cfg.defaultMaxTrials}`");
+                sb.AppendLine($"- fovDeg: `{cfg.fovDeg}`");
+                sb.AppendLine($"- baseDistanceRangeM: `[{cfg.baseDistanceMinM}, {cfg.baseDistanceMaxM}]`");
+                sb.AppendLine($"- minPresentableDistanceM: `{cfg.minPresentableDistanceM}`");
+                sb.AppendLine($"- deltaStartM: `{cfg.deltaStartM}`");
+                sb.AppendLine($"- deltaMinM: `{cfg.deltaMinM}`");
+                sb.AppendLine($"- deltaMaxM: `{cfg.deltaMaxM}`");
+                sb.AppendLine($"- kappa: `{cfg.kappa}`");
+                sb.AppendLine($"- reversalTargetPerGroup: `{cfg.reversalTargetPerGroup}`");
+                sb.AppendLine($"- thresholdUseLastReversals: `{cfg.thresholdUseLastReversals}`");
                 sb.AppendLine();
             }
 
@@ -318,6 +346,14 @@ namespace VRPerception.Tasks
                     sb.AppendLine($"- trueDistanceM: `{t.trueDistanceM}`");
                 }
 
+                // Horizon Cue Integration 字段
+                if (Math.Abs(t.horizonAngleDeg) > 0.001f || t.repetitionIndex > 0)
+                {
+                    sb.AppendLine($"- horizonAngleDeg: `{t.horizonAngleDeg}`");
+                    if (t.repetitionIndex > 0)
+                        sb.AppendLine($"- repetitionIndex: `{t.repetitionIndex}`");
+                }
+
                 // Semantic Size Bias 字段
                 if (!string.IsNullOrWhiteSpace(t.objectA) || !string.IsNullOrWhiteSpace(t.objectB))
                 {
@@ -330,14 +366,17 @@ namespace VRPerception.Tasks
                 }
 
                 // Relative Depth Ordering 字段
-                if (t.depthA > 0f || t.depthB > 0f || !string.IsNullOrWhiteSpace(t.trueCloser))
+                bool isDepthTask =
+                    string.Equals(t.taskId, "relative_depth_order", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(t.taskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase);
+
+                if (isDepthTask || t.depthA > 0f || t.depthB > 0f || !string.IsNullOrWhiteSpace(t.trueCloser))
                 {
-                    sb.AppendLine($"- depthA: `{t.depthA}`");
-                    sb.AppendLine($"- depthB: `{t.depthB}`");
+                    sb.AppendLine($"- depthA: `{FormatFloatOrRuntime(t.depthA, isDepthTask)}`");
+                    sb.AppendLine($"- depthB: `{FormatFloatOrRuntime(t.depthB, isDepthTask)}`");
                     sb.AppendLine($"- scaleA: `{t.scaleA}`");
                     sb.AppendLine($"- scaleB: `{t.scaleB}`");
-                    if (!string.IsNullOrWhiteSpace(t.trueCloser))
-                        sb.AppendLine($"- trueCloser: `{t.trueCloser}`");
+                    sb.AppendLine($"- trueCloser: `{FormatStringOrRuntime(t.trueCloser, isDepthTask)}`");
                 }
 
                 // Change Detection 字段
@@ -440,6 +479,84 @@ namespace VRPerception.Tasks
             }
 
             return sb.ToString();
+        }
+
+        private static string FormatFloatOrRuntime(float value, bool preferRuntimePlaceholder)
+        {
+            if (value > 0f) return value.ToString("0.###");
+            return preferRuntimePlaceholder ? "runtime" : value.ToString("0.###");
+        }
+
+        private static string FormatStringOrRuntime(string value, bool preferRuntimePlaceholder)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+            return preferRuntimePlaceholder ? "runtime" : "";
+        }
+
+        private sealed class DepthJndStaircaseConfig
+        {
+            public int defaultMaxTrials = 60;
+            public float fovDeg = 60f;
+            public float baseDistanceMinM = 4.0f;
+            public float baseDistanceMaxM = 10.0f;
+            public float minPresentableDistanceM = 1.0f;
+            public float deltaStartM = 0.50f;
+            public float deltaMinM = 0.02f;
+            public float deltaMaxM = 2.00f;
+            public float kappa = 1.4142135f;
+            public int reversalTargetPerGroup = 8;
+            public int thresholdUseLastReversals = 4;
+        }
+
+        private static DepthJndStaircaseConfig GetDepthJndStaircaseConfig(ITask task)
+        {
+            var cfg = new DepthJndStaircaseConfig();
+            if (task == null) return cfg;
+
+            // DepthJndStaircaseTask 使用 private const；用反射读取以避免在此处重复维护。
+            try
+            {
+                var t = task.GetType();
+                if (!string.Equals(t.Name, "DepthJndStaircaseTask", StringComparison.Ordinal))
+                {
+                    return cfg;
+                }
+
+                TryReadConstInt(t, "DefaultMaxTrials", ref cfg.defaultMaxTrials);
+                TryReadConstFloat(t, "DefaultFovDeg", ref cfg.fovDeg);
+                TryReadConstFloat(t, "BaseDistanceMinM", ref cfg.baseDistanceMinM);
+                TryReadConstFloat(t, "BaseDistanceMaxM", ref cfg.baseDistanceMaxM);
+                TryReadConstFloat(t, "MinPresentableDistanceM", ref cfg.minPresentableDistanceM);
+                TryReadConstFloat(t, "DeltaStartM", ref cfg.deltaStartM);
+                TryReadConstFloat(t, "DeltaMinM", ref cfg.deltaMinM);
+                TryReadConstFloat(t, "DeltaMaxM", ref cfg.deltaMaxM);
+                TryReadConstFloat(t, "Kappa", ref cfg.kappa);
+                TryReadConstInt(t, "ReversalTargetPerGroup", ref cfg.reversalTargetPerGroup);
+                TryReadConstInt(t, "ThresholdUseLastReversals", ref cfg.thresholdUseLastReversals);
+            }
+            catch
+            {
+                // ignore, keep defaults
+            }
+
+            return cfg;
+        }
+
+        private static void TryReadConstInt(Type type, string fieldName, ref int target)
+        {
+            var f = type.GetField(fieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (f == null || !f.IsLiteral) return;
+            if (f.GetRawConstantValue() is int v) target = v;
+        }
+
+        private static void TryReadConstFloat(Type type, string fieldName, ref float target)
+        {
+            var f = type.GetField(fieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (f == null || !f.IsLiteral) return;
+
+            var raw = f.GetRawConstantValue();
+            if (raw is float fv) { target = fv; return; }
+            if (raw is double dv) { target = (float)dv; return; }
         }
 
         private static string SafeGetSystemPrompt(ITask task)

@@ -23,6 +23,8 @@ namespace VRPerception.Perception
                     return SemanticSizeBiasSystem();
                 case "relative_depth_order":
                     return RelativeDepthOrderSystem();
+                case "depth_jnd_staircase":
+                    return DepthJndStaircaseSystem();
                 case "change_detection":
                     return ChangeDetectionSystem();
                 case "occlusion_reasoning":
@@ -76,6 +78,15 @@ namespace VRPerception.Perception
                    "\"answer\":{\"closer\":\"A\"|\"B\"},\"confidence\":<0..1>} " +
                    "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with provided tools. " +
                    "Do NOT output any extra text.";
+        }
+
+        private static string DepthJndStaircaseSystem()
+        {
+            return "You are a vision agent for Staircase Relative Depth JND. ONLY output JSON. " +
+                   "Your goal is to decide which object (A or B) is closer to the camera in the image. " +
+                   "Inference format: {\"type\":\"inference\",\"taskId\":\"depth_jnd_staircase\",\"trialId\":<int>," +
+                   "\"answer\":{\"closer\":\"A\"|\"B\"},\"confidence\":<0..1>} " +
+                   "Do NOT output any extra text or action_plan.";
         }
 
         private static string ChangeDetectionSystem()
@@ -181,6 +192,20 @@ namespace VRPerception.Perception
             sb.AppendLine("Object A is on the left side of the view; object B is on the right side.");
             sb.Append("Output ONLY JSON with fields: ");
             sb.Append("type=inference, answer.closer ('A'|'B'), confidence (0..1).");
+            return sb.ToString();
+        }
+
+        public static string BuildDepthJndStaircasePrompt(string background, float fovDeg)
+        {
+            var bg = string.IsNullOrEmpty(background) ? "none" : background;
+            var fov = fovDeg > 0 ? fovDeg : 60f;
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Task: Decide which object is closer to the camera (A or B).");
+            sb.AppendLine("Both objects are visually identical; only their depth differs.");
+            sb.AppendLine($"Conditions: background={bg}, FOV={fov} deg.");
+            sb.AppendLine("Object A is on the left side of the view; object B is on the right side.");
+            sb.Append("Output ONLY JSON with fields: type=inference, answer.closer ('A'|'B'), confidence (0..1).");
             return sb.ToString();
         }
 
