@@ -28,6 +28,9 @@ namespace VRPerception.Tasks
     {
         public string TaskId => "horizon_cue_integration";
 
+        // 试次切换黑屏保持时长：避免用户看到场景/物体瞬时跳变。
+        private const int InterTrialBlackoutHoldMs = 600;
+
         private TaskRunnerContext _ctx;
 
         private GameObject _runtimeRoot;
@@ -35,6 +38,11 @@ namespace VRPerception.Tasks
         private Transform _skySphere;
         private Transform _redSphere;
         private TrialBlackoutOverlay _blackout;
+        private bool _blackoutIsRuntimeCreated;
+        private bool? _blackoutOriginalHideOnTrialEnd;
+        private bool? _blackoutOriginalEnabled;
+        private bool? _blackoutOriginalActiveSelf;
+        private bool? _blackoutOriginalVisible;
 
         private Material _runtimeRedMaterial;
         private Material _runtimeSkyMaterial;
@@ -78,7 +86,8 @@ namespace VRPerception.Tasks
                 }
             }
 
-            // 任务运行时自建一套最小场景（根节点/环境Rig/天空球/红球/黑场遮罩）。
+            // 任务运行时自建一套最小场景（根节点/环境Rig/天空球/红球）。
+            // 黑场遮罩优先复用原场景（Bridge）中已有的 TrialBlackoutOverlay。
             EnsureRuntimeObjects();
             return Task.CompletedTask;
         }
@@ -95,10 +104,13 @@ namespace VRPerception.Tasks
             _didDisableRoom = false;
             _roomGo = null;
 
+            RestoreSceneBlackoutIfNeeded();
+
             _environmentRig = null;
             _skySphere = null;
             _redSphere = null;
             _blackout = null;
+            _blackoutIsRuntimeCreated = false;
 
             if (_runtimeRedMaterial != null)
             {
@@ -198,8 +210,9 @@ namespace VRPerception.Tasks
                 return;
             }
 
-            // 防御：确保新试次开始时不是黑场。
-            _blackout?.Hide();
+            // 若上一试次刚把黑场打开，这里先不要立刻关闭。
+            // 做法：在黑场下更新场景，然后保持一小段时间，最后再解除黑场。
+            bool wasBlackoutVisible = _blackout != null && _blackout.IsVisible;
 
             // 确保天空球不会被相机 far clip 裁剪（默认 Primitive.Sphere 半径约为 0.5，scale=1 表示直径 1）。
             if (_skySphere != null)
@@ -234,7 +247,13 @@ namespace VRPerception.Tasks
                 trial.sphereScreenY01 = vp.y;
             }
 
-            // 给渲染/采集留出稳定时间窗口。
+            if (wasBlackoutVisible)
+            {
+                await Task.Delay(InterTrialBlackoutHoldMs, ct);
+                _blackout?.Hide();
+            }
+
+            // 给渲染/采集留出稳定时间窗口（解除黑场后也需要一段时间确保画面稳定）。
             await Task.Delay(250, ct);
         }
 
@@ -301,12 +320,101 @@ namespace VRPerception.Tasks
                 _redSphere = CreateRedSphere(_runtimeRoot.transform);
             }
 
-            if (_blackout == null)
+            EnsureBlackoutOverlay();
+        }
+
+        private void EnsureBlackoutOverlay()
+        {
+            if (_blackout != null) return;
+
+            if (TryFindSceneTrialBlackoutOverlay(out var overlay))
             {
-                var blackoutGo = new GameObject("TrialBlackoutOverlay");
-                blackoutGo.transform.SetParent(_runtimeRoot.transform, worldPositionStays: false);
-                _blackout = blackoutGo.AddComponent<TrialBlackoutOverlay>();
+                _blackout = overlay;
+                _blackoutIsRuntimeCreated = false;
+
+                // 记录原状态，方便任务结束后恢复。
+                _blackoutOriginalHideOnTrialEnd = overlay.HideOnTrialEnd;
+                _blackoutOriginalEnabled = overlay.enabled;
+                _blackoutOriginalActiveSelf = overlay.gameObject != null ? overlay.gameObject.activeSelf : null;
+                _blackoutOriginalVisible = overlay.IsVisible;
+
+                if (!overlay.enabled) overlay.enabled = true;
+                if (overlay.gameObject != null && !overlay.gameObject.activeInHierarchy) overlay.gameObject.SetActive(true);
+
+                // 该任务需要把黑屏延续到下一试次再解除，不能在 TrialEnd 事件时自动隐藏。
+                overlay.HideOnTrialEnd = false;
+                return;
             }
+
+            // 找不到场景遮罩时，回退到运行时创建，避免任务不可用。
+            Debug.LogWarning("[HorizonCueIntegrationTask] TrialBlackoutOverlay not found in scene; creating a runtime one.");
+            var blackoutGo = new GameObject("TrialBlackoutOverlay");
+            blackoutGo.transform.SetParent(_runtimeRoot != null ? _runtimeRoot.transform : null, worldPositionStays: false);
+            _blackout = blackoutGo.AddComponent<TrialBlackoutOverlay>();
+            _blackoutIsRuntimeCreated = true;
+            _blackout.HideOnTrialEnd = false;
+        }
+
+        private void RestoreSceneBlackoutIfNeeded()
+        {
+            if (_blackout == null) return;
+            if (_blackoutIsRuntimeCreated) return;
+
+            try
+            {
+                var go = _blackout.gameObject;
+                if (go != null && !go.activeInHierarchy) go.SetActive(true);
+
+                if (_blackoutOriginalHideOnTrialEnd.HasValue) _blackout.HideOnTrialEnd = _blackoutOriginalHideOnTrialEnd.Value;
+
+                if (_blackoutOriginalVisible.HasValue)
+                {
+                    if (_blackoutOriginalVisible.Value) _blackout.Show();
+                    else _blackout.Hide();
+                }
+
+                if (_blackoutOriginalEnabled.HasValue) _blackout.enabled = _blackoutOriginalEnabled.Value;
+                if (go != null && _blackoutOriginalActiveSelf.HasValue) go.SetActive(_blackoutOriginalActiveSelf.Value);
+            }
+            catch
+            {
+                // ignore restore failures
+            }
+            finally
+            {
+                _blackoutOriginalHideOnTrialEnd = null;
+                _blackoutOriginalEnabled = null;
+                _blackoutOriginalActiveSelf = null;
+                _blackoutOriginalVisible = null;
+            }
+        }
+
+        private static bool TryFindSceneTrialBlackoutOverlay(out TrialBlackoutOverlay overlay)
+        {
+            overlay = null;
+            try
+            {
+                overlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
+                if (overlay != null) return true;
+
+                var all = Resources.FindObjectsOfTypeAll<TrialBlackoutOverlay>();
+                if (all == null) return false;
+                for (int i = 0; i < all.Length; i++)
+                {
+                    var candidate = all[i];
+                    if (candidate == null) continue;
+                    var go = candidate.gameObject;
+                    if (go == null) continue;
+                    if (!go.scene.IsValid()) continue; // exclude prefab assets
+                    overlay = candidate;
+                    return true;
+                }
+            }
+            catch
+            {
+                overlay = null;
+            }
+            return overlay != null;
         }
 
         private Transform CreateSkySphere(Transform parent)
