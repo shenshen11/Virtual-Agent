@@ -47,6 +47,7 @@ namespace VRPerception.Tasks
         private readonly List<float> _reversalDeltas = new List<float>(16);
         private int _groupIndex = 0;
         private int _trialIndexInGroup = 0;
+        private bool _endRequested = false;
 
         public DepthJndStaircaseTask(TaskRunnerContext ctx)
         {
@@ -75,6 +76,7 @@ namespace VRPerception.Tasks
             _rand = new System.Random(seed);
 
             ResetStaircaseForNewGroup(0);
+            _endRequested = false;
 
             int desired = DefaultMaxTrials;
             try
@@ -127,6 +129,7 @@ namespace VRPerception.Tasks
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
             TryBindHelpers();
 
             if (_scene != null)
@@ -204,14 +207,14 @@ namespace VRPerception.Tasks
             string lastDirectionSnapshot = _lastDirection;
             float deltaNextSnapshot = _deltaM;
 
-            bool groupEnded = false;
             float thresholdEstimate = EstimateThreshold();
+            bool groupEnded = reversalCountSnapshot >= ReversalTargetPerGroup;
 
-            if (_reversalCount >= ReversalTargetPerGroup)
+            if (groupEnded && !_endRequested)
             {
-                groupEnded = true;
                 thresholdEstimate = EstimateThreshold();
-                ResetStaircaseForNewGroup(_groupIndex + 1);
+                _endRequested = true;
+                _ctx?.runner?.CancelRun();
             }
 
             try
