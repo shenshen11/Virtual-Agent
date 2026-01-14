@@ -465,6 +465,21 @@ namespace VRPerception.Tasks
                         sb.AppendLine($"- dotRadius: `{t.dotRadius}`");
                 }
 
+                // Visual Crowding 字段
+                if (t.eccentricityDeg > 0 || t.spacingDeg > 0 || !string.IsNullOrWhiteSpace(t.targetLetter) || (t.flankerLetters != null && t.flankerLetters.Length > 0))
+                {
+                    if (t.eccentricityDeg > 0)
+                        sb.AppendLine($"- eccentricityDeg: `{t.eccentricityDeg}`");
+                    if (t.spacingDeg > 0)
+                        sb.AppendLine($"- spacingDeg: `{t.spacingDeg}`");
+                    if (!string.IsNullOrWhiteSpace(t.targetLetter))
+                        sb.AppendLine($"- targetLetter: `{t.targetLetter}`");
+                    if (t.targetIndex >= 0)
+                        sb.AppendLine($"- targetIndex: `{t.targetIndex}`");
+                    if (t.flankerLetters != null && t.flankerLetters.Length > 0)
+                        sb.AppendLine($"- flankerLetters: `{string.Join(" ", t.flankerLetters)}`");
+                }
+
                 // 任务提示词（有助于理解每个 trial 的实际文案）
                 var taskPrompt = SafeBuildTaskPrompt(task, t);
                 if (!string.IsNullOrWhiteSpace(taskPrompt))

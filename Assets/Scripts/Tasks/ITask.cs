@@ -132,6 +132,13 @@ namespace VRPerception.Tasks
         public string trueMoreSide;               // 真值："left" | "right"
         public float exposureDurationMs = 500f;   // 曝光时长（默认 500ms）
         public float dotRadius = 0.2f;            // 点的半径
+
+        // Visual Crowding 专用字段
+        public float eccentricityDeg;             // 目标字母离心率（度）
+        public float spacingDeg;                  // 目标与最近干扰项的间距（度）
+        public string targetLetter;               // 真值：目标字母
+        public string[] flankerLetters;           // 干扰字母序列（长度 5 时目标索引在 2）
+        public int targetIndex = 2;               // 目标在串中的索引位置，默认 0..4 中的 2
     }
 
     /// <summary>
@@ -185,6 +192,11 @@ namespace VRPerception.Tasks
         public string trueMoreSide;               // "left" | "right"
         public bool isMoreSideCorrect;            // 是否判断正确
         public long humanReactionTimeMs;          // 人类反应时（从 mask 出现到提交）
+
+        // Visual Crowding 指标
+        public string predictedLetter;            // 模型/人类预测的字母
+        public string trueLetter;                 // 真值字母
+        public bool isLetterCorrect;              // 是否识别正确
 
         // 其他扩展指标（键值对）
         public string extraJson;

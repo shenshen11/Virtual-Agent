@@ -164,6 +164,42 @@ struct Trial {
 - Y 轴：Estimated Distance（人类/MLLM）
 - 系列：5m 组、10m 组、20m 组（3 条折线）
 
+## 场景 14：视觉拥挤（Visual Crowding）
+
+目标：在严格中央注视条件下，让被试/模型用余光识别**右侧外周**字母串中间目标字母，测量拥挤效应随离心率与间距变化的心理物理曲线，并对比 Human vs MLLM 是否存在“临界间距（Critical Spacing）”。
+
+刺激与界面：
+- 屏幕中央持续显示红色注视点（或 “+”），被试要求全程盯住注视点。
+- 右侧外周呈现水平 5 字母串：`F1 F2 [T] F3 F4`（`[T]` 为目标字母，`Fi` 为干扰字母，且 `Fi != T`）。
+
+自变量（建议最小可行集合）：
+- **Eccentricity（eccentricityDeg）**：目标中心距注视点的视角距离（如 6° / 10° / 14°）。
+- **Spacing（spacingDeg）**：目标与最近干扰字母中心距（如 0.5° / 1.0° / 1.5° / 2.0° / 3.0°）。
+- （固定项）字母集合：建议使用大写字母并移除易混淆字符（如 I/O/Q）；干扰字母与目标同集合采样。
+
+因变量：
+- `correct`（bool）
+- `confidence`（0–1，仅模型端）
+- RT；模型记录 `latencyMs`
+
+
+模型输出（inference）：
+```json
+{ "type":"inference","taskId":"visual_crowding","trialId":12,"answer":{"letter":"R"},"confidence":0.72 }
+```
+Trial流程
+
+推荐动作原语：
+- 建议仅允许 `snapshot`（强制单次）；如需对齐不同 Provider，可在任务端明确禁用 `action_plan`。
+
+评测与拟合（建议）：
+- **准确率曲线**：按 `eccentricityDeg` 分组，绘制 Accuracy vs `spacingDeg`。
+- **临界间距**：对每个 `eccentricityDeg` 拟合 psychometric（logistic/cumulative normal），取 75% 正确率对应的 `criticalSpacingDeg`。
+- **Bouma 比值**：`boumaK = criticalSpacingDeg / eccentricityDeg`（人类通常相对稳定；模型可能显著偏离）。
+
+日志字段建议（JSONL）：
+- 条件：`eccentricityDeg`, `spacingDeg`, `targetLetter`, `flankers[]`, `targetIndex=2`, `seed`
+
 ## 日志与配置建议（适用于全部场景）
 
 - JSONL 字段：`taskId`、`trialId`、条件（FOV/光照/背景/遮挡/对象分布等）、真值、模型输出、`confidence`、动作序列、`latencyMs`、`provider`/`transport`、随机种子

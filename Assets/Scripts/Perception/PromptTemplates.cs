@@ -37,6 +37,8 @@ namespace VRPerception.Perception
                     return VisualSearchSystem();
                 case "object_counting":
                     return ObjectCountingSystem();
+                case "visual_crowding":
+                    return VisualCrowdingSystem();
                 case "numerosity_comparison":
                     return NumerosityComparisonSystem();
                 default:
@@ -151,6 +153,15 @@ namespace VRPerception.Perception
                    "Do NOT output any extra text.";
         }
 
+        private static string VisualCrowdingSystem()
+        {
+            return "You are a vision agent for peripheral letter recognition under visual crowding. " +
+                   "ONLY output JSON. Do not use action_plan; you get a single snapshot. " +
+                   "Inference format: {\"type\":\"inference\",\"taskId\":\"visual_crowding\",\"trialId\":<int>," +
+                   "\"answer\":{\"letter\":\"<A-Z>\"},\"confidence\":<0..1>} " +
+                   "Never output any extra text.";
+        }
+
         private static string NumerosityComparisonSystem()
         {
             return "You are a vision agent for Numerosity Comparison. ONLY output JSON. " +
@@ -206,6 +217,22 @@ namespace VRPerception.Perception
             sb.AppendLine($"Conditions: background={bg}, FOV={fov} deg.");
             sb.AppendLine("Object A is on the left side of the view; object B is on the right side.");
             sb.Append("Output ONLY JSON with fields: type=inference, answer.closer ('A'|'B'), confidence (0..1).");
+            return sb.ToString();
+        }
+
+        public static string BuildVisualCrowdingPrompt(float eccentricityDeg, float spacingDeg, string targetLetter, string[] flankers)
+        {
+            var ecc = eccentricityDeg > 0 ? eccentricityDeg : 6f;
+            var sp = spacingDeg > 0 ? spacingDeg : 1f;
+            var target = string.IsNullOrEmpty(targetLetter) ? "?" : targetLetter;
+            var fText = flankers != null && flankers.Length > 0 ? string.Join(" ", flankers) : "F1 F2 [T] F3 F4";
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Task: Identify the center target letter in a 5-letter string shown to the right of a central fixation point.");
+            sb.AppendLine("Fixation stays at screen center. You get a single snapshot (no action_plan).");
+            sb.AppendLine($"Eccentricity (target center from fixation): {ecc} deg. Letter spacing: {sp} deg (center-to-center).");
+            sb.AppendLine($"Letters (left to right): {fText}. Target letter (true) = {target} at index 2 (middle).");
+            sb.Append("Output ONLY JSON with fields: type=inference, answer.letter (A-Z), confidence (0..1).");
             return sb.ToString();
         }
 
