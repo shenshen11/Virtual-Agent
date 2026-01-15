@@ -31,6 +31,10 @@ namespace VRPerception.Perception
                     return ColorConstancySystem();
                 case "material_perception":
                     return MaterialPerceptionSystem();
+                case "material_roughness":
+                case "material_roughness_motion":
+                case "material_roughness_static":
+                    return MaterialRoughnessSystem();
                 case "visual_search":
                     return VisualSearchSystem();
                 case "object_counting":
@@ -95,6 +99,14 @@ namespace VRPerception.Perception
                    "Inference format: {\"type\":\"inference\",\"taskId\":\"occlusion_reasoning\",\"trialId\":<int>," +
                    "\"answer\":{\"present\":true|false,\"count\":<int>},\"confidence\":<0..1>} " +
                    "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with the provided tools. " +
+                   "Do NOT output any extra text.";
+        }
+
+        private static string MaterialRoughnessSystem()
+        {
+            return "You are a vision agent for Material Roughness Estimation. ONLY output JSON. " +
+                   "Output format: {\"roughness\":<number 0..1>,\"confidence\":<0..1>} " +
+                   "Roughness definition: 0=perfectly smooth mirror-like, 1=fully rough matte. " +
                    "Do NOT output any extra text.";
         }
 
@@ -280,6 +292,20 @@ namespace VRPerception.Perception
             return sb.ToString();
         }
 
+        public static string BuildMaterialRoughnessPrompt(string environment, bool requireHeadMotion, float fovDeg)
+        {
+            var env = string.IsNullOrWhiteSpace(environment) ? "unknown" : environment;
+            var fov = fovDeg > 0 ? fovDeg : 60f;
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Task: Estimate the surface roughness of the main metallic sphere in the image.");
+            sb.AppendLine("Roughness definition: 0 = perfectly smooth mirror-like; 1 = completely rough matte.");
+            sb.AppendLine($"Scene conditions: environment={env}, FOV={fov} deg.");
+            sb.AppendLine($"Experimental flag (for human): head_motion_required={(requireHeadMotion ? "true" : "false")}.");
+            sb.Append("Output ONLY JSON with fields: roughness (number 0..1), confidence (0..1).");
+            return sb.ToString();
+        }
+
         // ============ Tool Specifications (for action_plan) ============
 
         // 注：ParameterSpec.PropertySpec 是占位结构，JsonUtility 对匿名结构支持有限；
@@ -366,6 +392,12 @@ namespace VRPerception.Perception
                 MakeTool("head_look_at", "Look at a target by name or position.", new [] { "target" }),
                 MakeTool("snapshot", "Request a frame capture.", Array.Empty<string>())
             };
+        }
+
+        public static ToolSpec[] GetToolsForMaterialRoughness()
+        {
+            // 该任务默认不提供工具，以避免模型走 action_plan 分支造成额外不可控变量。
+            return Array.Empty<ToolSpec>();
         }
 
         public static ToolSpec[] GetToolsForVisualSearch()

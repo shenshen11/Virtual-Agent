@@ -547,5 +547,6 @@ namespace VRPerception.Perception
         // 扩展常用任务字段，便于上层通过反射提取
         public float distance_m;
         public string larger;
+        public float roughness;
     }
 }

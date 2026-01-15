@@ -6,6 +6,7 @@ using UnityEngine.XR.Interaction.Toolkit.UI;
 using TMPro;
 using VRPerception.Infra.EventBus;
 using VRPerception.Perception;
+using VRPerception.Tasks;
 
 namespace VRPerception.UI
 {
@@ -48,6 +49,19 @@ namespace VRPerception.UI
         [SerializeField] private Toggle optionBToggle;
         [SerializeField] private ToggleGroup sizeToggleGroup;
 
+        [Header("Material Roughness")]
+        [SerializeField] private GameObject roughnessGroup;
+        [SerializeField] private Slider roughnessSlider;
+        [SerializeField] private TMP_Text roughnessValueText;
+
+        [Header("Motion Gate (Roughness)")]
+        [Tooltip("当 trial.requireHeadMotion=true 时，是否要求头动达到阈值才允许提交（用于 optic flow 条件）。")]
+        [SerializeField] private bool enableHeadMotionGate = true;
+        [Tooltip("要求头部 yaw 峰峰值（度），达到后才可提交。")]
+        [SerializeField] private float requiredYawRangeDeg = 20f;
+        [Tooltip("可选：用于显示门控状态的提示文本。")]
+        [SerializeField] private TMP_Text motionGateHint;
+
         [Header("UX Settings")]
         [Tooltip("显示弹窗时是否自动选中第一个输入框")]
         [SerializeField] private bool autoFocusInput = true;
@@ -66,6 +80,14 @@ namespace VRPerception.UI
         private Coroutine _ensureSubscribeRoutine;
 
         private Canvas _canvas;
+
+        // Motion gate state (roughness)
+        private bool _requireHeadMotion;
+        private bool _yawInit;
+        private float _lastYawDeg;
+        private float _unwrappedYawDeg;
+        private float _minYawDeg;
+        private float _maxYawDeg;
 
         private void Awake()
         {
@@ -170,6 +192,13 @@ namespace VRPerception.UI
                 _awaitingInput = true;
                 _taskId = data.taskId;
                 _trialId = data.trialId;
+
+                _requireHeadMotion = false;
+                if (data.trialConfig is TrialSpec ts)
+                {
+                    _requireHeadMotion = ts.requireHeadMotion;
+                }
+
                 PrepareDialogForTask(_taskId, data.humanInputPrompt);
                 ShowDialog();
             }
@@ -186,10 +215,12 @@ namespace VRPerception.UI
         {
             bool isDistance = string.Equals(taskId, "distance_compression", StringComparison.OrdinalIgnoreCase);
             bool isSizeBias = string.Equals(taskId, "semantic_size_bias", StringComparison.OrdinalIgnoreCase);
+            bool isRoughness = !string.IsNullOrWhiteSpace(taskId) && taskId.StartsWith("material_roughness", StringComparison.OrdinalIgnoreCase);
 
             if (taskLabel != null) taskLabel.text = $"任务: {taskId}";
             if (trialLabel != null) trialLabel.text = $"试次: {_trialId}";
             if (errorHint != null) errorHint.text = string.Empty;
+            if (motionGateHint != null) motionGateHint.text = string.Empty;
 
             // 设置任务提示文本：优先使用自定义提示，否则使用默认提示
             if (taskPromptText != null)
@@ -206,6 +237,14 @@ namespace VRPerception.UI
                 {
                     taskPromptText.text = "请选择您认为更大的对象（A 或 B），并设置您的置信度。";
                 }
+                else if (isRoughness)
+                {
+                    taskPromptText.text = "请估计金属球表面的粗糙度 roughness（0=镜面，1=完全哑光），并设置置信度。";
+                    if (_requireHeadMotion)
+                    {
+                        taskPromptText.text += "\n本条件要求左右晃头观察高光变化后再提交。";
+                    }
+                }
                 else
                 {
                     taskPromptText.text = "请根据任务要求完成输入。";
@@ -214,6 +253,7 @@ namespace VRPerception.UI
 
             if (distanceGroup != null) distanceGroup.SetActive(isDistance);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(isSizeBias);
+            if (roughnessGroup != null) roughnessGroup.SetActive(isRoughness);
 
             if (isDistance && distanceInput != null)
             {
@@ -226,6 +266,26 @@ namespace VRPerception.UI
                 confidenceSlider.value = 0.9f;
                 UpdateConfidenceLabel(confidenceSlider.value);
                 confidenceSlider.wholeNumbers = false;
+            }
+
+            if (isRoughness)
+            {
+                if (roughnessSlider != null)
+                {
+                    roughnessSlider.wholeNumbers = false;
+                    roughnessSlider.minValue = 0f;
+                    roughnessSlider.maxValue = 1f;
+                    roughnessSlider.value = 0.5f;
+                    UpdateRoughnessLabel(roughnessSlider.value);
+                }
+
+                // 先禁用提交，等待 Update() 中门控达标（若 requireHeadMotion=false 则立即放行）
+                if (submitButton != null)
+                {
+                    submitButton.interactable = !_requireHeadMotion || !enableHeadMotionGate;
+                }
+
+                ResetHeadMotionGate();
             }
 
             if (isSizeBias && sizeToggleGroup != null)
@@ -264,6 +324,57 @@ namespace VRPerception.UI
             }
         }
 
+        private void Update()
+        {
+            if (!_awaitingInput) return;
+            if (roughnessGroup == null || !roughnessGroup.activeSelf) return;
+
+            // 实时更新 roughness 文本
+            if (roughnessSlider != null)
+            {
+                UpdateRoughnessLabel(roughnessSlider.value);
+            }
+
+            if (!_requireHeadMotion || !enableHeadMotionGate)
+            {
+                if (submitButton != null) submitButton.interactable = true;
+                if (motionGateHint != null) motionGateHint.text = string.Empty;
+                return;
+            }
+
+            var cam = _canvas != null && _canvas.worldCamera != null ? _canvas.worldCamera : Camera.main;
+            if (cam == null) return;
+
+            float yaw = cam.transform.eulerAngles.y;
+            if (!_yawInit)
+            {
+                _yawInit = true;
+                _lastYawDeg = yaw;
+                _unwrappedYawDeg = 0f;
+                _minYawDeg = 0f;
+                _maxYawDeg = 0f;
+            }
+            else
+            {
+                var delta = Mathf.DeltaAngle(_lastYawDeg, yaw);
+                _unwrappedYawDeg += delta;
+                _minYawDeg = Mathf.Min(_minYawDeg, _unwrappedYawDeg);
+                _maxYawDeg = Mathf.Max(_maxYawDeg, _unwrappedYawDeg);
+                _lastYawDeg = yaw;
+            }
+
+            float range = _maxYawDeg - _minYawDeg;
+            bool ok = range >= Mathf.Max(1f, requiredYawRangeDeg);
+
+            if (submitButton != null) submitButton.interactable = ok;
+            if (motionGateHint != null)
+            {
+                motionGateHint.text = ok
+                    ? "头动门控已达标，可以提交。"
+                    : $"请左右晃头观察高光变化（当前≈{range:0}° / 需≥{requiredYawRangeDeg:0}°）";
+            }
+        }
+
         private void HideDialog()
         {
             if (dialogRoot != null) dialogRoot.SetActive(false);
@@ -272,6 +383,7 @@ namespace VRPerception.UI
             // 显式隐藏任务特定的 Group，确保它们不会残留
             if (distanceGroup != null) distanceGroup.SetActive(false);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(false);
+            if (roughnessGroup != null) roughnessGroup.SetActive(false);
         }
 
         private void HookUIEvents(bool bind)
@@ -279,12 +391,14 @@ namespace VRPerception.UI
             if (bind)
             {
                 if (confidenceSlider != null) confidenceSlider.onValueChanged.AddListener(UpdateConfidenceLabel);
+                if (roughnessSlider != null) roughnessSlider.onValueChanged.AddListener(UpdateRoughnessLabel);
                 if (submitButton != null) submitButton.onClick.AddListener(SubmitCurrent);
                 if (skipButton != null) skipButton.onClick.AddListener(SkipCurrent);
             }
             else
             {
                 if (confidenceSlider != null) confidenceSlider.onValueChanged.RemoveListener(UpdateConfidenceLabel);
+                if (roughnessSlider != null) roughnessSlider.onValueChanged.RemoveListener(UpdateRoughnessLabel);
                 if (submitButton != null) submitButton.onClick.RemoveListener(SubmitCurrent);
                 if (skipButton != null) skipButton.onClick.RemoveListener(SkipCurrent);
             }
@@ -294,6 +408,21 @@ namespace VRPerception.UI
         {
             if (confidenceValueText != null)
                 confidenceValueText.text = $"置信度: {value:F2}";
+        }
+
+        private void UpdateRoughnessLabel(float value)
+        {
+            if (roughnessValueText != null)
+                roughnessValueText.text = $"粗糙度: {value:F2}";
+        }
+
+        private void ResetHeadMotionGate()
+        {
+            _yawInit = false;
+            _lastYawDeg = 0f;
+            _unwrappedYawDeg = 0f;
+            _minYawDeg = 0f;
+            _maxYawDeg = 0f;
         }
 
         private void SubmitCurrent()
@@ -323,6 +452,22 @@ namespace VRPerception.UI
             {
                 string larger = optionAToggle != null && optionAToggle.isOn ? "A" : "B";
                 PublishSize(larger, confidence);
+            }
+            else if (roughnessGroup != null && roughnessGroup.activeSelf)
+            {
+                if (_requireHeadMotion && enableHeadMotionGate && submitButton != null && !submitButton.interactable)
+                {
+                    if (errorHint != null) errorHint.text = "请先完成左右晃头观察（门控未达标）。";
+                    return;
+                }
+
+                if (roughnessSlider == null)
+                {
+                    if (errorHint != null) errorHint.text = "Roughness Slider 未绑定，请在 Inspector 中绑定 UI。";
+                    return;
+                }
+
+                PublishRoughness(Mathf.Clamp01(roughnessSlider.value), confidence);
             }
             else
             {
@@ -396,6 +541,22 @@ namespace VRPerception.UI
             PublishResponse(response);
         }
 
+        private void PublishRoughness(float roughness, float confidence)
+        {
+            var response = new LLMResponse
+            {
+                type = "inference",
+                taskId = _taskId,
+                trialId = _trialId,
+                providerId = "human",
+                confidence = confidence,
+                latencyMs = 0,
+                answer = new RoughnessAnswer { roughness = roughness, confidence = confidence }
+            };
+
+            PublishResponse(response);
+        }
+
         private void PublishResponse(LLMResponse response)
         {
             var data = new InferenceReceivedEventData
@@ -441,6 +602,13 @@ namespace VRPerception.UI
         private class SizeAnswer
         {
             public string larger;
+            public float confidence;
+        }
+
+        [Serializable]
+        private class RoughnessAnswer
+        {
+            public float roughness;
             public float confidence;
         }
     }

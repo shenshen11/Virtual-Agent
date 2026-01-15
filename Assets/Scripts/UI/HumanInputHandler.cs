@@ -40,6 +40,9 @@ namespace VRPerception.UI
         // semantic_size_bias
         private int _largerIndex = 0; // 0=A, 1=B
 
+        // material_roughness*
+        private float _roughness = 0.5f;
+
         // shared
         private float _confidence = 0.9f;
         private Vector2 _scroll;
@@ -99,6 +102,7 @@ namespace VRPerception.UI
                 // reset UI defaults
                 _distanceText = "10.0";
                 _largerIndex = 0;
+                _roughness = 0.5f;
                 _confidence = 0.9f;
             }
             else if (data.state == TrialLifecycleState.Completed ||
@@ -168,9 +172,23 @@ namespace VRPerception.UI
                     SubmitSize(larger, Mathf.Clamp01(_confidence));
                 }
             }
+            else if (_taskId != null && _taskId.StartsWith("material_roughness", StringComparison.OrdinalIgnoreCase))
+            {
+                GUILayout.Label("估计粗糙度 roughness (0..1):");
+                GUILayout.Label($"roughness: {_roughness:F2}");
+                _roughness = GUILayout.HorizontalSlider(_roughness, 0f, 1f);
+                GUILayout.Space(4);
+                DrawConfidence();
+                GUILayout.Space(6);
+
+                if (GUILayout.Button("提交答案", GUILayout.Height(26)))
+                {
+                    SubmitRoughness(Mathf.Clamp01(_roughness), Mathf.Clamp01(_confidence));
+                }
+            }
             else
             {
-                GUILayout.Label("该组件仅支持 distance_compression 与 semantic_size_bias。");
+                GUILayout.Label("该组件仅支持 distance_compression / semantic_size_bias / material_roughness*。");
                 if (GUILayout.Button("关闭", GUILayout.Height(24)))
                 {
                     _awaitingInput = false;
@@ -215,6 +233,22 @@ namespace VRPerception.UI
                 confidence = conf,
                 latencyMs = 0,
                 answer = new SizeAnswer { larger = larger, confidence = conf }
+            };
+
+            PublishInference(response);
+        }
+
+        private void SubmitRoughness(float roughness, float conf)
+        {
+            var response = new LLMResponse
+            {
+                type = "inference",
+                taskId = _taskId,
+                trialId = _trialId,
+                providerId = "human",
+                confidence = conf,
+                latencyMs = 0,
+                answer = new RoughnessAnswer { roughness = roughness, confidence = conf }
             };
 
             PublishInference(response);
@@ -285,6 +319,13 @@ namespace VRPerception.UI
         private class SizeAnswer
         {
             public string larger; // "A"|"B"
+            public float confidence;
+        }
+
+        [Serializable]
+        private class RoughnessAnswer
+        {
+            public float roughness;
             public float confidence;
         }
     }
