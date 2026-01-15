@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using VRPerception.Infra.EventBus;
+using VRPerception.Perception;
+using VRPerception.Tasks.EnvironmentModules;
 
 namespace VRPerception.Tasks
 {
@@ -51,6 +53,12 @@ namespace VRPerception.Tasks
         [Tooltip("主方向光（可选）。如未指定，将在运行时尝试查找场景中的第一个 Directional Light。")]
         [SerializeField] private Light mainDirectionalLight;
 
+        [Header("Environment Modules")]
+        [Tooltip("可选：用于 module 控制 clearFlags/backgroundColor 的相机。为空时将尝试使用 StimulusCapture.HeadCamera 或 Camera.main。")]
+        [SerializeField] private Camera environmentCamera;
+
+        private EnvironmentController _environmentController;
+
         private readonly List<GameObject> _spawned = new List<GameObject>();
         private readonly List<GameObject> _occluders = new List<GameObject>();
         private string _currentEnvironment = null;
@@ -68,6 +76,7 @@ namespace VRPerception.Tasks
         public float CurrentTextureDensity => _currentTextureDensity;
         public bool CurrentOcclusionEnabled => _currentOcclusionEnabled;
         public bool CurrentShadowEnabled => _currentShadowEnabled;
+        public string CurrentEnvironmentModuleId => _environmentController?.ActiveModuleId;
 
         private void Awake()
         {
@@ -95,6 +104,38 @@ namespace VRPerception.Tasks
 
         public void SetupEnvironment(string environment, float textureDensity = 1f, string lightingPreset = "default", bool occlusion = false)
         {
+            // module 模式（新任务使用）：environment="module:<id>" 或 environment="<id>"（当场景中存在同名 module 时）
+            if (TryResolveEnvironmentModuleId(environment, out var moduleId))
+            {
+                ClearCurrent();
+
+                bool switched = SwitchModule(moduleId);
+                if (!switched)
+                {
+                    Debug.LogWarning($"[ExperimentSceneManager] Failed to switch to environment module '{moduleId}'. Falling back to open_field.");
+                    BuildOpenField();
+                    _currentEnvironment = "open_field";
+                }
+
+                _currentTextureDensity = Mathf.Max(0.1f, textureDensity);
+                _currentLightingPreset = switched
+                    ? (string.IsNullOrEmpty(lightingPreset) ? "module" : (lightingPreset ?? "module").ToLower())
+                    : (lightingPreset ?? "default").ToLower();
+                _currentOcclusionEnabled = occlusion;
+
+                // module 负责环境隔离，不主动应用 SetLighting/SetOcclusion/SetTextureDensity
+                // 若 module 切换失败并回退到 open_field，则按旧逻辑应用这些设置，避免环境处于未知状态
+                if (!switched)
+                {
+                    SetTextureDensity(_currentTextureDensity);
+                    SetLighting(_currentLightingPreset);
+                    SetOcclusion(_currentOcclusionEnabled);
+                }
+
+                PublishSceneEvent("environment_setup", new { environment = _currentEnvironment, moduleId = moduleId });
+                return;
+            }
+
             ClearCurrent();
 
             switch ((environment ?? "open_field").ToLower())
@@ -121,9 +162,50 @@ namespace VRPerception.Tasks
             PublishSceneEvent("environment_setup");
         }
 
+        /// <summary>
+        /// 切换 Environment Module（增量接入：仅当新任务/配置显式选择 module 时才会用到）。
+        /// </summary>
+        public bool SwitchModule(string moduleId)
+        {
+            EnsureEnvironmentController();
+
+            if (_environmentController == null)
+            {
+                Debug.LogWarning("[ExperimentSceneManager] EnvironmentController not initialized.");
+                return false;
+            }
+
+            var ctx = BuildModuleContext();
+            var ok = _environmentController.SwitchTo(moduleId, ctx);
+
+            if (ok)
+            {
+                _currentEnvironment = string.IsNullOrWhiteSpace(moduleId) ? null : $"module:{moduleId.Trim()}";
+                PublishSceneEvent("module_switched", new { moduleId = moduleId, current = _currentEnvironment });
+            }
+
+            return ok;
+        }
+
+        /// <summary>
+        /// 获取当前激活 module 的锚点（如 "StimulusAnchor"/"LightAnchor"）。
+        /// </summary>
+        public Transform GetModuleAnchor(string anchorId)
+        {
+            if (_environmentController == null || !_environmentController.HasActiveModule) return null;
+            return _environmentController.GetAnchor(anchorId);
+        }
+
         public void SetLighting(string preset)
         {
             var p = (preset ?? "default").ToLower();
+            // 若 module 正在控制环境且不允许外部 set_lighting，则忽略（避免串味）
+            if (_environmentController != null && _environmentController.HasActiveModule && !_environmentController.ActiveModuleAllowsSetLighting)
+            {
+                PublishSceneEvent("lighting_ignored", new { preset = p, moduleId = _environmentController.ActiveModuleId });
+                return;
+            }
+
             _currentLightingPreset = p;
 
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
@@ -247,6 +329,12 @@ namespace VRPerception.Tasks
         /// </summary>
         public void SetShadowMode(bool enable)
         {
+            if (_environmentController != null && _environmentController.HasActiveModule && !_environmentController.ActiveModuleAllowsSetLighting)
+            {
+                PublishSceneEvent("shadow_ignored", new { enabled = enable, moduleId = _environmentController.ActiveModuleId });
+                return;
+            }
+
             _currentShadowEnabled = enable;
 
             EnsureMainDirectionalLight();
@@ -262,6 +350,14 @@ namespace VRPerception.Tasks
 
         public void ClearCurrent()
         {
+            // module 清理（恢复快照 + 恢复切换前 module root activeSelf）
+            if (_environmentController != null && _environmentController.HasActiveModule)
+            {
+                var prevModuleId = _environmentController.ActiveModuleId;
+                _environmentController.ClearActive(BuildModuleContext());
+                PublishSceneEvent("module_cleared", new { moduleId = prevModuleId });
+            }
+
             foreach (var go in _spawned)
             {
 #if UNITY_EDITOR
@@ -367,6 +463,56 @@ namespace VRPerception.Tasks
                     break;
                 }
             }
+        }
+
+        private void EnsureEnvironmentController()
+        {
+            _environmentController ??= new EnvironmentController();
+        }
+
+        private EnvironmentModuleContext BuildModuleContext()
+        {
+            EnsureMainDirectionalLight();
+            return new EnvironmentModuleContext(ResolveEnvironmentCamera(), mainDirectionalLight);
+        }
+
+        private Camera ResolveEnvironmentCamera()
+        {
+            if (environmentCamera != null) return environmentCamera;
+
+            var stim = FindObjectOfType<StimulusCapture>();
+            if (stim != null && stim.HeadCamera != null) return stim.HeadCamera;
+
+            return Camera.main;
+        }
+
+        private bool TryResolveEnvironmentModuleId(string environment, out string moduleId)
+        {
+            moduleId = null;
+            if (string.IsNullOrWhiteSpace(environment)) return false;
+
+            var trimmed = environment.Trim();
+            if (trimmed.StartsWith("module:", StringComparison.OrdinalIgnoreCase))
+            {
+                moduleId = trimmed.Substring("module:".Length).Trim();
+                return !string.IsNullOrEmpty(moduleId);
+            }
+
+            // 兼容：直接写 moduleId（仅当场景中存在同名 module 时生效）
+            if (string.Equals(trimmed, "open_field", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "corridor", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            EnsureEnvironmentController();
+            if (_environmentController != null && _environmentController.HasModule(trimmed))
+            {
+                moduleId = trimmed;
+                return true;
+            }
+
+            return false;
         }
 
         // ============== Event Bus Helper ==============
