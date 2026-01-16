@@ -238,10 +238,25 @@ namespace VRPerception.Tasks
                     dirColor = Color.white;
                     dirIntensity = 1.3f;
                     break;
+                case "white_neutral":
+                    ambient = new Color(0.80f, 0.80f, 0.80f);
+                    dirColor = Color.white;
+                    dirIntensity = 1.1f;
+                    break;
                 case "dim_neutral":
                     ambient = new Color(0.35f, 0.35f, 0.35f);
                     dirColor = Color.white;
                     dirIntensity = 0.7f;
+                    break;
+                case "adapt_red":
+                    ambient = new Color(0.60f, 0.15f, 0.15f);
+                    dirColor = new Color(1.00f, 0.30f, 0.30f);
+                    dirIntensity = 1.1f;
+                    break;
+                case "adapt_blue":
+                    ambient = new Color(0.15f, 0.15f, 0.60f);
+                    dirColor = new Color(0.30f, 0.30f, 1.00f);
+                    dirIntensity = 1.1f;
                     break;
                 case "bright_warm":
                     ambient = new Color(0.90f, 0.80f, 0.70f);

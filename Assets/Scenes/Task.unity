@@ -7988,6 +7988,9 @@ GameObject:
   - component: {fileID: 1824977594}
   - component: {fileID: 1824977593}
   - component: {fileID: 1824977592}
+  - component: {fileID: 2162427517}
+  - component: {fileID: 3777570289}
+  - component: {fileID: 2671414045}
   m_Layer: 0
   m_Name: ExperimentRig
   m_TagString: Untagged
@@ -8044,6 +8047,61 @@ MonoBehaviour:
   actionPlanLoopTimeoutMs: 20000
   humanInputTimeoutMs: 0
   subjectMode: 1
+--- !u!114 &2162427517
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1824977591}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3452813d524c46b4bf4763d30813f92b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  furniturePrefabs: []
+  minCount: 6
+  maxCount: 10
+  centerOffset: {x: 0, y: 0, z: 3}
+  areaSize: {x: 6, y: 0, z: 6}
+  alignToFloor: 1
+  floorY: 0
+  randomYaw: 1
+  scaleRange: {x: 0.8, y: 1.2}
+  parentToThis: 1
+--- !u!114 &3777570289
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1824977591}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 93ae51ae802146a1b17a9ce52b32532b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  humanInputPrefab: {fileID: 100100000, guid: 0a98043949bcca34bb91265198ab6b72, type: 3}
+  parentOverride: {fileID: 0}
+  localPosition: {x: 0, y: -0.1, z: 1.2}
+  localEulerAngles: {x: 0, y: 0, z: 0}
+  localScale: {x: 0.1, y: 0.1, z: 0.1}
+  activateOnSpawn: 1
+--- !u!114 &2671414045
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1824977591}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 23bf671e6df382e43bfe8978c48207ef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  createEventSystemIfMissing: 1
+  ensureInputSystemModule: 1
+  ensureXRModule: 1
 --- !u!4 &1824977594
 Transform:
   m_ObjectHideFlags: 0

@@ -27,6 +27,7 @@ namespace VRPerception.Tasks
             TryRegisterInternal("change_detection", ctx => new ChangeDetectionTask(ctx));
             TryRegisterInternal("occlusion_reasoning", ctx => new OcclusionReasoningTask(ctx));
             TryRegisterInternal("color_constancy", ctx => new ColorConstancyTask(ctx));
+            TryRegisterInternal("color_constancy_adjustment", ctx => new ColorConstancyAdjustmentTask(ctx));
             TryRegisterInternal("material_perception", ctx => new MaterialPerceptionTask(ctx));
             // Material roughness under ambiguity (Complex vs Simple modules)
             TryRegisterInternal("material_roughness", ctx => new MaterialRoughnessAmbiguityTask(ctx, "material_roughness", requireHeadMotion: true));

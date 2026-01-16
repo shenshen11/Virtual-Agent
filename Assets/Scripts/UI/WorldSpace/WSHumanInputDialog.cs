@@ -54,6 +54,16 @@ namespace VRPerception.UI
         [SerializeField] private Slider roughnessSlider;
         [SerializeField] private TMP_Text roughnessValueText;
 
+        [Header("Color Constancy (Adjustment)")]
+        [SerializeField] private GameObject colorGroup;
+        [SerializeField] private Slider colorRSlider;
+        [SerializeField] private Slider colorGSlider;
+        [SerializeField] private Slider colorBSlider;
+        [SerializeField] private TMP_Text colorRValueText;
+        [SerializeField] private TMP_Text colorGValueText;
+        [SerializeField] private TMP_Text colorBValueText;
+        [SerializeField] private Image colorPreviewImage;
+
         [Header("Motion Gate (Roughness)")]
         [Tooltip("当 trial.requireHeadMotion=true 时，是否要求头动达到阈值才允许提交（用于 optic flow 条件）。")]
         [SerializeField] private bool enableHeadMotionGate = true;
@@ -88,6 +98,8 @@ namespace VRPerception.UI
         private float _unwrappedYawDeg;
         private float _minYawDeg;
         private float _maxYawDeg;
+
+        private ColorAdjustableTarget _colorTarget;
 
         private void Awake()
         {
@@ -216,6 +228,7 @@ namespace VRPerception.UI
             bool isDistance = string.Equals(taskId, "distance_compression", StringComparison.OrdinalIgnoreCase);
             bool isSizeBias = string.Equals(taskId, "semantic_size_bias", StringComparison.OrdinalIgnoreCase);
             bool isRoughness = !string.IsNullOrWhiteSpace(taskId) && taskId.StartsWith("material_roughness", StringComparison.OrdinalIgnoreCase);
+            bool isColor = string.Equals(taskId, "color_constancy_adjustment", StringComparison.OrdinalIgnoreCase);
 
             if (taskLabel != null) taskLabel.text = $"任务: {taskId}";
             if (trialLabel != null) trialLabel.text = $"试次: {_trialId}";
@@ -245,6 +258,10 @@ namespace VRPerception.UI
                         taskPromptText.text += "\n本条件要求左右晃头观察高光变化后再提交。";
                     }
                 }
+                else if (isColor)
+                {
+                    taskPromptText.text = "请调节球体颜色至您认为的“视觉灰色”，并提交当前 RGB。";
+                }
                 else
                 {
                     taskPromptText.text = "请根据任务要求完成输入。";
@@ -254,6 +271,11 @@ namespace VRPerception.UI
             if (distanceGroup != null) distanceGroup.SetActive(isDistance);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(isSizeBias);
             if (roughnessGroup != null) roughnessGroup.SetActive(isRoughness);
+            if (isColor)
+            {
+                EnsureColorWidgets();
+            }
+            if (colorGroup != null) colorGroup.SetActive(isColor);
 
             if (isDistance && distanceInput != null)
             {
@@ -286,6 +308,14 @@ namespace VRPerception.UI
                 }
 
                 ResetHeadMotionGate();
+            }
+
+            if (isColor)
+            {
+                _colorTarget = FindColorTarget();
+                var startColor = _colorTarget != null ? _colorTarget.CurrentColor : new Color(0.5f, 0.5f, 0.5f);
+                SetColorSliders(startColor);
+                UpdateColorPreviewAndTarget();
             }
 
             if (isSizeBias && sizeToggleGroup != null)
@@ -327,51 +357,53 @@ namespace VRPerception.UI
         private void Update()
         {
             if (!_awaitingInput) return;
-            if (roughnessGroup == null || !roughnessGroup.activeSelf) return;
 
-            // 实时更新 roughness 文本
-            if (roughnessSlider != null)
+            if (roughnessGroup != null && roughnessGroup.activeSelf)
             {
-                UpdateRoughnessLabel(roughnessSlider.value);
-            }
+                // 实时更新 roughness 文本
+                if (roughnessSlider != null)
+                {
+                    UpdateRoughnessLabel(roughnessSlider.value);
+                }
 
-            if (!_requireHeadMotion || !enableHeadMotionGate)
-            {
-                if (submitButton != null) submitButton.interactable = true;
-                if (motionGateHint != null) motionGateHint.text = string.Empty;
-                return;
-            }
+                if (!_requireHeadMotion || !enableHeadMotionGate)
+                {
+                    if (submitButton != null) submitButton.interactable = true;
+                    if (motionGateHint != null) motionGateHint.text = string.Empty;
+                    return;
+                }
 
-            var cam = _canvas != null && _canvas.worldCamera != null ? _canvas.worldCamera : Camera.main;
-            if (cam == null) return;
+                var cam = _canvas != null && _canvas.worldCamera != null ? _canvas.worldCamera : Camera.main;
+                if (cam == null) return;
 
-            float yaw = cam.transform.eulerAngles.y;
-            if (!_yawInit)
-            {
-                _yawInit = true;
-                _lastYawDeg = yaw;
-                _unwrappedYawDeg = 0f;
-                _minYawDeg = 0f;
-                _maxYawDeg = 0f;
-            }
-            else
-            {
-                var delta = Mathf.DeltaAngle(_lastYawDeg, yaw);
-                _unwrappedYawDeg += delta;
-                _minYawDeg = Mathf.Min(_minYawDeg, _unwrappedYawDeg);
-                _maxYawDeg = Mathf.Max(_maxYawDeg, _unwrappedYawDeg);
-                _lastYawDeg = yaw;
-            }
+                float yaw = cam.transform.eulerAngles.y;
+                if (!_yawInit)
+                {
+                    _yawInit = true;
+                    _lastYawDeg = yaw;
+                    _unwrappedYawDeg = 0f;
+                    _minYawDeg = 0f;
+                    _maxYawDeg = 0f;
+                }
+                else
+                {
+                    var delta = Mathf.DeltaAngle(_lastYawDeg, yaw);
+                    _unwrappedYawDeg += delta;
+                    _minYawDeg = Mathf.Min(_minYawDeg, _unwrappedYawDeg);
+                    _maxYawDeg = Mathf.Max(_maxYawDeg, _unwrappedYawDeg);
+                    _lastYawDeg = yaw;
+                }
 
-            float range = _maxYawDeg - _minYawDeg;
-            bool ok = range >= Mathf.Max(1f, requiredYawRangeDeg);
+                float range = _maxYawDeg - _minYawDeg;
+                bool ok = range >= Mathf.Max(1f, requiredYawRangeDeg);
 
-            if (submitButton != null) submitButton.interactable = ok;
-            if (motionGateHint != null)
-            {
-                motionGateHint.text = ok
-                    ? "头动门控已达标，可以提交。"
-                    : $"请左右晃头观察高光变化（当前≈{range:0}° / 需≥{requiredYawRangeDeg:0}°）";
+                if (submitButton != null) submitButton.interactable = ok;
+                if (motionGateHint != null)
+                {
+                    motionGateHint.text = ok
+                        ? "头动门控已达标，可以提交。"
+                        : $"请左右晃头观察高光变化（当前≈{range:0}° / 需≥{requiredYawRangeDeg:0}°）";
+                }
             }
         }
 
@@ -384,6 +416,7 @@ namespace VRPerception.UI
             if (distanceGroup != null) distanceGroup.SetActive(false);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(false);
             if (roughnessGroup != null) roughnessGroup.SetActive(false);
+            if (colorGroup != null) colorGroup.SetActive(false);
         }
 
         private void HookUIEvents(bool bind)
@@ -392,6 +425,9 @@ namespace VRPerception.UI
             {
                 if (confidenceSlider != null) confidenceSlider.onValueChanged.AddListener(UpdateConfidenceLabel);
                 if (roughnessSlider != null) roughnessSlider.onValueChanged.AddListener(UpdateRoughnessLabel);
+                if (colorRSlider != null) colorRSlider.onValueChanged.AddListener(OnColorSliderChanged);
+                if (colorGSlider != null) colorGSlider.onValueChanged.AddListener(OnColorSliderChanged);
+                if (colorBSlider != null) colorBSlider.onValueChanged.AddListener(OnColorSliderChanged);
                 if (submitButton != null) submitButton.onClick.AddListener(SubmitCurrent);
                 if (skipButton != null) skipButton.onClick.AddListener(SkipCurrent);
             }
@@ -399,6 +435,9 @@ namespace VRPerception.UI
             {
                 if (confidenceSlider != null) confidenceSlider.onValueChanged.RemoveListener(UpdateConfidenceLabel);
                 if (roughnessSlider != null) roughnessSlider.onValueChanged.RemoveListener(UpdateRoughnessLabel);
+                if (colorRSlider != null) colorRSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
+                if (colorGSlider != null) colorGSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
+                if (colorBSlider != null) colorBSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
                 if (submitButton != null) submitButton.onClick.RemoveListener(SubmitCurrent);
                 if (skipButton != null) skipButton.onClick.RemoveListener(SkipCurrent);
             }
@@ -416,6 +455,62 @@ namespace VRPerception.UI
                 roughnessValueText.text = $"粗糙度: {value:F2}";
         }
 
+        private void OnColorSliderChanged(float _)
+        {
+            UpdateColorValueTexts();
+            UpdateColorPreviewAndTarget();
+        }
+
+        private void SetColorSliders(Color color)
+        {
+            if (colorRSlider != null) colorRSlider.value = Mathf.RoundToInt(color.r * 255f);
+            if (colorGSlider != null) colorGSlider.value = Mathf.RoundToInt(color.g * 255f);
+            if (colorBSlider != null) colorBSlider.value = Mathf.RoundToInt(color.b * 255f);
+            UpdateColorValueTexts();
+        }
+
+        private void UpdateColorValueTexts()
+        {
+            if (colorRValueText != null && colorRSlider != null)
+                colorRValueText.text = $"R:{Mathf.RoundToInt(colorRSlider.value)}";
+            if (colorGValueText != null && colorGSlider != null)
+                colorGValueText.text = $"G:{Mathf.RoundToInt(colorGSlider.value)}";
+            if (colorBValueText != null && colorBSlider != null)
+                colorBValueText.text = $"B:{Mathf.RoundToInt(colorBSlider.value)}";
+        }
+
+        private void UpdateColorPreviewAndTarget()
+        {
+            var color = GetColorFromSliders();
+            if (colorPreviewImage != null)
+            {
+                colorPreviewImage.color = color;
+            }
+
+            if (_colorTarget == null)
+            {
+                _colorTarget = FindColorTarget();
+            }
+
+            if (_colorTarget != null)
+            {
+                _colorTarget.SetColor(color);
+            }
+        }
+
+        private Color GetColorFromSliders()
+        {
+            float r = colorRSlider != null ? colorRSlider.value / 255f : 0.5f;
+            float g = colorGSlider != null ? colorGSlider.value / 255f : 0.5f;
+            float b = colorBSlider != null ? colorBSlider.value / 255f : 0.5f;
+            return new Color(r, g, b, 1f);
+        }
+
+        private ColorAdjustableTarget FindColorTarget()
+        {
+            return FindObjectOfType<ColorAdjustableTarget>();
+        }
+
         private void ResetHeadMotionGate()
         {
             _yawInit = false;
@@ -423,6 +518,124 @@ namespace VRPerception.UI
             _unwrappedYawDeg = 0f;
             _minYawDeg = 0f;
             _maxYawDeg = 0f;
+        }
+
+        private void EnsureColorWidgets()
+        {
+            if (colorGroup != null && colorRSlider != null && colorGSlider != null && colorBSlider != null)
+            {
+                return;
+            }
+
+            var root = dialogRoot != null ? dialogRoot.transform : transform;
+
+            if (colorGroup == null)
+            {
+                colorGroup = new GameObject("ColorConstancy", typeof(RectTransform));
+                colorGroup.transform.SetParent(root, false);
+
+                var rt = colorGroup.GetComponent<RectTransform>();
+                rt.anchorMin = new Vector2(0.05f, 0.05f);
+                rt.anchorMax = new Vector2(0.95f, 0.45f);
+                rt.offsetMin = Vector2.zero;
+                rt.offsetMax = Vector2.zero;
+
+                var bg = colorGroup.AddComponent<Image>();
+                bg.color = new Color(0f, 0f, 0f, 0.25f);
+
+                var layout = colorGroup.AddComponent<VerticalLayoutGroup>();
+                layout.childControlHeight = true;
+                layout.childForceExpandHeight = false;
+                layout.childControlWidth = true;
+                layout.childForceExpandWidth = true;
+                layout.spacing = 6f;
+                layout.padding = new RectOffset(8, 8, 8, 8);
+            }
+
+            if (colorPreviewImage == null)
+            {
+                var preview = new GameObject("ColorPreview", typeof(RectTransform), typeof(Image));
+                preview.transform.SetParent(colorGroup.transform, false);
+                colorPreviewImage = preview.GetComponent<Image>();
+                colorPreviewImage.color = new Color(0.5f, 0.5f, 0.5f, 1f);
+                var le = preview.AddComponent<LayoutElement>();
+                le.preferredHeight = 18f;
+            }
+
+            TMP_Text textTemplate = taskLabel != null ? taskLabel : GetComponentInChildren<TMP_Text>(true);
+            Slider sliderTemplate = colorRSlider != null ? colorRSlider : (confidenceSlider != null ? confidenceSlider : GetComponentInChildren<Slider>(true));
+
+            if (sliderTemplate == null || textTemplate == null)
+            {
+                return;
+            }
+
+            if (colorRSlider == null || colorRValueText == null)
+                CreateColorRow("R", textTemplate, sliderTemplate, out colorRSlider, out colorRValueText);
+            if (colorGSlider == null || colorGValueText == null)
+                CreateColorRow("G", textTemplate, sliderTemplate, out colorGSlider, out colorGValueText);
+            if (colorBSlider == null || colorBValueText == null)
+                CreateColorRow("B", textTemplate, sliderTemplate, out colorBSlider, out colorBValueText);
+
+            HookUIEvents(false);
+            HookUIEvents(true);
+        }
+
+        private void CreateColorRow(string label, TMP_Text textTemplate, Slider sliderTemplate, out Slider slider, out TMP_Text valueText)
+        {
+            slider = null;
+            valueText = null;
+
+            var row = new GameObject($"Row_{label}", typeof(RectTransform));
+            row.transform.SetParent(colorGroup.transform, false);
+
+            var h = row.AddComponent<HorizontalLayoutGroup>();
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childControlWidth = true;
+            h.childForceExpandWidth = true;
+            h.spacing = 6f;
+
+            var labelObj = Instantiate(textTemplate.gameObject, row.transform);
+            labelObj.name = $"Label_{label}";
+            var labelText = labelObj.GetComponent<TMP_Text>();
+            if (labelText != null)
+            {
+                labelText.text = label;
+                labelText.fontSize = Mathf.Max(12, labelText.fontSize - 4);
+                labelText.alignment = TextAlignmentOptions.MidlineLeft;
+                labelText.raycastTarget = false;
+            }
+            var labelLE = labelObj.GetComponent<LayoutElement>() ?? labelObj.AddComponent<LayoutElement>();
+            labelLE.preferredWidth = 24f;
+
+            var sliderObj = Instantiate(sliderTemplate.gameObject, row.transform);
+            sliderObj.name = $"Slider_{label}";
+            sliderObj.SetActive(true);
+            slider = sliderObj.GetComponent<Slider>();
+            if (slider != null)
+            {
+                slider.onValueChanged.RemoveAllListeners();
+                slider.wholeNumbers = true;
+                slider.minValue = 0f;
+                slider.maxValue = 255f;
+                slider.value = 128f;
+            }
+            var sliderLE = sliderObj.GetComponent<LayoutElement>() ?? sliderObj.AddComponent<LayoutElement>();
+            sliderLE.preferredWidth = 160f;
+            sliderLE.flexibleWidth = 1f;
+
+            var valueObj = Instantiate(textTemplate.gameObject, row.transform);
+            valueObj.name = $"Value_{label}";
+            valueText = valueObj.GetComponent<TMP_Text>();
+            if (valueText != null)
+            {
+                valueText.text = "128";
+                valueText.fontSize = Mathf.Max(12, valueText.fontSize - 4);
+                valueText.alignment = TextAlignmentOptions.MidlineRight;
+                valueText.raycastTarget = false;
+            }
+            var valueLE = valueObj.GetComponent<LayoutElement>() ?? valueObj.AddComponent<LayoutElement>();
+            valueLE.preferredWidth = 56f;
         }
 
         private void SubmitCurrent()
@@ -468,6 +681,19 @@ namespace VRPerception.UI
                 }
 
                 PublishRoughness(Mathf.Clamp01(roughnessSlider.value), confidence);
+            }
+            else if (colorGroup != null && colorGroup.activeSelf)
+            {
+                if (colorRSlider == null || colorGSlider == null || colorBSlider == null)
+                {
+                    if (errorHint != null) errorHint.text = "RGB Slider 未绑定，请在 Inspector 中绑定 UI。";
+                    return;
+                }
+
+                int r = Mathf.RoundToInt(colorRSlider.value);
+                int g = Mathf.RoundToInt(colorGSlider.value);
+                int b = Mathf.RoundToInt(colorBSlider.value);
+                PublishColor(r, g, b, confidence);
             }
             else
             {
@@ -557,6 +783,22 @@ namespace VRPerception.UI
             PublishResponse(response);
         }
 
+        private void PublishColor(int r, int g, int b, float confidence)
+        {
+            var response = new LLMResponse
+            {
+                type = "inference",
+                taskId = _taskId,
+                trialId = _trialId,
+                providerId = "human",
+                confidence = confidence,
+                latencyMs = 0,
+                answer = new ColorAnswer { color_name = "gray", rgb = new[] { r, g, b }, confidence = confidence }
+            };
+
+            PublishResponse(response);
+        }
+
         private void PublishResponse(LLMResponse response)
         {
             var data = new InferenceReceivedEventData
@@ -609,6 +851,14 @@ namespace VRPerception.UI
         private class RoughnessAnswer
         {
             public float roughness;
+            public float confidence;
+        }
+
+        [Serializable]
+        private class ColorAnswer
+        {
+            public string color_name;
+            public int[] rgb;
             public float confidence;
         }
     }
