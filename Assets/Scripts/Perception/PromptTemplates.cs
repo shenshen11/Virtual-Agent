@@ -31,8 +31,14 @@ namespace VRPerception.Perception
                     return OcclusionReasoningSystem();
                 case "color_constancy":
                     return ColorConstancySystem();
+                case "color_constancy_adjustment":
+                    return ColorConstancyAdjustmentSystem();
                 case "material_perception":
                     return MaterialPerceptionSystem();
+                case "material_roughness":
+                case "material_roughness_motion":
+                case "material_roughness_static":
+                    return MaterialRoughnessSystem();
                 case "visual_search":
                     return VisualSearchSystem();
                 case "object_counting":
@@ -113,6 +119,14 @@ namespace VRPerception.Perception
                    "Do NOT output any extra text.";
         }
 
+        private static string MaterialRoughnessSystem()
+        {
+            return "You are a vision agent for Material Roughness Estimation. ONLY output JSON. " +
+                   "Output format: {\"roughness\":<number 0..1>,\"confidence\":<0..1>} " +
+                   "Roughness definition: 0=perfectly smooth mirror-like, 1=fully rough matte. " +
+                   "Do NOT output any extra text.";
+        }
+
         private static string ColorConstancySystem()
         {
             return "You are a vision agent for Color Constancy. ONLY output JSON. " +
@@ -120,6 +134,16 @@ namespace VRPerception.Perception
                    "Inference format: {\"type\":\"inference\",\"taskId\":\"color_constancy\",\"trialId\":<int>," +
                    "\"answer\":{\"color_name\":\"red|green|blue|yellow|white|gray\",\"rgb\":[R,G,B]},\"confidence\":<0..1>} " +
                    "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with the provided tools. " +
+                   "Do NOT output any extra text.";
+        }
+
+        private static string ColorConstancyAdjustmentSystem()
+        {
+            return "You are a vision agent for Color Constancy (Adjustment). ONLY output JSON. " +
+                   "Your goal is to select the labeled ball that appears most neutral gray under the current lighting. " +
+                   "Inference format: {\"type\":\"inference\",\"taskId\":\"color_constancy_adjustment\",\"trialId\":<int>," +
+                   "\"answer\":{\"choice\":\"A\"},\"confidence\":<0..1>} " +
+                   "Optionally include \"rgb\":[R,G,B] if available. " +
                    "Do NOT output any extra text.";
         }
 
@@ -328,6 +352,21 @@ namespace VRPerception.Perception
             return sb.ToString();
         }
 
+        public static string BuildColorConstancyAdjustmentPrompt(string phase, string background, string lighting, float fovDeg)
+        {
+            var ph = string.IsNullOrEmpty(phase) ? "unknown" : phase;
+            var bg = string.IsNullOrEmpty(background) ? "none" : background;
+            var light = string.IsNullOrEmpty(lighting) ? "white_neutral" : lighting;
+            var fov = fovDeg > 0 ? fovDeg : 60f;
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Task: Choose the labeled ball that appears most neutral gray under the current lighting.");
+            sb.AppendLine($"Phase: {ph}. Scene: background={bg}, lighting={light}, FOV={fov} deg.");
+            sb.AppendLine("Each ball has a visible letter label (A, B, C, ...).");
+            sb.Append("Output ONLY JSON with fields: type=inference, answer.choice (single letter), optional answer.rgb ([R,G,B]), confidence (0..1).");
+            return sb.ToString();
+        }
+
         public static string BuildMaterialPerceptionPrompt(string targetKind, string background, string lighting, float yawDeg)
         {
             var kind = string.IsNullOrEmpty(targetKind) ? "object" : targetKind;
@@ -340,6 +379,20 @@ namespace VRPerception.Perception
             sb.AppendLine($"Target shape: {kind}. Scene background: {bg}. Lighting preset: {light}.");
             sb.AppendLine($"Object is oriented at yaw ≈ {yaw:0} degrees to expose specular cues.");
             sb.Append("Output ONLY JSON with fields: type=inference, answer.material ('metal'|'glass'|'wood'|'fabric'|'sand'|'rock'), confidence (0..1).");
+            return sb.ToString();
+        }
+
+        public static string BuildMaterialRoughnessPrompt(string environment, bool requireHeadMotion, float fovDeg)
+        {
+            var env = string.IsNullOrWhiteSpace(environment) ? "unknown" : environment;
+            var fov = fovDeg > 0 ? fovDeg : 60f;
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Task: Estimate the surface roughness of the main metallic sphere in the image.");
+            sb.AppendLine("Roughness definition: 0 = perfectly smooth mirror-like; 1 = completely rough matte.");
+            sb.AppendLine($"Scene conditions: environment={env}, FOV={fov} deg.");
+            sb.AppendLine($"Experimental flag (for human): head_motion_required={(requireHeadMotion ? "true" : "false")}.");
+            sb.Append("Output ONLY JSON with fields: roughness (number 0..1), confidence (0..1).");
             return sb.ToString();
         }
 
@@ -420,6 +473,12 @@ namespace VRPerception.Perception
             };
         }
 
+        public static ToolSpec[] GetToolsForColorConstancyAdjustment()
+        {
+            // 默认不启用工具，避免引入额外变量
+            return Array.Empty<ToolSpec>();
+        }
+
         public static ToolSpec[] GetToolsForMaterialPerception()
         {
             return new[]
@@ -429,6 +488,12 @@ namespace VRPerception.Perception
                 MakeTool("head_look_at", "Look at a target by name or position.", new [] { "target" }),
                 MakeTool("snapshot", "Request a frame capture.", Array.Empty<string>())
             };
+        }
+
+        public static ToolSpec[] GetToolsForMaterialRoughness()
+        {
+            // 该任务默认不提供工具，以避免模型走 action_plan 分支造成额外不可控变量。
+            return Array.Empty<ToolSpec>();
         }
 
         public static ToolSpec[] GetToolsForVisualSearch()

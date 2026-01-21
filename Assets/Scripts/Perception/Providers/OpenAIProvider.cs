@@ -580,6 +580,7 @@ namespace VRPerception.Perception
         public string closer;
         // A/B 二选一任务（semantic_size_bias 等）：更大者
         public string larger;
+        public float roughness;
         // Numerosity Comparison：更多的一侧（left/right）
         public string more_side;
         // Change Detection：是否变化 + 类别

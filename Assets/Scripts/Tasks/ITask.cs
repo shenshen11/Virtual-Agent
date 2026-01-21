@@ -124,6 +124,10 @@ namespace VRPerception.Tasks
         public float lightYawDeg;         // 主光源方位（度）
         public float lightPitchDeg;       // 主光源俯仰角（度）
 
+        // Material Roughness（Ambiguity）可能用到
+        public float roughness;           // 真值粗糙度（0..1），0=镜面，1=完全哑光
+        public bool requireHeadMotion;    // Human 条件：是否要求头动门控（optic flow）
+
         // Numerosity Comparison 专用字段
         public float baseCountN;                  // 基准数量（较少一侧）：10/50/100/200/500
         public float ratioR;                      // 比例：1.1-2.0
@@ -186,6 +190,12 @@ namespace VRPerception.Tasks
         // Visual Search 指标
         public bool predictedFound;
         public string predictedTarget;
+
+        // Material Roughness 指标（连续）
+        public float predictedRoughness;   // 0..1
+        public float trueRoughness;        // 0..1
+        public float roughnessAbsError;    // |pred-true|
+        public float roughnessSignedError; // pred-true
 
         // Numerosity Comparison 指标
         public string predictedMoreSide;          // "left" | "right"
