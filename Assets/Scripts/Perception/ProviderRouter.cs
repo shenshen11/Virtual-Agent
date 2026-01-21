@@ -98,6 +98,12 @@ namespace VRPerception.Perception
         private List<string> SelectProviders(LLMRequest request)
         {
             var healthyProviders = _registry.GetHealthyProviders();
+            // Fallback: if no provider is marked healthy yet (e.g., health check not finished),
+            // allow all registered providers to be tried instead of failing fast.
+            if (healthyProviders.Count == 0)
+            {
+                healthyProviders = _registry.Providers.Keys.ToList();
+            }
             var selectedProviders = new List<string>();
             
             switch (strategy)

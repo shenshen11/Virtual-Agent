@@ -384,15 +384,20 @@ namespace VRPerception.Tasks
                 _overrideTaskId = resolvedTaskId;
 
                 // 尝试同步 TaskMode 以便 UI / 导出工具展示（仅对已知任务生效）
-                if (string.Equals(resolvedTaskId, "distance_compression", StringComparison.OrdinalIgnoreCase))
+                // 尝试根据 taskId 对齐枚举，便于 Inspector 下拉框保持同步
+                bool matched = false;
+                foreach (TaskMode mode in Enum.GetValues(typeof(TaskMode)))
                 {
-                    taskMode = TaskMode.DistanceCompression;
+                    var mapped = TaskModeToTaskId(mode);
+                    if (!string.IsNullOrEmpty(mapped) && string.Equals(resolvedTaskId, mapped, StringComparison.OrdinalIgnoreCase))
+                    {
+                        taskMode = mode;
+                        matched = true;
+                        break;
+                    }
                 }
-                else if (string.Equals(resolvedTaskId, "semantic_size_bias", StringComparison.OrdinalIgnoreCase))
-                {
-                    taskMode = TaskMode.SemanticSizeBias;
-                }
-                else if (Enum.TryParse(resolvedTaskId, true, out TaskMode parsedMode))
+
+                if (!matched && Enum.TryParse(resolvedTaskId, true, out TaskMode parsedMode))
                 {
                     taskMode = parsedMode;
                 }
@@ -450,6 +455,17 @@ namespace VRPerception.Tasks
             {
                 TaskMode.DistanceCompression => "distance_compression",
                 TaskMode.SemanticSizeBias => "semantic_size_bias",
+                TaskMode.RelativeDepthOrder => "relative_depth_order",
+                TaskMode.ChangeDetection => "change_detection",
+                TaskMode.OcclusionReasoning => "occlusion_reasoning",
+                TaskMode.ColorConstancy => "color_constancy",
+                TaskMode.MaterialPerception => "material_perception",
+                TaskMode.NumerosityComparison => "numerosity_comparison",
+                TaskMode.VisualSearch => "visual_search",
+                TaskMode.ObjectCounting => "object_counting",
+                TaskMode.DepthJndStaircase => "depth_jnd_staircase",
+                TaskMode.HorizonCueIntegration => "horizon_cue_integration",
+                TaskMode.VisualCrowding => "visual_crowding",
                 _ => null
             };
         }
@@ -563,7 +579,18 @@ namespace VRPerception.Tasks
     public enum TaskMode
     {
         DistanceCompression,
-        SemanticSizeBias
+        SemanticSizeBias,
+        RelativeDepthOrder,
+        ChangeDetection,
+        OcclusionReasoning,
+        ColorConstancy,
+        MaterialPerception,
+        NumerosityComparison,
+        VisualSearch,
+        ObjectCounting,
+        DepthJndStaircase,
+        HorizonCueIntegration,
+        VisualCrowding
     }
 
     public enum SubjectMode

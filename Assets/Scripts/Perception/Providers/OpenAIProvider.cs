@@ -429,7 +429,26 @@ namespace VRPerception.Perception
                 var jsonContent = content.Substring(jsonStart, jsonEnd - jsonStart + 1);
                 try
                 {
+                    // 优先按 PromptTemplates 的嵌套结构解析：{ ..., "answer": { ... } }
+                    var envelope = JsonUtility.FromJson<InferenceEnvelope>(jsonContent);
+                    if (envelope != null && envelope.answer != null)
+                    {
+                        envelope.answer.raw_json = jsonContent;
+                        return new LLMResponse
+                        {
+                            type = "inference",
+                            taskId = request.taskId,
+                            trialId = request.trialId,
+                            answer = envelope.answer,
+                            confidence = envelope.confidence > 0 ? envelope.confidence : envelope.answer.confidence,
+                            explanation = !string.IsNullOrEmpty(envelope.explanation) ? envelope.explanation : envelope.answer.explanation,
+                            latencyMs = latencyMs
+                        };
+                    }
+
                     var inferenceResult = JsonUtility.FromJson<InferenceResult>(jsonContent);
+                    // 记录模型输出的 JSON 原文，便于后续排查字段结构/映射问题
+                    inferenceResult.raw_json = jsonContent;
                     return new LLMResponse
                     {
                         type = "inference",
@@ -540,12 +559,36 @@ namespace VRPerception.Perception
     }
     
     [Serializable]
+    public class InferenceEnvelope
+    {
+        public string type;
+        public string taskId;
+        public int trialId;
+        public InferenceResult answer;
+        public float confidence;
+        public string explanation;
+    }
+
+    [Serializable]
     public class InferenceResult
     {
         public float confidence;
         public string explanation;
         // 扩展常用任务字段，便于上层通过反射提取
         public float distance_m;
+        // A/B 二选一任务（relative_depth_order / depth_jnd_staircase 等）：更近者
+        public string closer;
+        // A/B 二选一任务（semantic_size_bias 等）：更大者
         public string larger;
+        // Numerosity Comparison：更多的一侧（left/right）
+        public string more_side;
+        // Change Detection：是否变化 + 类别
+        public bool changed;
+        public string category;
+        // Visual Crowding：识别到的字母
+        public string letter;
+
+        // 从模型输出中截取的 { ... } 原文（用于日志排查）
+        public string raw_json;
     }
 }

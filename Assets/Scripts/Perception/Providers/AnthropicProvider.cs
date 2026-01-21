@@ -301,7 +301,26 @@ namespace VRPerception.Perception
                 var jsonContent = content.Substring(jsonStart, jsonEnd - jsonStart + 1);
                 try
                 {
+                    // 优先按 PromptTemplates 的嵌套结构解析：{ ..., "answer": { ... } }
+                    var envelope = JsonUtility.FromJson<InferenceEnvelope>(jsonContent);
+                    if (envelope != null && envelope.answer != null)
+                    {
+                        envelope.answer.raw_json = jsonContent;
+                        return new LLMResponse
+                        {
+                            type = "inference",
+                            taskId = request.taskId,
+                            trialId = request.trialId,
+                            answer = envelope.answer,
+                            confidence = envelope.confidence > 0 ? envelope.confidence : envelope.answer.confidence,
+                            explanation = !string.IsNullOrEmpty(envelope.explanation) ? envelope.explanation : envelope.answer.explanation,
+                            latencyMs = latencyMs
+                        };
+                    }
+
                     var inferenceResult = JsonUtility.FromJson<InferenceResult>(jsonContent);
+                    // 记录模型输出的 JSON 原文，便于后续排查字段结构/映射问题
+                    inferenceResult.raw_json = jsonContent;
                     return new LLMResponse
                     {
                         type = "inference",
