@@ -16,37 +16,7 @@ MonoBehaviour:
   displayName: 
   description: 
   entries:
-  - taskId: distance_compression
-    displayName: 
-    description: "\u8DDD\u79BB\u611F\u77E5\u4EFB\u52A1"
-    subjectMode: 1
-    randomSeed: 12345
-    maxTrials: 15
-    enableActionPlanLoop: 1
-    actionPlanLoopTimeoutMs: 20000
-    requireHumanInput: 1
-    scenePreset: 
-    preTaskMessage: "\u6B22\u8FCE\u53C2\u52A0\u8DDD\u79BB\u4F30\u8BA1\u4EFB\u52A1\uFF01\n\u8BF7\u4ED4\u7EC6\u89C2\u5BDF\u573A\u666F\u4E2D\u7684\u7269\u4F53\uFF0C\u5E76\u4F30\u8BA1\u60A8\u4E0E\u7269\u4F53\u4E4B\u95F4\u7684\u8DDD\u79BB\u3002"
-    postTaskMessage: "\u8DDD\u79BB\u4F30\u8BA1\u4EFB\u52A1\u5DF2\u5B8C\u6210"
-    restSeconds: 2
-    operatorNotes: 
-    humanInputPrompt: "\u8BF7\u8F93\u5165\u7269\u4F53\u7684\u8DDD\u79BB"
-  - taskId: semantic_size_bias
-    displayName: 
-    description: "\u5927\u5C0F\u6BD4\u8F83\u4EFB\u52A1"
-    subjectMode: 1
-    randomSeed: 12345
-    maxTrials: 25
-    enableActionPlanLoop: 1
-    actionPlanLoopTimeoutMs: 20000
-    requireHumanInput: 1
-    scenePreset: 
-    preTaskMessage: "\u63A5\u4E0B\u6765\u662F\u5927\u5C0F\u6BD4\u8F83\u4EFB\u52A1\u3002\n\u8BF7\u9009\u62E9\u60A8\u8BA4\u4E3A\u66F4\u5927\u7684\u5BF9\u8C61\u3002"
-    postTaskMessage: "\u60A8\u5DF2\u5B8C\u6210\u6240\u6709\u4EFB\u52A1\uFF0C\u8C22\u8C22\u53C2\u4E0E"
-    restSeconds: -1
-    operatorNotes: 
-    humanInputPrompt: "\u8BF7\u9009\u62E9\u66F4\u5927\u7684\u4E00\u4E2A\u7269\u4F53"
-  - taskId: relative_depth_order
+  - taskId: color_constancy_adjustment
     displayName: 
     description: 
     subjectMode: 1
@@ -61,57 +31,12 @@ MonoBehaviour:
     restSeconds: -1
     operatorNotes: 
     humanInputPrompt: 
-  - taskId: change_detection
+  - taskId: material_roughness
     displayName: 
     description: 
     subjectMode: 1
     randomSeed: 12345
     maxTrials: 15
-    enableActionPlanLoop: 1
-    actionPlanLoopTimeoutMs: 20000
-    requireHumanInput: 0
-    scenePreset: 
-    preTaskMessage: 
-    postTaskMessage: 
-    restSeconds: -1
-    operatorNotes: 
-    humanInputPrompt: 
-  - taskId: occlusion_reasoning
-    displayName: 
-    description: 
-    subjectMode: 1
-    randomSeed: 12345
-    maxTrials: 25
-    enableActionPlanLoop: 1
-    actionPlanLoopTimeoutMs: 20000
-    requireHumanInput: 0
-    scenePreset: 
-    preTaskMessage: 
-    postTaskMessage: 
-    restSeconds: -1
-    operatorNotes: 
-    humanInputPrompt: 
-  - taskId: material_perception
-    displayName: 
-    description: 
-    subjectMode: 1
-    randomSeed: 12345
-    maxTrials: 20
-    enableActionPlanLoop: 1
-    actionPlanLoopTimeoutMs: 20000
-    requireHumanInput: 0
-    scenePreset: 
-    preTaskMessage: 
-    postTaskMessage: 
-    restSeconds: -1
-    operatorNotes: 
-    humanInputPrompt: 
-  - taskId: color_constancy
-    displayName: 
-    description: 
-    subjectMode: 1
-    randomSeed: 12345
-    maxTrials: 10
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 0
