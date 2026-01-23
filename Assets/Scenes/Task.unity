@@ -9593,6 +9593,9 @@ MonoBehaviour:
   maxCount: 10
   centerOffset: {x: 0, y: 0, z: 3}
   areaSize: {x: 6, y: 0, z: 6}
+  minDistanceFromAnchor: 4
+  minSeparation: 2.5
+  maxPlacementAttempts: 24
   alignToFloor: 1
   floorY: 0
   randomYaw: 1
