@@ -45,6 +45,7 @@ namespace VRPerception.Perception
     [Serializable]
     public class LLMRequest
     {
+        public string requestId;
         public string taskId;
         public int trialId;
         public string systemPrompt;

@@ -279,6 +279,7 @@ namespace VRPerception.Perception
         {
             return new LLMRequest
             {
+                requestId = request.RequestId,
                 taskId = request.TaskId,
                 trialId = request.TrialId,
                 systemPrompt = request.SystemPrompt ?? GetDefaultSystemPrompt(request.TaskId),
