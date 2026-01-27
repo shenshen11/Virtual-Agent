@@ -101,7 +101,9 @@ namespace VRPerception.Tasks
 
                         // Human exposure control (handled by TrialBlackoutOverlay / TaskRunner timing)
                         exposureDurationMs = 500f,
-                        dotRadius = 0.2f
+                        // 固定点半径（米）。注意：ParticleSystem 里会用直径 = 2 * dotRadius。
+                        // 取值与旧实现的 startSize(约 0.03~0.12m) 对齐：radius=0.04 -> size≈0.08m。
+                        dotRadius = 0.04f
                     });
                 }
             }
@@ -126,7 +128,7 @@ namespace VRPerception.Tasks
         public string BuildTaskPrompt(TrialSpec trial)
         {
             var fov = trial.fovDeg > 0 ? trial.fovDeg : 60f;
-            return $"Task: Rapid Numerosity Comparison. Decide which side has MORE items (left/right). FOV={fov:0} deg.";
+            return PromptTemplates.BuildNumerosityComparisonPrompt(fov);
         }
 
         public Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
@@ -303,11 +305,18 @@ namespace VRPerception.Tasks
 
             float leftMinDist = ComputeMinDistance(regionWidth, regionHeight, leftCount);
             float rightMinDist = ComputeMinDistance(regionWidth, regionHeight, rightCount);
-            float leftSize = Mathf.Clamp(leftMinDist * 0.6f, 0.03f, 0.12f);
-            float rightSize = Mathf.Clamp(rightMinDist * 0.6f, 0.03f, 0.12f);
+            // 关键：固定点大小，不随数量/密度变化（避免 size 成为比较线索）。
+            // TrialSpec.dotRadius 表示“半径”（米），ParticleSystem.startSize 使用“直径/尺寸”（米）。
+            float dotRadius = trial.dotRadius > 0 ? trial.dotRadius : 0.06f;
+            float dotSize = Mathf.Clamp(dotRadius * 2f, 0.01f, 0.5f);
 
-            SetParticles(_leftPs, leftCount, leftCenter, right, up, regionWidth, regionHeight, leftMinDist, leftSize);
-            SetParticles(_rightPs, rightCount, rightCenter, right, up, regionWidth, regionHeight, rightMinDist, rightSize);
+            // 为避免大量重叠，最小间距下限与点大小相关；过大可能导致高数量条件放置失败。
+            float minDistFloor = dotSize * 0.55f;
+            leftMinDist = Mathf.Max(leftMinDist, minDistFloor);
+            rightMinDist = Mathf.Max(rightMinDist, minDistFloor);
+
+            SetParticles(_leftPs, leftCount, leftCenter, right, up, regionWidth, regionHeight, leftMinDist, dotSize);
+            SetParticles(_rightPs, rightCount, rightCenter, right, up, regionWidth, regionHeight, rightMinDist, dotSize);
 
             PlaceDivider(origin, forward, up, regionHeight);
         }
@@ -428,7 +437,8 @@ namespace VRPerception.Tasks
         {
             if (_divider == null)
             {
-                _divider = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                // 用具有“厚度”的隔离物（细长立方体）替代纯贴片 Quad，视觉上更像明确的分隔/隔离条带。
+                _divider = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 _divider.name = "num_divider";
                 var col = _divider.GetComponent<Collider>();
                 if (col != null) UnityEngine.Object.Destroy(col);
@@ -439,15 +449,22 @@ namespace VRPerception.Tasks
                     if (shader != null)
                     {
                         r.material = new Material(shader);
-                        r.material.color = new Color(0.1f, 0.1f, 0.1f, 1f);
+                        r.material.color = new Color(1f, 1f, 1f, 1f);
                     }
+                    try
+                    {
+                        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                        r.receiveShadows = false;
+                    }
+                    catch { }
                 }
             }
 
             _divider.SetActive(true);
             _divider.transform.position = origin - forward.normalized * 0.02f;
             _divider.transform.rotation = Quaternion.LookRotation(-forward.normalized, up);
-            _divider.transform.localScale = new Vector3(0.05f, Mathf.Max(0.1f, height), 1f);
+            // x: 条带宽度（左右方向），y: 高度（上下方向），z: 厚度（前后方向）
+            _divider.transform.localScale = new Vector3(0.06f, Mathf.Max(0.1f, height), 0.03f);
         }
 
         private static void ClearParticles(ParticleSystem ps)
@@ -464,31 +481,34 @@ namespace VRPerception.Tasks
 
             try
             {
-                // OpenAI/Anthropic: answer is InferenceResult, fields are top-level.
+                // OpenAI/Anthropic: answer is typically InferenceResult; fields are top-level.
                 var t = answer.GetType();
-                var prop = t.GetProperty("larger") ?? t.GetProperty("more_side") ?? t.GetProperty("moreSide");
-                if (prop != null)
+                var candidates = new[] { "more_side", "moreSide", "larger" };
+                for (int i = 0; i < candidates.Length; i++)
                 {
-                    return NormalizeSide(prop.GetValue(answer, null)?.ToString(), out moreSide);
-                }
+                    var name = candidates[i];
 
-                var field = t.GetField("larger") ?? t.GetField("more_side") ?? t.GetField("moreSide");
-                if (field != null)
-                {
-                    return NormalizeSide(field.GetValue(answer)?.ToString(), out moreSide);
+                    var prop = t.GetProperty(name);
+                    if (prop != null && NormalizeSide(prop.GetValue(answer, null)?.ToString(), out moreSide))
+                        return true;
+
+                    var field = t.GetField(name);
+                    if (field != null && NormalizeSide(field.GetValue(answer)?.ToString(), out moreSide))
+                        return true;
                 }
 
                 if (answer is IDictionary dict)
                 {
-                    foreach (var key in dict.Keys)
+                    // Prefer more_side keys; tolerate variants.
+                    var keys = new[] { "more_side", "moreSide", "larger" };
+                    foreach (var wanted in keys)
                     {
-                        if (key == null) continue;
-                        var k = key.ToString();
-                        if (string.Equals(k, "larger", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(k, "more_side", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(k, "moreSide", StringComparison.OrdinalIgnoreCase))
+                        foreach (var key in dict.Keys)
                         {
-                            return NormalizeSide(dict[key]?.ToString(), out moreSide);
+                            if (key == null) continue;
+                            var k = key.ToString();
+                            if (!string.Equals(k, wanted, StringComparison.OrdinalIgnoreCase)) continue;
+                            if (NormalizeSide(dict[key]?.ToString(), out moreSide)) return true;
                         }
                     }
                 }
