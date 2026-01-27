@@ -404,7 +404,7 @@ namespace VRPerception.Tasks
             // Use Plane
             var plane = GameObject.CreatePrimitive(PrimitiveType.Plane);
             plane.name = "env_open_field_ground";
-            plane.transform.position = Vector3.zero;
+            plane.transform.position = new Vector3(0f, -1f, 0f);
             // Plane is 10x10 units. Scale to match openFieldSize (XZ)
             var sx = Mathf.Max(1f, openFieldSize.x / 10f);
             var sz = Mathf.Max(1f, openFieldSize.y / 10f);
@@ -418,7 +418,7 @@ namespace VRPerception.Tasks
             // Ground (long plane)
             var ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
             ground.name = "env_corridor_ground";
-            ground.transform.position = new Vector3(0f, 0f, 0f);
+            ground.transform.position = new Vector3(0f, -1f, 0f);
             ground.transform.localScale = new Vector3(corridorHalfWidth * 2f, 0.2f, corridorLength);
             ApplyMat(ground, groundMaterial);
             _spawned.Add(ground);
@@ -426,7 +426,7 @@ namespace VRPerception.Tasks
             // Left wall
             var left = GameObject.CreatePrimitive(PrimitiveType.Cube);
             left.name = "env_corridor_wall_left";
-            left.transform.position = new Vector3(-corridorHalfWidth, corridorWallHeight * 0.5f, 0f);
+            left.transform.position = new Vector3(-corridorHalfWidth, corridorWallHeight * 0.5f-1f, 0f);
             left.transform.localScale = new Vector3(corridorWallThickness, corridorWallHeight, corridorLength);
             ApplyMat(left, wallMaterial);
             _spawned.Add(left);
@@ -434,7 +434,7 @@ namespace VRPerception.Tasks
             // Right wall
             var right = GameObject.CreatePrimitive(PrimitiveType.Cube);
             right.name = "env_corridor_wall_right";
-            right.transform.position = new Vector3(corridorHalfWidth, corridorWallHeight * 0.5f, 0f);
+            right.transform.position = new Vector3(corridorHalfWidth, corridorWallHeight * 0.5f-1f, 0f);
             right.transform.localScale = new Vector3(corridorWallThickness, corridorWallHeight, corridorLength);
             ApplyMat(right, wallMaterial);
             _spawned.Add(right);

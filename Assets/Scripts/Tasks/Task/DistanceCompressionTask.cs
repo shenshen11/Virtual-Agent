@@ -51,7 +51,7 @@ namespace VRPerception.Tasks
             _rand = new System.Random(seed);
 
             var envs = new[] { "open_field", "corridor" };
-            var fovs = new[] { 50f, 60f, 90f };
+            var fovs = new[] { 60f };
             var kinds = new[] { "sphere"};
             // 改成用对数分布的6个距离点
             var dists = new[] { 2f, 3.2f, 5f, 8f, 12.6f, 20f };
@@ -141,13 +141,7 @@ namespace VRPerception.Tasks
 
         public string GetSystemPrompt()
         {
-            // 严格 ONLY JSON 的系统提示
-            return
-                "You are a vision agent. ONLY output JSON according to task rules. " +
-                "If you can answer directly, output an inference JSON with distance. " +
-                "Format: {\"type\":\"inference\",\"taskId\":\"distance_compression\",\"trialId\":<int>," +
-                "\"answer\":{\"distance_m\":<number>},\"confidence\":<0..1>}. " +
-                "No extra text. If information is insufficient, you may request actions, but prefer answering directly.";
+            return PromptTemplates.GetSystemPrompt(TaskId);
         }
 
         public ToolSpec[] GetTools()
@@ -158,11 +152,18 @@ namespace VRPerception.Tasks
 
         public string BuildTaskPrompt(TrialSpec trial)
         {
-            var envText = trial.environment == "corridor" ? "a long corridor" : "an open field";
-            return
-                $"Task: Estimate the distance to the target object in meters.\n" +
-                $"Scene: {envText}. Target kind: {trial.targetKind}. Camera FOV: {trial.fovDeg} deg.\n" +
-                $"Output ONLY JSON with fields: type=inference, answer.distance_m (float), confidence (0..1).";
+            if (trial != null && trial.isAnchor)
+            {
+                return PromptTemplates.BuildDistanceCompressionCalibrationPrompt(
+                    trial.targetKind,
+                    trial.fovDeg,
+                    trial.environment,
+                    trial.trueDistanceM);
+            }
+            return PromptTemplates.BuildDistanceCompressionPrompt(
+                trial?.targetKind,
+                trial?.fovDeg ?? 0f,
+                trial?.environment);
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
@@ -274,7 +275,7 @@ namespace VRPerception.Tasks
                 case "sphere":
                 case "cube":
                 default:
-                    pos.y = yCenter;
+                    pos.y = yCenter-0.5f;
                     scale = 1.0f;
                     break;
             }
@@ -383,6 +384,16 @@ namespace VRPerception.Tasks
             {
                 if (TryToFloat(field.GetValue(answer), out distance)) return true;
             }
+            var ackProp = t.GetProperty("acknowledged_distance_m", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+            if (ackProp != null)
+            {
+                if (TryToFloat(ackProp.GetValue(answer), out distance)) return true;
+            }
+            var ackField = t.GetField("acknowledged_distance_m", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+            if (ackField != null)
+            {
+                if (TryToFloat(ackField.GetValue(answer), out distance)) return true;
+            }
 
             // 2) 尝试 JSON 序列化后再解析
             try
@@ -394,6 +405,11 @@ namespace VRPerception.Tasks
                     if (parsed != null && parsed.distance_m > 0)
                     {
                         distance = parsed.distance_m;
+                        return true;
+                    }
+                    if (parsed != null && parsed.acknowledged_distance_m > 0)
+                    {
+                        distance = parsed.acknowledged_distance_m;
                         return true;
                     }
                 }
@@ -462,6 +478,7 @@ namespace VRPerception.Tasks
         private class DistanceAnswer
         {
             public float distance_m;
+            public float acknowledged_distance_m;
             public float confidence;
             public string explanation;
         }
