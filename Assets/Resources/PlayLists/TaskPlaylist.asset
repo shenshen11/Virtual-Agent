@@ -16,27 +16,12 @@ MonoBehaviour:
   displayName: 
   description: 
   entries:
-  - taskId: color_constancy_adjustment
+  - taskId: material_roughness_static
     displayName: 
     description: 
     subjectMode: 1
     randomSeed: 12345
-    maxTrials: 15
-    enableActionPlanLoop: 1
-    actionPlanLoopTimeoutMs: 20000
-    requireHumanInput: 0
-    scenePreset: 
-    preTaskMessage: 
-    postTaskMessage: 
-    restSeconds: -1
-    operatorNotes: 
-    humanInputPrompt: 
-  - taskId: material_roughness
-    displayName: 
-    description: 
-    subjectMode: 1
-    randomSeed: 12345
-    maxTrials: 15
+    maxTrials: 12
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 0
