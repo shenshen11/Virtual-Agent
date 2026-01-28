@@ -210,15 +210,27 @@ namespace VRPerception.Tasks
         {
             var arr = new string[5];
             arr[2] = target;
+            var candidates = new List<string>(_letterPool.Length);
+            for (int i = 0; i < _letterPool.Length; i++)
+            {
+                var letter = _letterPool[i];
+                if (!string.Equals(letter, target, StringComparison.OrdinalIgnoreCase))
+                {
+                    candidates.Add(letter);
+                }
+            }
             for (int i = 0; i < arr.Length; i++)
             {
                 if (i == 2) continue;
-                string candidate;
-                do
+                if (candidates.Count == 0)
                 {
-                    candidate = SampleLetter();
-                } while (string.Equals(candidate, target, StringComparison.OrdinalIgnoreCase));
-                arr[i] = candidate;
+                    arr[i] = SampleLetter();
+                    continue;
+                }
+
+                var idx = _rand.Next(candidates.Count);
+                arr[i] = candidates[idx];
+                candidates.RemoveAt(idx);
             }
             return arr;
         }
@@ -233,11 +245,11 @@ namespace VRPerception.Tasks
             // 十字注视点：水平+垂直细条
             var horiz = GameObject.CreatePrimitive(PrimitiveType.Cube);
             horiz.transform.SetParent(root.transform, worldPositionStays: false);
-            horiz.transform.localScale = new Vector3(0.12f, 0.01f, 0.01f);
+            horiz.transform.localScale = new Vector3(0.36f, 0.05f, 0.01f);
 
             var vert = GameObject.CreatePrimitive(PrimitiveType.Cube);
             vert.transform.SetParent(root.transform, worldPositionStays: false);
-            vert.transform.localScale = new Vector3(0.01f, 0.12f, 0.01f);
+            vert.transform.localScale = new Vector3(0.05f, 0.36f, 0.01f);
 
             var rendererH = horiz.GetComponent<Renderer>();
             var rendererV = vert.GetComponent<Renderer>();
@@ -259,10 +271,10 @@ namespace VRPerception.Tasks
             var basePos = origin + forward * depth;
 
             // 放大间距比例避免拥挤过度，并确保整串在注视点右侧
-            var baseSpacing = 0.3f; // 保底间距，防止重叠
+            var baseSpacing = 0.5f; // 保底间距，防止重叠
             var spacingOffset = Mathf.Max(Mathf.Tan(trial.spacingDeg * Mathf.Deg2Rad) * depth * 2.5f, baseSpacing);
             var eccOffset = Mathf.Tan(trial.eccentricityDeg * Mathf.Deg2Rad) * depth;
-            var minEccOffset = (trial.targetIndex + 0.5f) * spacingOffset; // 左端留半个间距的安全距离
+            var minEccOffset = (trial.targetIndex + 1.0f) * spacingOffset; // 左端留半个间距的安全距离
             if (eccOffset < minEccOffset) eccOffset = minEccOffset;
 
             for (int i = 0; i < trial.flankerLetters.Length; i++)
@@ -292,7 +304,7 @@ namespace VRPerception.Tasks
             tm.anchor = TextAnchor.MiddleCenter;
             tm.alignment = TextAlignment.Center;
             tm.characterSize = 0.06f;
-            tm.fontSize = 70;
+            tm.fontSize = 100;
             tm.color = Color.white;
 
             return go;
