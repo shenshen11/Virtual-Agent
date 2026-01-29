@@ -124,7 +124,8 @@ namespace VRPerception.Tasks
         {
             return PromptTemplates.BuildDepthJndStaircasePrompt(
                 trial.background,
-                trial.fovDeg);
+                trial.fovDeg,
+                trial.trialId);
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)

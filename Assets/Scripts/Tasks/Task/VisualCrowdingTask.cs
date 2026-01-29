@@ -111,7 +111,8 @@ namespace VRPerception.Tasks
                 trial.eccentricityDeg,
                 trial.spacingDeg,
                 trial.targetLetter,
-                trial.flankerLetters);
+                trial.flankerLetters,
+                trial.trialId);
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)

@@ -593,6 +593,127 @@ namespace VRPerception.Infra
                     savedCsvPaths.Add(path);
                 }
 
+                // material_roughness
+                if (_completed.Exists(r => r.taskId == "material_roughness"))
+                {
+                    var path = Path.Combine(_sessionDir, "material_roughness_summary.csv");
+                    using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                    {
+                        // material_roughness_summary.csv 字段说明：
+                        // - taskId/trialId: 任务ID/试次ID
+                        // - environment: 场景类型
+                        // - fovDeg: 相机视场角（度）
+                        // - trueRoughness: 真值粗糙度（0..1）
+                        // - requireHeadMotion: 是否要求头动门控（1/0）
+                        // - predictedRoughness: 模型预测粗糙度（0..1）
+                        // - roughnessAbsError: 绝对误差 |pred-true|
+                        // - roughnessSignedError: 有符号误差 pred-true
+                        // - confidence/providerId/latencyMs: 同上
+                        sw.WriteLine("taskId,trialId,environment,fovDeg,trueRoughness,requireHeadMotion,predictedRoughness,roughnessAbsError,roughnessSignedError,confidence,providerId,latencyMs");
+
+                        foreach (var r in _completed)
+                        {
+                            if (r.taskId != "material_roughness") continue;
+                            var t = r.trial;
+                            var e = r.evaluation;
+
+                            sw.WriteLine(string.Join(",",
+                                Escape(r.taskId),
+                                r.trialId,
+                                Escape(t.environment),
+                                t.fovDeg.ToString("F0"),
+                                t.roughness.ToString("F3"),
+                                t.requireHeadMotion ? "1" : "0",
+                                e.predictedRoughness.ToString("F3"),
+                                e.roughnessAbsError.ToString("F3"),
+                                e.roughnessSignedError.ToString("F3"),
+                                e.confidence.ToString("F3"),
+                                Escape(e.providerId),
+                                e.latencyMs
+                            ));
+                        }
+                    }
+                    savedCsvPaths.Add(path);
+                }
+
+                // color_constancy_adjustment
+                if (_completed.Exists(r => r.taskId == "color_constancy_adjustment"))
+                {
+                    var path = Path.Combine(_sessionDir, "color_constancy_adjustment_summary.csv");
+                    using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                    {
+                        // color_constancy_adjustment_summary.csv 字段说明：
+                        // - taskId/trialId: 任务ID/试次ID
+                        // - phase: 实验阶段（main/校准等）
+                        // - background/fovDeg/lighting: 实验条件
+                        // - trueR/trueG/trueB: 真值RGB（0-255）
+                        // - predictedChoice: 模型选择的标签
+                        // - predictedR/G/B: 模型预测RGB（0-255）
+                        // - rgbError: RGB欧氏距离误差
+                        // - confidence/providerId/latencyMs: 同上
+                        sw.WriteLine("taskId,trialId,phase,background,fovDeg,lighting,trueR,trueG,trueB,predictedChoice,predictedR,predictedG,predictedB,rgbError,confidence,providerId,latencyMs");
+
+                        foreach (var r in _completed)
+                        {
+                            if (r.taskId != "color_constancy_adjustment") continue;
+                            var t = r.trial;
+                            var e = r.evaluation;
+
+                            // 从 extraJson 解析数据
+                            string phase = "unknown";
+                            string predictedChoice = "";
+                            int[] predictedRgb = new int[] { 0, 0, 0 };
+
+                            try
+                            {
+                                var extra = JsonUtility.FromJson<ColorConstancyAdjustmentExtra>(e.extraJson);
+                                if (extra != null)
+                                {
+                                    phase = extra.phase ?? "unknown";
+                                    predictedChoice = extra.choice ?? "";
+                                    if (extra.predictedRgb != null && extra.predictedRgb.Length >= 3)
+                                    {
+                                        predictedRgb = extra.predictedRgb;
+                                    }
+                                }
+                            }
+                            catch { }
+
+                            // 计算 RGB 误差（欧氏距离）
+                            float rgbError = 0f;
+                            if (predictedRgb != null && predictedRgb.Length >= 3)
+                            {
+                                rgbError = Mathf.Sqrt(
+                                    Mathf.Pow(predictedRgb[0] - t.trueR, 2) +
+                                    Mathf.Pow(predictedRgb[1] - t.trueG, 2) +
+                                    Mathf.Pow(predictedRgb[2] - t.trueB, 2)
+                                );
+                            }
+
+                            sw.WriteLine(string.Join(",",
+                                Escape(r.taskId),
+                                r.trialId,
+                                Escape(phase),
+                                Escape(t.background),
+                                t.fovDeg.ToString("F0"),
+                                Escape(t.lighting),
+                                t.trueR,
+                                t.trueG,
+                                t.trueB,
+                                Escape(predictedChoice),
+                                predictedRgb[0],
+                                predictedRgb[1],
+                                predictedRgb[2],
+                                rgbError.ToString("F3"),
+                                e.confidence.ToString("F3"),
+                                Escape(e.providerId),
+                                e.latencyMs
+                            ));
+                        }
+                    }
+                    savedCsvPaths.Add(path);
+                }
+
                 if (enableJsonl && savedCsvPaths.Count > 0)
                 {
                     foreach (var p in savedCsvPaths)
@@ -769,6 +890,29 @@ namespace VRPerception.Infra
             public int trialId;
             public TrialSpec trial;
             public TrialEvaluation evaluation;
+        }
+
+        [Serializable]
+        private class ColorConstancyAdjustmentExtra
+        {
+            public string phase;
+            public bool hasFurniture;
+            public string lighting;
+            public int[] initialRgb;
+            public int[] baselineRgb;
+            public int[] predictedRgb;
+            public int[] deltaRgb;
+            public string choice;
+            public string[] candidateLabels;
+            public RgbTriplet[] candidateRgbs;
+        }
+
+        [Serializable]
+        private struct RgbTriplet
+        {
+            public int r;
+            public int g;
+            public int b;
         }
     }
 }

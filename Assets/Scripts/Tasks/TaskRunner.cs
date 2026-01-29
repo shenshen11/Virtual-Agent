@@ -208,7 +208,7 @@ namespace VRPerception.Tasks
                             trial.trialId,
                             _task.GetSystemPrompt(),
                             _task.BuildTaskPrompt(trial),
-                            _task.GetTools(),
+                            null,
                             captureOptions,
                             _runCts.Token
                         );
@@ -466,6 +466,8 @@ namespace VRPerception.Tasks
                 TaskMode.DepthJndStaircase => "depth_jnd_staircase",
                 TaskMode.HorizonCueIntegration => "horizon_cue_integration",
                 TaskMode.VisualCrowding => "visual_crowding",
+                TaskMode.ColorConstancyAdjustment => "color_constancy_adjustment",
+                TaskMode.MaterialRoughnessAmbiguity => "material_roughness",
                 _ => null
             };
         }
@@ -590,7 +592,9 @@ namespace VRPerception.Tasks
         ObjectCounting,
         DepthJndStaircase,
         HorizonCueIntegration,
-        VisualCrowding
+        VisualCrowding,
+        ColorConstancyAdjustment,
+        MaterialRoughnessAmbiguity
     }
 
     public enum SubjectMode

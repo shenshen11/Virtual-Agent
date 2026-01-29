@@ -179,11 +179,7 @@ namespace VRPerception.Tasks
 
         public string GetSystemPrompt()
         {
-            return
-                "You are a vision agent. ONLY output JSON according to task rules. " +
-                "Format: {\"type\":\"inference\",\"taskId\":\"horizon_cue_integration\",\"trialId\":<int>," +
-                "\"answer\":{\"distance_m\":<number>},\"confidence\":<0..1>}. " +
-                "No extra text.";
+            return PromptTemplates.GetSystemPrompt(TaskId);
         }
 
         public ToolSpec[] GetTools()
@@ -193,9 +189,7 @@ namespace VRPerception.Tasks
 
         public string BuildTaskPrompt(TrialSpec trial)
         {
-            return
-                "Task: Estimate the distance to the red sphere in meters.\n" +
-                "Output ONLY JSON with fields: type=inference, answer.distance_m (float), confidence (0..1).";
+            return PromptTemplates.BuildHorizonCueIntegrationPrompt(trial.trialId);
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)

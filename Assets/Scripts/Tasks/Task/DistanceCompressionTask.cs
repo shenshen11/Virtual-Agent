@@ -158,12 +158,14 @@ namespace VRPerception.Tasks
                     trial.targetKind,
                     trial.fovDeg,
                     trial.environment,
-                    trial.trueDistanceM);
+                    trial.trueDistanceM,
+                    trial.trialId);
             }
             return PromptTemplates.BuildDistanceCompressionPrompt(
                 trial?.targetKind,
                 trial?.fovDeg ?? 0f,
-                trial?.environment);
+                trial?.environment,
+                trial?.trialId ?? 0);
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)

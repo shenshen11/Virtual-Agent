@@ -128,7 +128,7 @@ namespace VRPerception.Tasks
         public string BuildTaskPrompt(TrialSpec trial)
         {
             var fov = trial.fovDeg > 0 ? trial.fovDeg : 60f;
-            return PromptTemplates.BuildNumerosityComparisonPrompt(fov);
+            return PromptTemplates.BuildNumerosityComparisonPrompt(fov, trial.trialId);
         }
 
         public Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)

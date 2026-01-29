@@ -107,12 +107,12 @@ namespace VRPerception.Tasks
         {
             if (!_metaByTrial.TryGetValue(trial, out var meta))
             {
-                return PromptTemplates.BuildColorConstancyAdjustmentPrompt("unknown", "none", trial.lighting, trial.fovDeg);
+                return PromptTemplates.BuildColorConstancyAdjustmentPrompt("unknown", "none", trial.lighting, trial.fovDeg, trial.trialId);
             }
 
             var background = meta.hasFurniture ? "furniture" : "empty";
             var phase = meta.phase ?? "unknown";
-            return PromptTemplates.BuildColorConstancyAdjustmentPrompt(phase, background, meta.lighting, trial.fovDeg);
+            return PromptTemplates.BuildColorConstancyAdjustmentPrompt(phase, background, meta.lighting, trial.fovDeg, trial.trialId);
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)

@@ -52,7 +52,7 @@ namespace VRPerception.Tasks
             _rand = new System.Random(seed);
 
             var backgrounds = new[] { "none", "indoor", "street" };
-            var fovs = new[] { 60f, 90f };
+            var fovs = new[] { 60f };
             var categories = new[] { "none", "appearance", "disappearance", "movement", "replacement" };
             var textures = new[] { 0.5f, 1.0f, 1.5f };
 
@@ -104,7 +104,7 @@ namespace VRPerception.Tasks
 
         public string BuildTaskPrompt(TrialSpec trial)
         {
-            return PromptTemplates.BuildChangeDetectionPrompt(trial.background, trial.fovDeg);
+            return PromptTemplates.BuildChangeDetectionPrompt(trial.background, trial.fovDeg, trial.trialId);
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)

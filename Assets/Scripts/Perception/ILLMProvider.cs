@@ -53,8 +53,8 @@ namespace VRPerception.Perception
         public string imageBase64;
         public FrameMetadata metadata;
         public ToolSpec[] tools;
-        public float temperature = 0.7f;
-        public float topP = 0.9f;
+        public float temperature = 0;
+        public float topP = 1;
         public string[] stopSequences;
         public int maxTokens = 1000;
         public int timeoutMs = 30000;
