@@ -521,55 +521,59 @@ namespace VRPerception.Tasks
         {
             if (_runtimeSkyMaterial != null) return;
 
-            var shader =
-                Shader.Find("Universal Render Pipeline/Unlit") ??
-                Shader.Find("Unlit/Texture") ??
-                Shader.Find("Sprites/Default") ??
-                Shader.Find("Standard");
-            if (shader == null) return;
+            // 使用程序生成的高分辨率渐变纹理作为天空盒
+            CreateImprovedGradientSkybox();
+        }
 
-            const int w = 256;
-            const int h = 128;
-
-            // 运行时生成一张“天空-地面渐变 + 明显地平线”的纹理，用作可控的地平线线索。
-            _runtimeSkyTexture = new Texture2D(w, h, TextureFormat.RGBA32, mipChain: false, linear: false)
+        private void CreateImprovedGradientSkybox()
+        {
+            // 使用Unlit/Texture shader创建天空盒材质
+            var shader = Shader.Find("Unlit/Texture") ?? Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null)
             {
-                wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear
+                Debug.LogError("[HorizonCueIntegrationTask] No suitable shader found");
+                return;
+            }
+
+            // 使用更高分辨率（2048x1024）以获得更好效果
+            const int w = 2048;
+            const int h = 1024;
+
+            _runtimeSkyTexture = new Texture2D(w, h, TextureFormat.RGBA32, mipChain: true, linear: false)
+            {
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Trilinear,
+                anisoLevel = 4
             };
 
-            var skyTop = new Color(0.55f, 0.75f, 1.0f, 1f);
-            var skyNearHorizon = new Color(0.75f, 0.85f, 1.0f, 1f);
-            var ground = new Color(0.18f, 0.20f, 0.18f, 1f);
-            var horizonLine = new Color(0.95f, 0.95f, 0.95f, 1f);
-
-            const float horizonV = 0.5f;
-            const float band = 0.04f;
-            const float line = 0.006f;
+            // 更自然的天空渐变
+            var skyTop = new Color(0.5f, 0.7f, 1.0f, 1f); // 深蓝色
+            var skyNearHorizon = new Color(0.7f, 0.85f, 1.0f, 1f); // 浅蓝色
+            var ground = new Color(0.2f, 0.23f, 0.2f, 1f); // 深绿色
+            var horizonLine = new Color(0.95f, 0.95f, 1.0f, 1f); // 亮白色
 
             for (int y = 0; y < h; y++)
             {
-                var v = h <= 1 ? 0f : (float)y / (h - 1);
+                var v = (float)y / (h - 1);
                 Color rowColor;
 
-                if (v >= horizonV + band * 0.5f)
+                // 使用非线性渐变，更接近真实天空
+                if (v >= 0.5f)
                 {
-                    var t = Mathf.InverseLerp(horizonV + band * 0.5f, 1f, v);
-                    rowColor = Color.Lerp(skyNearHorizon, skyTop, Mathf.Clamp01(t));
-                }
-                else if (v <= horizonV - band * 0.5f)
-                {
-                    rowColor = ground;
+                    var t = Mathf.Pow((v - 0.5f) * 2f, 0.6f); // 指数渐变
+                    rowColor = Color.Lerp(skyNearHorizon, skyTop, t);
                 }
                 else
                 {
-                    var t = Mathf.InverseLerp(horizonV - band * 0.5f, horizonV + band * 0.5f, v);
-                    rowColor = Color.Lerp(ground, skyNearHorizon, Mathf.Clamp01(t));
+                    rowColor = ground;
                 }
 
-                if (Mathf.Abs(v - horizonV) <= line * 0.5f)
+                // 添加地平线光晕效果
+                var horizonDist = Mathf.Abs(v - 0.5f);
+                if (horizonDist < 0.1f)
                 {
-                    rowColor = Color.Lerp(rowColor, horizonLine, 0.65f);
+                    var halo = 1f - (horizonDist / 0.1f);
+                    rowColor = Color.Lerp(rowColor, horizonLine, halo * 0.5f);
                 }
 
                 for (int x = 0; x < w; x++)
@@ -578,19 +582,23 @@ namespace VRPerception.Tasks
                 }
             }
 
-            _runtimeSkyTexture.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+            _runtimeSkyTexture.Apply(true, false);
 
             _runtimeSkyMaterial = new Material(shader);
-            if (_runtimeSkyMaterial.HasProperty("_BaseColor")) _runtimeSkyMaterial.SetColor("_BaseColor", Color.white);
-            else if (_runtimeSkyMaterial.HasProperty("_Color")) _runtimeSkyMaterial.SetColor("_Color", Color.white);
-            else _runtimeSkyMaterial.color = Color.white;
+            _runtimeSkyMaterial.SetColor("_BaseColor", Color.white);
 
-            if (_runtimeSkyMaterial.HasProperty("_BaseMap")) _runtimeSkyMaterial.SetTexture("_BaseMap", _runtimeSkyTexture);
-            else if (_runtimeSkyMaterial.HasProperty("_MainTex")) _runtimeSkyMaterial.SetTexture("_MainTex", _runtimeSkyTexture);
+            if (_runtimeSkyMaterial.HasProperty("_BaseMap"))
+                _runtimeSkyMaterial.SetTexture("_BaseMap", _runtimeSkyTexture);
+            else if (_runtimeSkyMaterial.HasProperty("_MainTex"))
+                _runtimeSkyMaterial.SetTexture("_MainTex", _runtimeSkyTexture);
 
-            // 关闭剔除，确保从球内部也能看到纹理。
-            if (_runtimeSkyMaterial.HasProperty("_Cull")) _runtimeSkyMaterial.SetFloat("_Cull", (float)CullMode.Off);
-            if (_runtimeSkyMaterial.HasProperty("_CullMode")) _runtimeSkyMaterial.SetFloat("_CullMode", (float)CullMode.Off);
+            // 关闭剔除，确保从球内部也能看到
+            if (_runtimeSkyMaterial.HasProperty("_Cull"))
+                _runtimeSkyMaterial.SetFloat("_Cull", (float)CullMode.Off);
+            if (_runtimeSkyMaterial.HasProperty("_CullMode"))
+                _runtimeSkyMaterial.SetFloat("_CullMode", (float)CullMode.Off);
+
+            Debug.Log("[HorizonCueIntegrationTask] Using improved gradient skybox (2048x1024)");
         }
 
         private static bool TryExtractDistanceM(object answerObj, out float distanceM)
