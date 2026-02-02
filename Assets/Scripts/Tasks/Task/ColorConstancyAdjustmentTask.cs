@@ -40,6 +40,9 @@ namespace VRPerception.Tasks
         private readonly Dictionary<TrialSpec, TrialMeta> _metaByTrial = new Dictionary<TrialSpec, TrialMeta>();
         private readonly List<GameObject> _spawned = new List<GameObject>();
 
+        private int _plannedTrialCount;
+        private string _currentFurniturePhase;
+
         private int[] _baselineRgb;
         private bool _baselineSet;
         private bool _redAdapted;
@@ -78,6 +81,7 @@ namespace VRPerception.Tasks
             _redAdapted = false;
             _blueAdapted = false;
             _restedForBlue = false;
+            _currentFurniturePhase = null;
 
             var trials = new List<TrialSpec>();
 
@@ -90,6 +94,7 @@ namespace VRPerception.Tasks
             // Blue block (rest + adaptation + alternating furniture)
             AddBlock(trials, "blue", "adapt_blue", DefaultRepeatsPerCondition);
 
+            _plannedTrialCount = trials.Count;
             return trials.ToArray();
         }
 
@@ -124,6 +129,12 @@ namespace VRPerception.Tasks
                 meta = new TrialMeta { phase = "unknown", hasFurniture = false, lighting = trial.lighting };
             }
 
+            if (trial.trialId == 0)
+            {
+                _currentFurniturePhase = null;
+                _furniture?.Clear();
+            }
+
             bool isHuman = IsHumanSubject();
 
             // Lighting first (adaptation uses this state)
@@ -139,7 +150,7 @@ namespace VRPerception.Tasks
             {
                 if (string.Equals(meta.phase, "red", StringComparison.OrdinalIgnoreCase) && !_redAdapted)
                 {
-                    EnsureFurnitureForAdaptation();
+                    EnsureFurnitureForAdaptation(meta.phase);
                     await DelaySeconds(DefaultAdaptSeconds, ct);
                     _redAdapted = true;
                 }
@@ -150,14 +161,14 @@ namespace VRPerception.Tasks
                         await DelaySeconds(DefaultRestSeconds, ct);
                         _restedForBlue = true;
                     }
-                    EnsureFurnitureForAdaptation();
+                    EnsureFurnitureForAdaptation(meta.phase);
                     await DelaySeconds(DefaultAdaptSeconds, ct);
                     _blueAdapted = true;
                 }
             }
 
             // Apply trial-specific furniture condition
-            ApplyFurniture(meta.hasFurniture);
+            ApplyFurniture(meta.hasFurniture, meta.phase);
 
             // Camera FOV
             var fov = trial.fovDeg > 0 ? trial.fovDeg : DefaultFovDeg;
@@ -180,7 +191,11 @@ namespace VRPerception.Tasks
         public async Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
         {
             ClearSpawned();
-            _furniture?.Clear();
+            if (IsLastTrial(trial))
+            {
+                _furniture?.Clear();
+                _currentFurniturePhase = null;
+            }
             await Task.Yield();
         }
 
@@ -375,25 +390,51 @@ namespace VRPerception.Tasks
             return false;
         }
 
-        private void EnsureFurnitureForAdaptation()
+        private void EnsureFurnitureForAdaptation(string phase)
         {
             if (_furniture == null) return;
-            var cam = ResolveCamera();
-            _furniture.Spawn(_rand, cam != null ? cam.transform : null);
+            EnsureFurnitureLayout(phase);
+            _furniture.SetActive(true);
         }
 
-        private void ApplyFurniture(bool hasFurniture)
+        private void ApplyFurniture(bool hasFurniture, string phase)
         {
             if (_furniture == null) return;
-            if (hasFurniture)
+            if (!hasFurniture)
+            {
+                _furniture.SetActive(false);
+                return;
+            }
+
+            EnsureFurnitureLayout(phase);
+            _furniture.SetActive(true);
+        }
+
+        private void EnsureFurnitureLayout(string phase)
+        {
+            if (_furniture == null) return;
+            var normalizedPhase = string.IsNullOrEmpty(phase) ? "unknown" : phase;
+            if (!string.Equals(_currentFurniturePhase, normalizedPhase, StringComparison.OrdinalIgnoreCase) || !_furniture.HasSpawned)
             {
                 var cam = ResolveCamera();
                 _furniture.Spawn(_rand, cam != null ? cam.transform : null);
+                _currentFurniturePhase = normalizedPhase;
             }
-            else
+        }
+
+        private bool IsLastTrial(TrialSpec trial)
+        {
+            int total = _plannedTrialCount;
+            if (_ctx?.runner != null)
             {
-                _furniture.Clear();
+                int maxTrials = _ctx.runner.CurrentMaxTrials;
+                if (maxTrials > 0)
+                {
+                    total = Mathf.Min(total, maxTrials);
+                }
             }
+
+            return total > 0 && trial.trialId >= total - 1;
         }
 
         private void SpawnAdjustableSphere(TrialMeta meta)
