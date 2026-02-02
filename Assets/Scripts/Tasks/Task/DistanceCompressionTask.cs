@@ -277,7 +277,7 @@ namespace VRPerception.Tasks
                 case "sphere":
                 case "cube":
                 default:
-                    pos.y = yCenter-0.5f;
+                    pos.y = cam.transform.position.y;
                     scale = 1.0f;
                     break;
             }

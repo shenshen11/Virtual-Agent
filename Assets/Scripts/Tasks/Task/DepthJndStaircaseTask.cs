@@ -305,7 +305,7 @@ namespace VRPerception.Tasks
             var right = cam.transform.right;
 
             float horizontalOffset = 0.7f;
-            float y = origin.y + 1.0f;
+            float y = origin.y;
 
             var posA = origin + forward * depthA - right * horizontalOffset;
             var posB = origin + forward * depthB + right * horizontalOffset;
