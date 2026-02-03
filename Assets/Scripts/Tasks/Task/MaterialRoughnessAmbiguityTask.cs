@@ -64,7 +64,7 @@ namespace VRPerception.Tasks
 
             // 计划：roughness 6 级 × 环境 2 种 × 重复 3 次 = 36 trial
             var roughnessLevels = new[] { 0.0f, 0.2f, 0.4f, 0.6f, 0.8f, 1.0f };
-            var moduleEnvs = new[] { "module:room_complex", "module:black_simple" };
+            var moduleEnvs = new[] { "module:hdri_complex", "module:black_simple" };
 
             const int repeats = 3;
             var trials = new List<TrialSpec>(roughnessLevels.Length * moduleEnvs.Length * repeats);

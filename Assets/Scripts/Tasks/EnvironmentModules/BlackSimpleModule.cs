@@ -38,7 +38,15 @@ namespace VRPerception.Tasks.EnvironmentModules
         [SerializeField] private Vector3 pointLightCameraOffset = new Vector3(0.3f, 0.2f, 0.5f);
         [SerializeField] private Vector3 pointLightFallbackLocalOffset = new Vector3(0.0f, 1.0f, 1.5f);
 
+        [Header("Quality Safety (Runtime)")]
+        [Tooltip("在某些设备上 Low/Very Low 质量会把 pixelLightCount 设为 0，导致点光不生效。")]
+        [SerializeField] private bool ensurePixelLights = true;
+        [SerializeField] private int minPixelLightCount = 1;
+        [SerializeField] private bool restorePixelLightCountOnTeardown = true;
+
         private Light _pointLight;
+        private int _prevPixelLightCount = -1;
+        private bool _pixelLightOverridden;
 
         public override void Apply(EnvironmentModuleContext context)
         {
@@ -85,6 +93,7 @@ namespace VRPerception.Tasks.EnvironmentModules
                 context.MainDirectionalLight.enabled = false;
             }
 
+            EnsurePixelLightCount();
             EnsurePointLight(context);
         }
 
@@ -94,6 +103,8 @@ namespace VRPerception.Tasks.EnvironmentModules
             {
                 _pointLight.enabled = false;
             }
+
+            RestorePixelLightCount();
         }
 
         private void EnsurePointLight(EnvironmentModuleContext context)
@@ -121,6 +132,7 @@ namespace VRPerception.Tasks.EnvironmentModules
             if (overridePointLightSettings)
             {
                 _pointLight.type = LightType.Point;
+                _pointLight.renderMode = LightRenderMode.ForcePixel;
                 _pointLight.color = pointLightColor;
                 _pointLight.intensity = Mathf.Max(0f, pointLightIntensity);
                 _pointLight.range = Mathf.Max(0.1f, pointLightRange);
@@ -185,6 +197,31 @@ namespace VRPerception.Tasks.EnvironmentModules
             {
                 _pointLight.transform.position = pointLightFallbackLocalOffset;
             }
+        }
+
+        private void EnsurePixelLightCount()
+        {
+            if (!ensurePixelLights) return;
+            int min = Mathf.Max(0, minPixelLightCount);
+            if (QualitySettings.pixelLightCount >= min) return;
+
+            if (!_pixelLightOverridden)
+            {
+                _prevPixelLightCount = QualitySettings.pixelLightCount;
+                _pixelLightOverridden = true;
+            }
+
+            QualitySettings.pixelLightCount = min;
+        }
+
+        private void RestorePixelLightCount()
+        {
+            if (!restorePixelLightCountOnTeardown) return;
+            if (!_pixelLightOverridden) return;
+
+            QualitySettings.pixelLightCount = Mathf.Max(0, _prevPixelLightCount);
+            _prevPixelLightCount = -1;
+            _pixelLightOverridden = false;
         }
     }
 }
