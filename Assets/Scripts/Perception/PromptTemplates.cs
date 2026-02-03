@@ -413,8 +413,8 @@ namespace VRPerception.Perception
         {
             var id = trialId.ToString(CultureInfo.InvariantCulture);
             return
-                "Task: Estimate the distance to the red sphere in meters.\n" +
-                "Use the horizon line and other visible depth cues; the camera remains fixed.\n" +
+                $"Trial metadata: {{\"task\":\"horizon_cue_integration\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
+                "The red sphere is directly in front of the camera at the same height. Estimate its distance in meters.\n" +
                 $"Output STRICT JSON exactly in this schema: {{\"task\":\"horizon_cue_integration\",\"trial_id\":\"{id}\",\"response\":{{\"distance_m\":<number>}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
         }
 
