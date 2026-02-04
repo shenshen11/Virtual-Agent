@@ -300,43 +300,431 @@ namespace VRPerception.Infra
         {
             try
             {
-                // 仅输出 distance_compression 的结果（可扩展多任务）
-                var path = Path.Combine(_sessionDir, "distance_compression_summary.csv");
-                using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                // 仅对本次会话中“实际跑过的任务”输出对应 CSV（避免固定写出多个文件）
+                var savedCsvPaths = new List<string>();
+
+                // distance_compression
+                if (_completed.Exists(r => r.taskId == "distance_compression"))
                 {
-                    sw.WriteLine("taskId,trialId,environment,fovDeg,targetKind,trueDistanceM,predictedDistanceM,absError,relError,confidence,providerId,latencyMs");
-
-                    foreach (var r in _completed)
+                    var path = Path.Combine(_sessionDir, "distance_compression_summary.csv");
+                    using (var sw = new StreamWriter(path, false, Encoding.UTF8))
                     {
-                        if (r.taskId != "distance_compression") continue;
-                        var t = r.trial;
-                        var e = r.evaluation;
+                        // distance_compression_summary.csv 字段说明：
+                        // - taskId: 任务ID
+                        // - trialId: 试次ID
+                        // - environment: 场景类型（open_field/corridor）
+                        // - fovDeg: 相机视场角（度）
+                        // - targetKind: 目标类型（sphere/cube/human...）
+                        // - trueDistanceM: 真值距离（米）
+                        // - predictedDistanceM: 模型预测距离（米）
+                        // - absError: 绝对误差 |pred-true|（米）
+                        // - relError: 相对误差 absError/trueDistanceM
+                        // - confidence: 模型置信度（0..1，来自模型输出）
+                        // - providerId: 使用的模型/服务提供方ID
+                        // - latencyMs: 推理耗时（毫秒）
+                        sw.WriteLine("taskId,trialId,environment,fovDeg,targetKind,trueDistanceM,predictedDistanceM,absError,relError,confidence,providerId,latencyMs");
 
-                        sw.WriteLine(string.Join(",",
-                            Escape(r.taskId),
-                            r.trialId,
-                            Escape(t.environment),
-                            t.fovDeg.ToString("F0"),
-                            Escape(t.targetKind),
-                            t.trueDistanceM.ToString("F3"),
-                            e.predictedDistanceM.ToString("F3"),
-                            e.absError.ToString("F3"),
-                            e.relError.ToString("F3"),
-                            e.confidence.ToString("F3"),
-                            Escape(e.providerId),
-                            e.latencyMs
-                        ));
+                        foreach (var r in _completed)
+                        {
+                            if (r.taskId != "distance_compression") continue;
+                            var t = r.trial;
+                            var e = r.evaluation;
+
+                            sw.WriteLine(string.Join(",",
+                                Escape(r.taskId),
+                                r.trialId,
+                                Escape(t.environment),
+                                t.fovDeg.ToString("F0"),
+                                Escape(t.targetKind),
+                                t.trueDistanceM.ToString("F3"),
+                                e.predictedDistanceM.ToString("F3"),
+                                e.absError.ToString("F3"),
+                                e.relError.ToString("F3"),
+                                e.confidence.ToString("F3"),
+                                Escape(e.providerId),
+                                e.latencyMs
+                            ));
+                        }
                     }
+                    savedCsvPaths.Add(path);
                 }
 
-                if (enableJsonl)
+                // visual_crowding
+                if (_completed.Exists(r => r.taskId == "visual_crowding"))
                 {
-                    BufferJson(new CsvSavedLine
+                    var vcPath = Path.Combine(_sessionDir, "visual_crowding_summary.csv");
+                    using (var sw = new StreamWriter(vcPath, false, Encoding.UTF8))
                     {
-                        type = "csv_saved",
-                        timestamp = DateTime.UtcNow.ToString("o"),
-                        path = Relativize(path)
-                    });
+                        // visual_crowding_summary.csv 字段说明：
+                        // - taskId: 任务ID
+                        // - trialId: 试次ID
+                        // - eccentricityDeg: 目标离心率（度）
+                        // - spacingDeg: 目标与最近干扰项间距（度）
+                        // - targetLetter: 真值目标字母
+                        // - flankerLetters: 干扰字母序列（空格分隔）
+                        // - predictedLetter: 模型预测字母
+                        // - isCorrect: 是否正确（1/0）
+                        // - confidence/providerId/latencyMs: 同上
+                        sw.WriteLine("taskId,trialId,eccentricityDeg,spacingDeg,targetLetter,flankerLetters,predictedLetter,isCorrect,confidence,providerId,latencyMs");
+
+                        foreach (var r in _completed)
+                        {
+                            if (r.taskId != "visual_crowding") continue;
+                            var t = r.trial;
+                            var e = r.evaluation;
+
+                            var flankers = t.flankerLetters != null && t.flankerLetters.Length > 0
+                                ? string.Join(" ", t.flankerLetters)
+                                : "";
+
+                            sw.WriteLine(string.Join(",",
+                                Escape(r.taskId),
+                                r.trialId,
+                                t.eccentricityDeg.ToString("F3"),
+                                t.spacingDeg.ToString("F3"),
+                                Escape(t.targetLetter),
+                                Escape(flankers),
+                                Escape(e.predictedLetter),
+                                e.isLetterCorrect ? "1" : "0",
+                                e.confidence.ToString("F3"),
+                                Escape(e.providerId),
+                                e.latencyMs
+                            ));
+                        }
+                    }
+                    savedCsvPaths.Add(vcPath);
+                }
+
+                // depth_jnd_staircase
+                if (_completed.Exists(r => r.taskId == "depth_jnd_staircase"))
+                {
+                    var path = Path.Combine(_sessionDir, "depth_jnd_staircase_summary.csv");
+                    using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                    {
+                        // depth_jnd_staircase_summary.csv 字段说明：
+                        // - taskId/trialId/environment/fovDeg: 同上
+                        // - depthA/depthB: 本试次 A(左)/B(右) 的真实深度（米）
+                        // - deltaM: 深度差 |depthA-depthB|（米）
+                        // - baseDistanceM: 基准深度 max(depthA, depthB)（米）
+                        // - trueCloser: 真值更近者（A/B）
+                        // - predictedCloser: 模型预测更近者（A/B）
+                        // - isCorrect: 是否判断正确（1/0）
+                        // - confidence/providerId/latencyMs: 同上
+                        // - groupIndex: 阶梯组索引（从 0 开始）
+                        // - trialIndexInGroup: 组内试次计数（内部计数）
+                        // - staircaseDeltaNextM: 更新后的下一试次阶梯Δ（米）
+                        // - reversalHappened: 是否发生反转（1/0）
+                        // - reversalCount: 已发生反转次数
+                        // - thresholdEstimateM: 当前阈值估计（米）
+                        // - groupEnded: 是否达到组结束条件（1/0）
+                        sw.WriteLine("taskId,trialId,environment,fovDeg,depthA,depthB,deltaM,baseDistanceM,trueCloser,predictedCloser,isCorrect,confidence,providerId,latencyMs,groupIndex,trialIndexInGroup,staircaseDeltaNextM,reversalHappened,reversalCount,thresholdEstimateM,groupEnded");
+
+                        foreach (var r in _completed)
+                        {
+                            if (r.taskId != "depth_jnd_staircase") continue;
+                            var t = r.trial;
+                            var e = r.evaluation;
+
+                            float depthA = t.depthA;
+                            float depthB = t.depthB;
+                            float deltaM = Mathf.Abs(depthA - depthB);
+                            float baseDistanceM = Mathf.Max(depthA, depthB);
+
+                            var extra = TryParseDepthJndExtra(e.extraJson);
+
+                            sw.WriteLine(string.Join(",",
+                                Escape(r.taskId),
+                                r.trialId,
+                                Escape(t.environment),
+                                t.fovDeg.ToString("F0"),
+                                depthA.ToString("F3"),
+                                depthB.ToString("F3"),
+                                deltaM.ToString("F3"),
+                                baseDistanceM.ToString("F3"),
+                                Escape(e.trueCloser),
+                                Escape(e.predictedCloser),
+                                e.isCorrect ? "1" : "0",
+                                e.confidence.ToString("F3"),
+                                Escape(e.providerId),
+                                e.latencyMs,
+                                extra != null ? extra.groupIndex.ToString() : "",
+                                extra != null ? extra.trialIndexInGroup.ToString() : "",
+                                extra != null ? extra.staircaseDeltaNextM.ToString("F3") : "",
+                                extra != null ? (extra.reversalHappened ? "1" : "0") : "",
+                                extra != null ? extra.reversalCount.ToString() : "",
+                                extra != null ? extra.thresholdEstimateM.ToString("F3") : "",
+                                extra != null ? (extra.groupEnded ? "1" : "0") : ""
+                            ));
+                        }
+                    }
+                    savedCsvPaths.Add(path);
+                }
+
+                // horizon_cue_integration
+                if (_completed.Exists(r => r.taskId == "horizon_cue_integration"))
+                {
+                    var path = Path.Combine(_sessionDir, "horizon_cue_integration_summary.csv");
+                    using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                    {
+                        // horizon_cue_integration_summary.csv 字段说明：
+                        // - taskId/trialId: 同上
+                        // - fovDeg: 相机视场角（度）
+                        // - trueDistanceM: 真值距离（米）
+                        // - horizonAngleDeg: 地平线俯仰偏移角（度）
+                        // - repetitionIndex: 重复序号（1..N）
+                        // - sphereScreenY01: 红球中心在屏幕上的 Y（0..1），用于校验“屏幕静止”
+                        // - predictedDistanceM/absError/relError: 同 distance_compression
+                        // - confidence/providerId/latencyMs: 同上
+                        sw.WriteLine("taskId,trialId,fovDeg,trueDistanceM,horizonAngleDeg,repetitionIndex,sphereScreenY01,predictedDistanceM,absError,relError,confidence,providerId,latencyMs");
+
+                        foreach (var r in _completed)
+                        {
+                            if (r.taskId != "horizon_cue_integration") continue;
+                            var t = r.trial;
+                            var e = r.evaluation;
+
+                            sw.WriteLine(string.Join(",",
+                                Escape(r.taskId),
+                                r.trialId,
+                                t.fovDeg.ToString("F0"),
+                                t.trueDistanceM.ToString("F3"),
+                                t.horizonAngleDeg.ToString("F3"),
+                                t.repetitionIndex,
+                                t.sphereScreenY01.ToString("F3"),
+                                e.predictedDistanceM.ToString("F3"),
+                                e.absError.ToString("F3"),
+                                e.relError.ToString("F3"),
+                                e.confidence.ToString("F3"),
+                                Escape(e.providerId),
+                                e.latencyMs
+                            ));
+                        }
+                    }
+                    savedCsvPaths.Add(path);
+                }
+
+                // numerosity_comparison
+                if (_completed.Exists(r => r.taskId == "numerosity_comparison"))
+                {
+                    var path = Path.Combine(_sessionDir, "numerosity_comparison_summary.csv");
+                    using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                    {
+                        // numerosity_comparison_summary.csv 字段说明：
+                        // - taskId/trialId: 同上
+                        // - baseCountN/ratioR: 实验条件（Weber law 参数）
+                        // - leftCount/rightCount: 本试次左右数量（真值）
+                        // - trueMoreSide/predictedMoreSide: 真值与预测（left/right）
+                        // - isCorrect: 是否正确（1/0）
+                        // - exposureDurationMs/dotRadius: 刺激曝光时长/点大小（用于复现实验条件）
+                        // - confidence/providerId/latencyMs: 同上
+                        sw.WriteLine("taskId,trialId,baseCountN,ratioR,leftCount,rightCount,trueMoreSide,predictedMoreSide,isCorrect,exposureDurationMs,dotRadius,confidence,providerId,latencyMs");
+
+                        foreach (var r in _completed)
+                        {
+                            if (r.taskId != "numerosity_comparison") continue;
+                            var t = r.trial;
+                            var e = r.evaluation;
+
+                            // 兼容：部分 trial 可能复用 trueCount/targetCount 存左右数量
+                            int left = t.leftCount > 0 ? t.leftCount : t.trueCount;
+                            int right = t.rightCount > 0 ? t.rightCount : t.targetCount;
+
+                            sw.WriteLine(string.Join(",",
+                                Escape(r.taskId),
+                                r.trialId,
+                                t.baseCountN.ToString("F0"),
+                                t.ratioR.ToString("F3"),
+                                left,
+                                right,
+                                 Escape(string.IsNullOrEmpty(e.trueMoreSide) ? t.trueMoreSide : e.trueMoreSide),
+                                 Escape(e.predictedMoreSide),
+                                 e.isMoreSideCorrect ? "1" : (e.isCorrect ? "1" : "0"),
+                                 t.exposureDurationMs.ToString("F0"),
+                                 t.dotRadius.ToString("F3"),
+                                 e.confidence.ToString("F3"),
+                                 Escape(e.providerId),
+                                 e.latencyMs
+                             ));
+                        }
+                    }
+                    savedCsvPaths.Add(path);
+                }
+
+                // change_detection
+                if (_completed.Exists(r => r.taskId == "change_detection"))
+                {
+                    var path = Path.Combine(_sessionDir, "change_detection_summary.csv");
+                    using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                    {
+                        // change_detection_summary.csv 字段说明：
+                        // - taskId/trialId: 同上
+                        // - background/fovDeg: 实验条件
+                        // - trueChanged/trueChangeCategory: 真值变化与类别
+                        // - predictedChanged/predictedChangeCategory: 模型预测
+                        // - isCorrect: 正确性（先比较 changed；若 changed=true 再比较类别）
+                        // - confidence/providerId/latencyMs: 同上
+                        sw.WriteLine("taskId,trialId,background,fovDeg,trueChanged,trueChangeCategory,predictedChanged,predictedChangeCategory,isCorrect,confidence,providerId,latencyMs");
+
+                        foreach (var r in _completed)
+                        {
+                            if (r.taskId != "change_detection") continue;
+                            var t = r.trial;
+                            var e = r.evaluation;
+
+                            var trueChanged = e.trueChanged;
+                            var trueCat = string.IsNullOrEmpty(e.trueChangeCategory) ? (t.changeCategory ?? "none") : e.trueChangeCategory;
+
+                            sw.WriteLine(string.Join(",",
+                                Escape(r.taskId),
+                                r.trialId,
+                                Escape(t.background),
+                                t.fovDeg.ToString("F0"),
+                                trueChanged ? "1" : "0",
+                                Escape(trueCat),
+                                e.predictedChanged ? "1" : "0",
+                                Escape(string.IsNullOrEmpty(e.predictedChangeCategory) ? "none" : e.predictedChangeCategory),
+                                e.isCorrect ? "1" : "0",
+                                e.confidence.ToString("F3"),
+                                Escape(e.providerId),
+                                e.latencyMs
+                            ));
+                        }
+                    }
+                    savedCsvPaths.Add(path);
+                }
+
+                // material_roughness
+                if (_completed.Exists(r => r.taskId == "material_roughness"))
+                {
+                    var path = Path.Combine(_sessionDir, "material_roughness_summary.csv");
+                    using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                    {
+                        // material_roughness_summary.csv 字段说明：
+                        // - taskId/trialId: 任务ID/试次ID
+                        // - environment: 场景类型
+                        // - fovDeg: 相机视场角（度）
+                        // - trueRoughness: 真值粗糙度（0..1）
+                        // - requireHeadMotion: 是否要求头动门控（1/0）
+                        // - predictedRoughness: 模型预测粗糙度（0..1）
+                        // - roughnessAbsError: 绝对误差 |pred-true|
+                        // - roughnessSignedError: 有符号误差 pred-true
+                        // - confidence/providerId/latencyMs: 同上
+                        sw.WriteLine("taskId,trialId,environment,fovDeg,trueRoughness,requireHeadMotion,predictedRoughness,roughnessAbsError,roughnessSignedError,confidence,providerId,latencyMs");
+
+                        foreach (var r in _completed)
+                        {
+                            if (r.taskId != "material_roughness") continue;
+                            var t = r.trial;
+                            var e = r.evaluation;
+
+                            sw.WriteLine(string.Join(",",
+                                Escape(r.taskId),
+                                r.trialId,
+                                Escape(t.environment),
+                                t.fovDeg.ToString("F0"),
+                                t.roughness.ToString("F3"),
+                                t.requireHeadMotion ? "1" : "0",
+                                e.predictedRoughness.ToString("F3"),
+                                e.roughnessAbsError.ToString("F3"),
+                                e.roughnessSignedError.ToString("F3"),
+                                e.confidence.ToString("F3"),
+                                Escape(e.providerId),
+                                e.latencyMs
+                            ));
+                        }
+                    }
+                    savedCsvPaths.Add(path);
+                }
+
+                // color_constancy_adjustment
+                if (_completed.Exists(r => r.taskId == "color_constancy_adjustment"))
+                {
+                    var path = Path.Combine(_sessionDir, "color_constancy_adjustment_summary.csv");
+                    using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                    {
+                        // color_constancy_adjustment_summary.csv 字段说明：
+                        // - taskId/trialId: 任务ID/试次ID
+                        // - phase: 实验阶段（main/校准等）
+                        // - background/fovDeg/lighting: 实验条件
+                        // - trueR/trueG/trueB: 真值RGB（0-255）
+                        // - predictedChoice: 模型选择的标签
+                        // - predictedR/G/B: 模型预测RGB（0-255）
+                        // - rgbError: RGB欧氏距离误差
+                        // - confidence/providerId/latencyMs: 同上
+                        sw.WriteLine("taskId,trialId,phase,background,fovDeg,lighting,trueR,trueG,trueB,predictedChoice,predictedR,predictedG,predictedB,rgbError,confidence,providerId,latencyMs");
+
+                        foreach (var r in _completed)
+                        {
+                            if (r.taskId != "color_constancy_adjustment") continue;
+                            var t = r.trial;
+                            var e = r.evaluation;
+
+                            // 从 extraJson 解析数据
+                            string phase = "unknown";
+                            string predictedChoice = "";
+                            int[] predictedRgb = new int[] { 0, 0, 0 };
+
+                            try
+                            {
+                                var extra = JsonUtility.FromJson<ColorConstancyAdjustmentExtra>(e.extraJson);
+                                if (extra != null)
+                                {
+                                    phase = extra.phase ?? "unknown";
+                                    predictedChoice = extra.choice ?? "";
+                                    if (extra.predictedRgb != null && extra.predictedRgb.Length >= 3)
+                                    {
+                                        predictedRgb = extra.predictedRgb;
+                                    }
+                                }
+                            }
+                            catch { }
+
+                            // 计算 RGB 误差（欧氏距离）
+                            float rgbError = 0f;
+                            if (predictedRgb != null && predictedRgb.Length >= 3)
+                            {
+                                rgbError = Mathf.Sqrt(
+                                    Mathf.Pow(predictedRgb[0] - t.trueR, 2) +
+                                    Mathf.Pow(predictedRgb[1] - t.trueG, 2) +
+                                    Mathf.Pow(predictedRgb[2] - t.trueB, 2)
+                                );
+                            }
+
+                            sw.WriteLine(string.Join(",",
+                                Escape(r.taskId),
+                                r.trialId,
+                                Escape(phase),
+                                Escape(t.background),
+                                t.fovDeg.ToString("F0"),
+                                Escape(t.lighting),
+                                t.trueR,
+                                t.trueG,
+                                t.trueB,
+                                Escape(predictedChoice),
+                                predictedRgb[0],
+                                predictedRgb[1],
+                                predictedRgb[2],
+                                rgbError.ToString("F3"),
+                                e.confidence.ToString("F3"),
+                                Escape(e.providerId),
+                                e.latencyMs
+                            ));
+                        }
+                    }
+                    savedCsvPaths.Add(path);
+                }
+
+                if (enableJsonl && savedCsvPaths.Count > 0)
+                {
+                    foreach (var p in savedCsvPaths)
+                    {
+                        BufferJson(new CsvSavedLine
+                        {
+                            type = "csv_saved",
+                            timestamp = DateTime.UtcNow.ToString("o"),
+                            path = Relativize(p)
+                        });
+                    }
                     FlushJsonl();
                 }
             }
@@ -347,6 +735,19 @@ namespace VRPerception.Infra
         }
 
         // ============ Utils ============
+
+        private static DepthJndExtraLine TryParseDepthJndExtra(string extraJson)
+        {
+            if (string.IsNullOrEmpty(extraJson)) return null;
+            try
+            {
+                return JsonUtility.FromJson<DepthJndExtraLine>(extraJson);
+            }
+            catch
+            {
+                return null;
+            }
+        }
 
         private static string Escape(string s)
         {
@@ -410,6 +811,17 @@ namespace VRPerception.Infra
             public float confidence;
             public string answerJson;
             public string explanation;
+        }
+
+        [Serializable] private class DepthJndExtraLine
+        {
+            public int groupIndex;
+            public int trialIndexInGroup;
+            public float staircaseDeltaNextM;
+            public bool reversalHappened;
+            public int reversalCount;
+            public float thresholdEstimateM;
+            public bool groupEnded;
         }
 
         [Serializable] private class ActionPlanLine
@@ -478,6 +890,29 @@ namespace VRPerception.Infra
             public int trialId;
             public TrialSpec trial;
             public TrialEvaluation evaluation;
+        }
+
+        [Serializable]
+        private class ColorConstancyAdjustmentExtra
+        {
+            public string phase;
+            public bool hasFurniture;
+            public string lighting;
+            public int[] initialRgb;
+            public int[] baselineRgb;
+            public int[] predictedRgb;
+            public int[] deltaRgb;
+            public string choice;
+            public string[] candidateLabels;
+            public RgbTriplet[] candidateRgbs;
+        }
+
+        [Serializable]
+        private struct RgbTriplet
+        {
+            public int r;
+            public int g;
+            public int b;
         }
     }
 }

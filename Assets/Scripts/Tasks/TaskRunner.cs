@@ -6,6 +6,7 @@ using UnityEngine;
 using VRPerception.Infra.EventBus;
 using VRPerception.Perception;
 using VRPerception.Tasks;
+using VRPerception.UI;
 
 namespace VRPerception.Tasks
 {
@@ -146,6 +147,7 @@ namespace VRPerception.Tasks
             }
 
             _runCts = new CancellationTokenSource();
+            bool runLifecycleBegun = false;
 
             // Wait briefly for EventBus channels to be created by EventBusBootstrap (handles late initialization)
             var ebDeadline = DateTime.UtcNow.AddMilliseconds(2000);
@@ -153,6 +155,12 @@ namespace VRPerception.Tasks
             {
                 await Task.Yield();
                 if (_runCts.IsCancellationRequested) throw new OperationCanceledException();
+            }
+
+            if (_task is ITaskRunLifecycle lifecycle)
+            {
+                await lifecycle.OnRunBeginAsync(_runCts.Token);
+                runLifecycleBegun = true;
             }
 
             for (int i = 0; i < trials.Length; i++)
@@ -200,7 +208,7 @@ namespace VRPerception.Tasks
                             trial.trialId,
                             _task.GetSystemPrompt(),
                             _task.BuildTaskPrompt(trial),
-                            _task.GetTools(),
+                            null,
                             captureOptions,
                             _runCts.Token
                         );
@@ -214,8 +222,25 @@ namespace VRPerception.Tasks
                     }
                     else
                     {
-                        // Human 模式：此处仅发布 WaitingForInput，UI 负责收集答案与生成 LLMResponse 的等价结构
-                        PublishTrialState(trial, TrialLifecycleState.WaitingForInput, trialConfig: trial);
+                        // Human 模式：等待必要的曝光/遮罩时序后，发布 WaitingForInput，UI 负责收集答案
+                        if (string.Equals(trial.taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Numerosity: 先短时展示刺激，再进入“黑屏后作答”阶段
+                            int exposureMs = Mathf.Clamp(Mathf.RoundToInt(trial.exposureDurationMs > 0 ? trial.exposureDurationMs : 500f), 0, 60000);
+                            bool maskArmed = TryArmTrialBlackoutOverlay(exposureMs);
+                            if (exposureMs > 0)
+                            {
+                                await Task.Delay(exposureMs, _runCts.Token);
+                            }
+
+                            if (!maskArmed)
+                            {
+                                Debug.LogWarning("[TaskRunner] TrialBlackoutOverlay not found/disabled; human numerosity trial will not be masked.");
+                            }
+                        }
+
+                        PublishTrialState(trial, TrialLifecycleState.WaitingForInput, trialConfig: trial, error: "Waiting for input");
+                        
                         // 使用专门的 humanInputTimeoutMs，0 表示无限等待
                         int timeout = humanInputTimeoutMs > 0 ? humanInputTimeoutMs : int.MaxValue;
                         finalResponse = await WaitForInferenceAsync(trial.taskId, trial.trialId, timeout, _runCts.Token);
@@ -255,6 +280,18 @@ namespace VRPerception.Tasks
                     trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
                     eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
                         new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "cancelled" });
+                    // 确保取消时也执行清理，移除已生成的场景物体
+                    try
+                    {
+                        if (_task != null)
+                        {
+                            await _task.OnAfterTrialAsync(trial, null, CancellationToken.None);
+                        }
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        Debug.LogWarning($"[TaskRunner] Cleanup after cancellation failed: {cleanupEx.Message}");
+                    }
                     break;
                 }
                 catch (Exception ex)
@@ -266,6 +303,11 @@ namespace VRPerception.Tasks
                     eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
                         new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "failed" });
                 }
+            }
+
+            if (runLifecycleBegun && _task is ITaskRunLifecycle lifecycleEnd)
+            {
+                try { await lifecycleEnd.OnRunEndAsync(CancellationToken.None); } catch { }
             }
 
             // 运行结束后请求一次日志刷盘（与 Orchestrator 的 checkpoint 刷盘相互独立，二者兼容）
@@ -342,15 +384,20 @@ namespace VRPerception.Tasks
                 _overrideTaskId = resolvedTaskId;
 
                 // 尝试同步 TaskMode 以便 UI / 导出工具展示（仅对已知任务生效）
-                if (string.Equals(resolvedTaskId, "distance_compression", StringComparison.OrdinalIgnoreCase))
+                // 尝试根据 taskId 对齐枚举，便于 Inspector 下拉框保持同步
+                bool matched = false;
+                foreach (TaskMode mode in Enum.GetValues(typeof(TaskMode)))
                 {
-                    taskMode = TaskMode.DistanceCompression;
+                    var mapped = TaskModeToTaskId(mode);
+                    if (!string.IsNullOrEmpty(mapped) && string.Equals(resolvedTaskId, mapped, StringComparison.OrdinalIgnoreCase))
+                    {
+                        taskMode = mode;
+                        matched = true;
+                        break;
+                    }
                 }
-                else if (string.Equals(resolvedTaskId, "semantic_size_bias", StringComparison.OrdinalIgnoreCase))
-                {
-                    taskMode = TaskMode.SemanticSizeBias;
-                }
-                else if (Enum.TryParse(resolvedTaskId, true, out TaskMode parsedMode))
+
+                if (!matched && Enum.TryParse(resolvedTaskId, true, out TaskMode parsedMode))
                 {
                     taskMode = parsedMode;
                 }
@@ -408,6 +455,19 @@ namespace VRPerception.Tasks
             {
                 TaskMode.DistanceCompression => "distance_compression",
                 TaskMode.SemanticSizeBias => "semantic_size_bias",
+                TaskMode.RelativeDepthOrder => "relative_depth_order",
+                TaskMode.ChangeDetection => "change_detection",
+                TaskMode.OcclusionReasoning => "occlusion_reasoning",
+                TaskMode.ColorConstancy => "color_constancy",
+                TaskMode.MaterialPerception => "material_perception",
+                TaskMode.NumerosityComparison => "numerosity_comparison",
+                TaskMode.VisualSearch => "visual_search",
+                TaskMode.ObjectCounting => "object_counting",
+                TaskMode.DepthJndStaircase => "depth_jnd_staircase",
+                TaskMode.HorizonCueIntegration => "horizon_cue_integration",
+                TaskMode.VisualCrowding => "visual_crowding",
+                TaskMode.ColorConstancyAdjustment => "color_constancy_adjustment",
+                TaskMode.MaterialRoughnessAmbiguity => "material_roughness",
                 _ => null
             };
         }
@@ -479,12 +539,62 @@ namespace VRPerception.Tasks
                     new { trial.taskId, trial.trialId, state });
             }
         }
+
+        private static bool TryArmTrialBlackoutOverlay(int delayMs)
+        {
+            try
+            {
+                var overlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
+                if (overlay == null)
+                {
+                    var all = Resources.FindObjectsOfTypeAll<TrialBlackoutOverlay>();
+                    if (all != null)
+                    {
+                        for (int i = 0; i < all.Length; i++)
+                        {
+                            var candidate = all[i];
+                            if (candidate == null) continue;
+                            var go = candidate.gameObject;
+                            if (go == null) continue;
+                            if (!go.scene.IsValid()) continue; // exclude prefab assets
+                            overlay = candidate;
+                            break;
+                        }
+                    }
+                }
+
+                if (overlay == null) return false;
+
+                if (!overlay.enabled) overlay.enabled = true;
+                if (!overlay.gameObject.activeInHierarchy) overlay.gameObject.SetActive(true);
+
+                overlay.BeginBlackoutAfterMs(delayMs);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 
     public enum TaskMode
     {
         DistanceCompression,
-        SemanticSizeBias
+        SemanticSizeBias,
+        RelativeDepthOrder,
+        ChangeDetection,
+        OcclusionReasoning,
+        ColorConstancy,
+        MaterialPerception,
+        NumerosityComparison,
+        VisualSearch,
+        ObjectCounting,
+        DepthJndStaircase,
+        HorizonCueIntegration,
+        VisualCrowding,
+        ColorConstancyAdjustment,
+        MaterialRoughnessAmbiguity
     }
 
     public enum SubjectMode

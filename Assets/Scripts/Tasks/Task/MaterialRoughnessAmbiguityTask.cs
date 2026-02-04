@@ -111,7 +111,7 @@ namespace VRPerception.Tasks
         public string BuildTaskPrompt(TrialSpec trial)
         {
             var env = string.IsNullOrWhiteSpace(trial.environment) ? "unknown" : trial.environment;
-            return PromptTemplates.BuildMaterialRoughnessPrompt(env, trial.requireHeadMotion, trial.fovDeg);
+            return PromptTemplates.BuildMaterialRoughnessPrompt(env, trial.requireHeadMotion, trial.fovDeg, trial.trialId);
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)

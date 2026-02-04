@@ -295,30 +295,35 @@ namespace VRPerception.Perception
             // 尝试从内容中提取JSON
             var jsonStart = content.IndexOf('{');
             var jsonEnd = content.LastIndexOf('}');
-            
+
             if (jsonStart >= 0 && jsonEnd > jsonStart)
             {
                 var jsonContent = content.Substring(jsonStart, jsonEnd - jsonStart + 1);
                 try
                 {
-                    var inferenceResult = JsonUtility.FromJson<InferenceResult>(jsonContent);
-                    return new LLMResponse
+                    // 仅支持新格式: {task, trial_id, response: {...}, confidence, valid}
+                    var newFormat = JsonUtility.FromJson<NewFormatResponse>(jsonContent);
+                    if (newFormat != null && newFormat.response != null)
                     {
-                        type = "inference",
-                        taskId = request.taskId,
-                        trialId = request.trialId,
-                        answer = inferenceResult,
-                        confidence = inferenceResult.confidence,
-                        explanation = inferenceResult.explanation,
-                        latencyMs = latencyMs
-                    };
+                        // 保留模型输出的 JSON 原文，便于排查字段映射
+                        newFormat.response.raw_json = jsonContent;
+                        return new LLMResponse
+                        {
+                            type = "inference",
+                            taskId = request.taskId,
+                            trialId = request.trialId,
+                            answer = newFormat.response,
+                            confidence = newFormat.confidence,
+                            latencyMs = latencyMs
+                        };
+                    }
                 }
                 catch
                 {
                     // JSON解析失败，返回原始内容
                 }
             }
-            
+
             return new LLMResponse
             {
                 type = "inference",

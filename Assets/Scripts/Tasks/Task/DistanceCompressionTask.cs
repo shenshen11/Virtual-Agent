@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
@@ -48,16 +48,40 @@ namespace VRPerception.Tasks
 
         public TrialSpec[] BuildTrials(int seed)
         {
-            // 使用 seed 只控制 trial 顺序，试次集合本身为固定的均衡设计
             _rand = new System.Random(seed);
 
             var envs = new[] { "open_field", "corridor" };
-            var fovs = new[] { 50f, 60f, 90f };
-            var kinds = new[] { "cube", "sphere", "human" };
-            // 选择 5 个代表性距离，覆盖 2–30 m 区间
-            var dists = new[] { 2f, 5f, 10f, 20f, 30f };
+            var fovs = new[] { 60f };
+            var kinds = new[] { "sphere"};
+            // 改成用对数分布的6个距离点
+            var dists = new[] { 2f, 3.2f, 5f, 8f, 12.6f, 20f };
             var textures = new[] { 0.5f, 1.0f, 1.5f };
             var lightings = new[] { "bright", "dim" };
+
+            // 锚定试次：固定前四个（2/5/10/20m），不打乱
+            var anchorDistances = new[] { 2f, 5f, 10f, 20f };
+            string anchorEnv = envs.Length > 0 ? envs[0] : "open_field";
+            float anchorFov = fovs.Length > 0 ? fovs[0] : 60f;
+            string anchorKind = kinds.Length > 0 ? kinds[0] : "sphere";
+            float anchorTexture = textures.Length > 1 ? textures[1] : (textures.Length > 0 ? textures[0] : 1f);
+            string anchorLighting = lightings.Length > 0 ? lightings[0] : "bright";
+
+            var anchorTrials = new List<TrialSpec>();
+            foreach (var dist in anchorDistances)
+            {
+                anchorTrials.Add(new TrialSpec
+                {
+                    taskId = TaskId,
+                    environment = anchorEnv,
+                    fovDeg = anchorFov,
+                    targetKind = anchorKind,
+                    trueDistanceM = dist,
+                    textureDensity = anchorTexture,
+                    lighting = anchorLighting,
+                    occlusion = false,
+                    isAnchor = true
+                });
+            }
 
             // 先构造 (env, fov, kind) 的所有组合
             var triples = new List<(string env, float fov, string kind)>();
@@ -72,84 +96,52 @@ namespace VRPerception.Tasks
                 }
             }
 
-            var candidates = new List<TrialSpec>();
+            var mainTrials = new List<TrialSpec>();
 
             int textureIndex = 0;
             int lightingIndex = 0;
 
-            // 第 1 轮：每个 (env, fov, kind) 组合分配一个最近距离 dists[0]
-            foreach (var t in triples)
+            // 生成 36 次试验：6 个距离 × 6 次重复（正式试次）
+            int repeatsPerDistance = 6;
+
+            foreach (var dist in dists)
             {
-                var tex = textures[textureIndex % textures.Length];
-                var light = lightings[lightingIndex % lightings.Length];
-
-                candidates.Add(new TrialSpec
+                for (int repeat = 0; repeat < repeatsPerDistance; repeat++)
                 {
-                    taskId = TaskId,
-                    environment = t.env,
-                    fovDeg = t.fov,
-                    targetKind = t.kind,
-                    trueDistanceM = dists[0],
-                    textureDensity = tex,
-                    lighting = light,
-                    occlusion = false
-                });
+                    var t = triples[(repeat) % triples.Count];
+                    var tex = textures[textureIndex % textures.Length];
+                    var light = lightings[lightingIndex % lightings.Length];
 
-                textureIndex++;
-                lightingIndex++;
-            }
+                    mainTrials.Add(new TrialSpec
+                    {
+                        taskId = TaskId,
+                        environment = t.env,
+                        fovDeg = t.fov,
+                        targetKind = t.kind,
+                        trueDistanceM = dist,
+                        textureDensity = tex,
+                        lighting = light,
+                        occlusion = false,
+                        isAnchor = false
+                    });
 
-            // 现在有 18 条；补充到 30 条：为部分组合分配第二个距离（从 dists[1..] 轮流取）
-            int targetCount = 30;
-            int remaining = targetCount - candidates.Count; // 12
-            int distanceIndex = 1; // 从第二个距离开始，避免与首轮重复
-            int tripleIndex = 0;
-
-            while (remaining > 0)
-            {
-                var t = triples[tripleIndex % triples.Count];
-                var tex = textures[textureIndex % textures.Length];
-                var light = lightings[lightingIndex % lightings.Length];
-
-                candidates.Add(new TrialSpec
-                {
-                    taskId = TaskId,
-                    environment = t.env,
-                    fovDeg = t.fov,
-                    targetKind = t.kind,
-                    trueDistanceM = dists[distanceIndex],
-                    textureDensity = tex,
-                    lighting = light,
-                    occlusion = false
-                });
-
-                textureIndex++;
-                lightingIndex++;
-                remaining--;
-
-                tripleIndex++;
-                distanceIndex++;
-                if (distanceIndex >= dists.Length)
-                {
-                    // 仅在 [1..dists.Length-1] 之间循环，避免重复使用 dists[0]
-                    distanceIndex = 1;
+                    textureIndex++;
+                    lightingIndex++;
                 }
             }
 
-            // 使用 seed 控制试次顺序，试次集合本身保持不变
-            Shuffle(candidates);
-            return candidates.ToArray();
+            // 仅打乱正式试次，锚定试次固定在前四个
+            Shuffle(mainTrials);
+
+            var all = new List<TrialSpec>(anchorTrials.Count + mainTrials.Count);
+            all.AddRange(anchorTrials);
+            all.AddRange(mainTrials);
+            return all.ToArray();
         }
 
         public string GetSystemPrompt()
         {
-            // 严格 ONLY JSON 的系统提示
-            return
-                "You are a vision agent. ONLY output JSON according to task rules. " +
-                "If you can answer directly, output an inference JSON with distance. " +
-                "Format: {\"type\":\"inference\",\"taskId\":\"distance_compression\",\"trialId\":<int>," +
-                "\"answer\":{\"distance_m\":<number>},\"confidence\":<0..1>}. " +
-                "No extra text. If information is insufficient, you may request actions, but prefer answering directly.";
+            return PromptTemplates.GetSystemPrompt(TaskId);
         }
 
         public ToolSpec[] GetTools()
@@ -160,11 +152,20 @@ namespace VRPerception.Tasks
 
         public string BuildTaskPrompt(TrialSpec trial)
         {
-            var envText = trial.environment == "corridor" ? "a long corridor" : "an open field";
-            return
-                $"Task: Estimate the distance to the target object in meters.\n" +
-                $"Scene: {envText}. Target kind: {trial.targetKind}. Camera FOV: {trial.fovDeg} deg.\n" +
-                $"Output ONLY JSON with fields: type=inference, answer.distance_m (float), confidence (0..1).";
+            if (trial != null && trial.isAnchor)
+            {
+                return PromptTemplates.BuildDistanceCompressionCalibrationPrompt(
+                    trial.targetKind,
+                    trial.fovDeg,
+                    trial.environment,
+                    trial.trueDistanceM,
+                    trial.trialId);
+            }
+            return PromptTemplates.BuildDistanceCompressionPrompt(
+                trial?.targetKind,
+                trial?.fovDeg ?? 0f,
+                trial?.environment,
+                trial?.trialId ?? 0);
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
@@ -276,7 +277,7 @@ namespace VRPerception.Tasks
                 case "sphere":
                 case "cube":
                 default:
-                    pos.y = yCenter;
+                    pos.y = cam.transform.position.y;
                     scale = 1.0f;
                     break;
             }
@@ -385,6 +386,16 @@ namespace VRPerception.Tasks
             {
                 if (TryToFloat(field.GetValue(answer), out distance)) return true;
             }
+            var ackProp = t.GetProperty("acknowledged_distance_m", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+            if (ackProp != null)
+            {
+                if (TryToFloat(ackProp.GetValue(answer), out distance)) return true;
+            }
+            var ackField = t.GetField("acknowledged_distance_m", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+            if (ackField != null)
+            {
+                if (TryToFloat(ackField.GetValue(answer), out distance)) return true;
+            }
 
             // 2) 尝试 JSON 序列化后再解析
             try
@@ -396,6 +407,11 @@ namespace VRPerception.Tasks
                     if (parsed != null && parsed.distance_m > 0)
                     {
                         distance = parsed.distance_m;
+                        return true;
+                    }
+                    if (parsed != null && parsed.acknowledged_distance_m > 0)
+                    {
+                        distance = parsed.acknowledged_distance_m;
                         return true;
                     }
                 }
@@ -464,6 +480,7 @@ namespace VRPerception.Tasks
         private class DistanceAnswer
         {
             public float distance_m;
+            public float acknowledged_distance_m;
             public float confidence;
             public string explanation;
         }

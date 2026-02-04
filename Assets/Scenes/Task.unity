@@ -96,7 +96,7 @@ LightmapSettings:
     m_ExportTrainingData: 0
     m_TrainingDataDestination: TrainingData
     m_LightProbeSampleCountMultiplier: 4
-  m_LightingDataAsset: {fileID: 0}
+  m_LightingDataAsset: {fileID: 112000000, guid: 94b19446cd1f21046b35b5a8f9f67161, type: 2}
   m_LightingSettings: {fileID: 0}
 --- !u!196 &4
 NavMeshSettings:
@@ -2034,7 +2034,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &575454897
 Transform:
   m_ObjectHideFlags: 0
@@ -2057,7 +2057,7 @@ Camera:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 575454896}
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_ClearFlags: 3
   m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
@@ -4523,6 +4523,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   eventBus: {fileID: 719105663}
   playlist: {fileID: 11400000, guid: 5747fed546c2f754780bc0e773e054b5, type: 2}
+  orchestrator: {fileID: 0}
   autoFindEventBus: 1
   panelRoot: {fileID: 809179789}
   titleText: {fileID: 0}
@@ -4939,7 +4940,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   orchestrator: {fileID: 1824977592}
   eventBus: {fileID: 719105663}
-  playlistSelector: {fileID: 0}
+  playlistSelector: {fileID: 1077309829}
   stateText: {fileID: 1417223492}
   startButton: {fileID: 415299307}
   pauseButton: {fileID: 2016511259}
@@ -4962,6 +4963,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   explicitPlaylists:
   - {fileID: 11400000, guid: 5747fed546c2f754780bc0e773e054b5, type: 2}
+  - {fileID: 11400000, guid: f5b3b04837c20314f95fcb294eccb9ca, type: 2}
+  - {fileID: 11400000, guid: 0b2c8e7a59c04f8da9b3e2f0841e6f2a, type: 2}
   autoLoadFromResources: 1
   playlistDropdown: {fileID: 121212280}
 --- !u!1 &1087635477
@@ -5476,7 +5479,9 @@ GameObject:
   m_Component:
   - component: {fileID: 1119791763}
   - component: {fileID: 1119791762}
+  - component: {fileID: 1119791765}
   - component: {fileID: 1119791764}
+  - component: {fileID: 1119791766}
   m_Layer: 0
   m_Name: Bridge
   m_TagString: Untagged
@@ -5499,7 +5504,7 @@ MonoBehaviour:
   eventBus: {fileID: 719105663}
   autoFindEventBus: 1
   useKeyboardInput: 1
-  verboseLog: 0
+  verboseLog: 1
   allowGenericAnswer: 1
   useRightControllerPrimaryButton: 1
   allowKeyboardAInEditor: 1
@@ -5535,13 +5540,56 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   configSource: 2
   taskRunnerOverride: {fileID: 1824977593}
-  playlist: {fileID: 11400000, guid: 5747fed546c2f754780bc0e773e054b5, type: 2}
-  playlistEntryIndex: 6
+  playlist: {fileID: 11400000, guid: f5b3b04837c20314f95fcb294eccb9ca, type: 2}
+  playlistEntryIndex: 0
   taskId: distance_compression
   seed: 12345
   maxTrials: 0
   outputDirectory: Docs\TrialPlan
   fileNamePrefix: TrialPlan_
+--- !u!114 &1119791765
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1119791761}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ac190d9b2050e84daa5357c4052f189, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  eventBus: {fileID: 0}
+  autoFindEventBus: 1
+  enabledForTask: 1
+  verboseLog: 0
+  minTriggerIntervalSeconds: 1
+  useLeftControllerButtons: 1
+  allowKeyboardInEditor: 1
+  editorChooseAKey: 49
+  editorChooseBKey: 50
+  defaultConfidence: 0.9
+--- !u!114 &1119791766
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1119791761}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dd40f92c5099e374e97cbb0709f87c5b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  eventBus: {fileID: 719105663}
+  autoFindEventBus: 1
+  hideOnTrialEnd: 1
+  guiDepth: -2000
+  useWorldSpaceQuadForBlackout: 1
+  autoFindHeadCamera: 1
+  headCamera: {fileID: 1962211336}
+  quadOverscan: 2
+  quadNearOffset: 0.02
 --- !u!1 &1147251934
 GameObject:
   m_ObjectHideFlags: 0
@@ -8152,7 +8200,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   disableRunnerAutoRun: 1
-  autoRestoreCheckpoint: 1
+  autoRestoreCheckpoint: 0
   deleteCheckpointOnPlaylistCompleted: 1
   saveCheckpointOnPause: 1
   saveCheckpointOnError: 1

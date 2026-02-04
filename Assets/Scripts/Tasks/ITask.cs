@@ -41,6 +41,16 @@ namespace VRPerception.Tasks
     }
 
     /// <summary>
+    /// 可选：任务级生命周期钩子（每次 RunAsync 调用一次）。
+    /// 用于在任务开始/结束时创建与销毁临时场景/对象，避免污染其他场景。
+    /// </summary>
+    public interface ITaskRunLifecycle
+    {
+        Task OnRunBeginAsync(CancellationToken ct);
+        Task OnRunEndAsync(CancellationToken ct);
+    }
+
+    /// <summary>
     /// 通用试次规格（不同任务可扩展其字段）
     /// </summary>
     [Serializable]
@@ -57,8 +67,14 @@ namespace VRPerception.Tasks
         public float fovDeg = 60f;        // 50/60/90
 
         // Distance Compression 专用字段
+        public bool isAnchor;             // 是否为锚定试次（不计入正式拟合）
         public string targetKind;         // "cube"|"sphere"|"human"
         public float trueDistanceM;       // 真值（米）
+
+        // Horizon Cue Integration 字段
+        public float horizonAngleDeg;     // 地平线偏移角（度）：-6/-3/0/+3/+6
+        public int repetitionIndex;       // 重复序号（1..N）
+        public float sphereScreenY01;     // 运行时记录：球体屏幕 Y（0..1），用于校验“屏幕静止”
 
         // Relative Depth Ordering 字段
         public float depthA;              // 对象 A 距离（米）
@@ -111,6 +127,22 @@ namespace VRPerception.Tasks
         // Material Roughness（Ambiguity）可能用到
         public float roughness;           // 真值粗糙度（0..1），0=镜面，1=完全哑光
         public bool requireHeadMotion;    // Human 条件：是否要求头动门控（optic flow）
+
+        // Numerosity Comparison 专用字段
+        public float baseCountN;                  // 基准数量（较少一侧）：10/50/100/200/500
+        public float ratioR;                      // 比例：1.1-2.0
+        public int leftCount;                     // 左侧实际数量
+        public int rightCount;                    // 右侧实际数量
+        public string trueMoreSide;               // 真值："left" | "right"
+        public float exposureDurationMs = 500f;   // 曝光时长（默认 500ms）
+        public float dotRadius = 0.2f;            // 点的半径
+
+        // Visual Crowding 专用字段
+        public float eccentricityDeg;             // 目标字母离心率（度）
+        public float spacingDeg;                  // 目标与最近干扰项的间距（度）
+        public string targetLetter;               // 真值：目标字母
+        public string[] flankerLetters;           // 干扰字母序列（长度 5 时目标索引在 2）
+        public int targetIndex = 2;               // 目标在串中的索引位置，默认 0..4 中的 2
     }
 
     /// <summary>
@@ -164,6 +196,17 @@ namespace VRPerception.Tasks
         public float trueRoughness;        // 0..1
         public float roughnessAbsError;    // |pred-true|
         public float roughnessSignedError; // pred-true
+
+        // Numerosity Comparison 指标
+        public string predictedMoreSide;          // "left" | "right"
+        public string trueMoreSide;               // "left" | "right"
+        public bool isMoreSideCorrect;            // 是否判断正确
+        public long humanReactionTimeMs;          // 人类反应时（从 mask 出现到提交）
+
+        // Visual Crowding 指标
+        public string predictedLetter;            // 模型/人类预测的字母
+        public string trueLetter;                 // 真值字母
+        public bool isLetterCorrect;              // 是否识别正确
 
         // 其他扩展指标（键值对）
         public string extraJson;

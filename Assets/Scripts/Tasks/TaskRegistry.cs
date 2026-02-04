@@ -33,8 +33,12 @@ namespace VRPerception.Tasks
             TryRegisterInternal("material_roughness", ctx => new MaterialRoughnessAmbiguityTask(ctx, "material_roughness", requireHeadMotion: true));
             TryRegisterInternal("material_roughness_motion", ctx => new MaterialRoughnessAmbiguityTask(ctx, "material_roughness_motion", requireHeadMotion: true));
             TryRegisterInternal("material_roughness_static", ctx => new MaterialRoughnessAmbiguityTask(ctx, "material_roughness_static", requireHeadMotion: false));
+            TryRegisterInternal("numerosity_comparison", ctx => new NumerosityComparisonTask(ctx));
             TryRegisterInternal("visual_search", ctx => new VisualSearchTask(ctx));
             TryRegisterInternal("object_counting", ctx => new ObjectCountingTask(ctx));
+            TryRegisterInternal("depth_jnd_staircase", ctx => new DepthJndStaircaseTask(ctx));
+            TryRegisterInternal("horizon_cue_integration", ctx => new HorizonCueIntegrationTask(ctx));
+            TryRegisterInternal("visual_crowding", ctx => new VisualCrowdingTask(ctx));
         }
 
         /// <summary>

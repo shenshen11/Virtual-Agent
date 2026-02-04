@@ -25,6 +25,17 @@ namespace VRPerception.Tasks
         private ExperimentSceneManager _scene;
         private ObjectPlacer _placer;
 
+        // Phase 1: 高对比度颜色池，用于区分不同物体
+        private static readonly Color[] s_objectColors = new Color[]
+        {
+            new Color(1.0f, 0.2f, 0.2f),   // 红色
+            new Color(0.2f, 0.5f, 1.0f),   // 蓝色
+            new Color(0.2f, 0.9f, 0.3f),   // 绿色
+            new Color(1.0f, 0.9f, 0.2f),   // 黄色
+            new Color(0.7f, 0.2f, 0.9f),   // 紫色
+            new Color(1.0f, 0.6f, 0.1f),   // 橙色
+        };
+
         public ChangeDetectionTask(TaskRunnerContext ctx)
         {
             _ctx = ctx;
@@ -52,7 +63,7 @@ namespace VRPerception.Tasks
             _rand = new System.Random(seed);
 
             var backgrounds = new[] { "none", "indoor", "street" };
-            var fovs = new[] { 60f, 90f };
+            var fovs = new[] { 60f };
             var categories = new[] { "none", "appearance", "disappearance", "movement", "replacement" };
             var textures = new[] { 0.5f, 1.0f, 1.5f };
 
@@ -104,7 +115,7 @@ namespace VRPerception.Tasks
 
         public string BuildTaskPrompt(TrialSpec trial)
         {
-            return PromptTemplates.BuildChangeDetectionPrompt(trial.background, trial.fovDeg);
+            return PromptTemplates.BuildChangeDetectionPrompt(trial.background, trial.fovDeg, trial.trialId);
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
@@ -129,7 +140,21 @@ namespace VRPerception.Tasks
             // 同一帧中布置 A/B 两个子场景（左右并排）
             PlaceChangeScene(trial);
 
-            await Task.Yield();
+            // 等待渲染完成（关键修复：确保物体完全渲染后再抓帧）
+            await WaitForRenderingComplete();
+        }
+
+        /// <summary>
+        /// 等待渲染完成
+        /// 确保物体完全渲染后再进行抓帧操作
+        /// </summary>
+        private async System.Threading.Tasks.Task WaitForRenderingComplete()
+        {
+            // 等待至少5帧，确保物体完全渲染
+            for (int i = 0; i < 5; i++)
+            {
+                await System.Threading.Tasks.Task.Yield();
+            }
         }
 
         public async Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
@@ -232,7 +257,7 @@ namespace VRPerception.Tasks
 
             float baseDepth = 8f;
             float clusterOffsetX = 2.5f;
-            float y = origin.y + 1.0f;
+            float y = origin.y;
 
             var centerA = origin + forward * baseDepth - right * clusterOffsetX;
             var centerB = origin + forward * baseDepth + right * clusterOffsetX;
@@ -281,8 +306,8 @@ namespace VRPerception.Tasks
                     break;
 
                 case "movement":
-                    // 在 B 中将最后一个物体横向移动
-                    localsB[2] = new Vector3(localsB[2].x + 0.9f, localsB[2].y, localsB[2].z);
+                    // 在 B 中将最后一个物体大幅横向移动（从0.9m增加到1.5m）
+                    localsB[2] = new Vector3(localsB[2].x + 1.5f, localsB[2].y, localsB[2].z);
                     break;
 
                 case "replacement":
@@ -314,9 +339,13 @@ namespace VRPerception.Tasks
                 var kind = kinds[i] ?? "cube";
                 var name = $"{prefix}{i}";
 
+                // Phase 1: 为每个物体分配不同颜色
+                var color = s_objectColors[i % s_objectColors.Length];
+                var material = new Material(Shader.Find("Standard")) { color = color };
+
                 if (_placer != null)
                 {
-                    _placer.Place(kind, pos, 1.0f, null, name);
+                    _placer.Place(kind, pos, 1.0f, material, name);
                 }
                 else
                 {
@@ -326,6 +355,13 @@ namespace VRPerception.Tasks
                         go.name = name;
                         go.transform.position = pos;
                         go.transform.localScale = Vector3.one;
+
+                        // 应用颜色到材质
+                        var renderer = go.GetComponent<Renderer>();
+                        if (renderer != null && renderer.material != null)
+                        {
+                            renderer.material.color = color;
+                        }
                     }
                 }
             }

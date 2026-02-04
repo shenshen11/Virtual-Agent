@@ -19,6 +19,8 @@ namespace VRPerception.UI
         [Header("References")]
         [SerializeField] private EventBusManager eventBus;
         [SerializeField] private TaskPlaylist playlist;
+        [Tooltip("可选：若指定，则优先使用当前 TaskOrchestrator 上正在运行的 Playlist。")]
+        [SerializeField] private TaskOrchestrator orchestrator;
         [SerializeField] private bool autoFindEventBus = true;
 
         [Header("UI Components")]
@@ -60,6 +62,10 @@ namespace VRPerception.UI
 
             if (autoFindEventBus && eventBus == null)
                 eventBus = EventBusManager.Instance;
+
+            // 自动查找 Orchestrator，确保可以拿到运行时实际使用的 Playlist
+            if (orchestrator == null)
+                orchestrator = FindObjectOfType<TaskOrchestrator>();
 
             HidePanel();
 
@@ -105,10 +111,15 @@ namespace VRPerception.UI
             // 当开始新的 Entry 时，显示 preTaskMessage
             if (data.state == OrchestratorLifecycleState.RunningEntry)
             {
+                // 优先使用 Orchestrator 当前运行的 Playlist；否则退回 Inspector 里手动绑定的 playlist
+                var activePlaylist = orchestrator != null ? orchestrator.CurrentPlaylist : playlist;
+
                 // 准备显示当前任务的 preTaskMessage
-                if (playlist != null && data.currentEntryIndex >= 0 && data.currentEntryIndex < playlist.Entries.Count)
+                if (activePlaylist != null &&
+                    data.currentEntryIndex >= 0 &&
+                    data.currentEntryIndex < activePlaylist.Entries.Count)
                 {
-                    var entry = playlist.Entries[data.currentEntryIndex];
+                    var entry = activePlaylist.Entries[data.currentEntryIndex];
                     if (!string.IsNullOrWhiteSpace(entry.preTaskMessage))
                     {
                         ShowPreTaskMessage(entry.preTaskMessage, entry.ResolveTaskId());

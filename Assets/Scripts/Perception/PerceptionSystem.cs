@@ -279,10 +279,11 @@ namespace VRPerception.Perception
         {
             return new LLMRequest
             {
+                requestId = request.RequestId,
                 taskId = request.TaskId,
                 trialId = request.TrialId,
                 systemPrompt = request.SystemPrompt ?? GetDefaultSystemPrompt(request.TaskId),
-                taskPrompt = request.TaskPrompt ?? GetDefaultTaskPrompt(request.TaskId),
+                taskPrompt = request.TaskPrompt ?? GetDefaultTaskPrompt(request.TaskId, request.TrialId),
                 imageBase64 = frameData.imageBase64,
                 metadata = frameData.metadata,
                 tools = request.Tools ?? GetDefaultTools(request.TaskId),
@@ -368,15 +369,15 @@ namespace VRPerception.Perception
         /// <summary>
         /// 获取默认任务提示
         /// </summary>
-        private string GetDefaultTaskPrompt(string taskId)
+        private string GetDefaultTaskPrompt(string taskId, int trialId)
         {
             // 当上层未传入任务提示词时，使用模板化提示（占位参数）
             return taskId switch
             {
-                "distance_compression" => PromptTemplates.BuildDistanceCompressionPrompt("unknown", 0f, "open_field"),
+                "distance_compression" => PromptTemplates.BuildDistanceCompressionPrompt("unknown", 0f, "open_field", trialId),
                 "semantic_size_bias" => PromptTemplates.BuildSemanticSizeBiasPrompt("A", "B", "equal", "none"),
                 "relative_depth_order" => PromptTemplates.BuildRelativeDepthOrderPrompt("none", "equal", false, 60f),
-                "change_detection" => PromptTemplates.BuildChangeDetectionPrompt("none", 60f),
+                "change_detection" => PromptTemplates.BuildChangeDetectionPrompt("none", 60f, trialId),
                 _ => "Analyze the image and respond with appropriate JSON."
             };
         }
@@ -386,15 +387,7 @@ namespace VRPerception.Perception
         /// </summary>
         private ToolSpec[] GetDefaultTools(string taskId)
         {
-            // 根据任务返回工具集合（如需动作闭环）
-            return taskId switch
-            {
-                "distance_compression" => PromptTemplates.GetToolsForDistanceCompression(),
-                "semantic_size_bias" => PromptTemplates.GetToolsForSemanticSizeBias(),
-                "relative_depth_order" => PromptTemplates.GetToolsForRelativeDepthOrder(),
-                "change_detection" => PromptTemplates.GetToolsForChangeDetection(),
-                _ => null
-            };
+            return null;
         }
     }
     

@@ -423,30 +423,36 @@ namespace VRPerception.Perception
             // 尝试从内容中提取JSON
             var jsonStart = content.IndexOf('{');
             var jsonEnd = content.LastIndexOf('}');
-            
+
             if (jsonStart >= 0 && jsonEnd > jsonStart)
             {
                 var jsonContent = content.Substring(jsonStart, jsonEnd - jsonStart + 1);
                 try
                 {
-                    var inferenceResult = JsonUtility.FromJson<InferenceResult>(jsonContent);
-                    return new LLMResponse
+                    // 仅支持新格式: {task, trial_id, response: {...}, confidence, valid}
+                    // 对应 PromptTemplates.cs 中的新标准格式
+                    var newFormat = JsonUtility.FromJson<NewFormatResponse>(jsonContent);
+                    if (newFormat != null && newFormat.response != null)
                     {
-                        type = "inference",
-                        taskId = request.taskId,
-                        trialId = request.trialId,
-                        answer = inferenceResult,
-                        confidence = inferenceResult.confidence,
-                        explanation = inferenceResult.explanation,
-                        latencyMs = latencyMs
-                    };
+                        // 保留模型输出的 JSON 原文，便于排查字段映射
+                        newFormat.response.raw_json = jsonContent;
+                        return new LLMResponse
+                        {
+                            type = "inference",
+                            taskId = request.taskId,
+                            trialId = request.trialId,
+                            answer = newFormat.response,
+                            confidence = newFormat.confidence,
+                            latencyMs = latencyMs
+                        };
+                    }
                 }
                 catch
                 {
                     // JSON解析失败，返回原始内容
                 }
             }
-            
+
             return new LLMResponse
             {
                 type = "inference",
@@ -539,14 +545,48 @@ namespace VRPerception.Perception
         public OpenAIFunction function;
     }
     
+    // 新格式响应结构：{task, trial_id, response: {...}, confidence, valid}
+    // 对应 PromptTemplates.cs 中新定义的标准输出格式
     [Serializable]
-    public class InferenceResult
+    public class NewFormatResponse
     {
+        public string task;
+        public string trial_id;
+        public NewFormatInnerResponse response;
         public float confidence;
-        public string explanation;
-        // 扩展常用任务字段，便于上层通过反射提取
+        public bool valid;
+    }
+
+    [Serializable]
+    public class NewFormatInnerResponse
+    {
+        // Distance Compression / Horizon Cue Integration
         public float distance_m;
-        public string larger;
+
+        // Visual Crowding
+        public string letter;
+
+        // Change Detection
+        public bool changed;
+        public string category;
+
+        // Numerosity Comparison
+        public string more_side;
+
+        // Material Roughness
         public float roughness;
+
+        // Depth JND Staircase
+        public string closer;
+
+        // Color Constancy Adjustment
+        public string choice;
+        // RGB 数组（JsonUtility 对数组支持有限，使用字段映射）
+        public int rgb_r;
+        public int rgb_g;
+        public int rgb_b;
+
+        // 从模型输出中截取的 { ... } 原文（用于日志排查）
+        public string raw_json;
     }
 }

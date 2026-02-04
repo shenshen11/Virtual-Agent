@@ -87,6 +87,7 @@ namespace VRPerception.UI
         private bool _awaitingInput;
         private string _taskId = string.Empty;
         private int _trialId = -1;
+        private float _awaitingInputSinceRealtime;
         private Coroutine _ensureSubscribeRoutine;
 
         private Canvas _canvas;
@@ -211,6 +212,7 @@ namespace VRPerception.UI
                     _requireHeadMotion = ts.requireHeadMotion;
                 }
 
+                _awaitingInputSinceRealtime = Time.realtimeSinceStartup;
                 PrepareDialogForTask(_taskId, data.humanInputPrompt);
                 ShowDialog();
             }
@@ -229,6 +231,7 @@ namespace VRPerception.UI
             bool isSizeBias = string.Equals(taskId, "semantic_size_bias", StringComparison.OrdinalIgnoreCase);
             bool isRoughness = !string.IsNullOrWhiteSpace(taskId) && taskId.StartsWith("material_roughness", StringComparison.OrdinalIgnoreCase);
             bool isColor = string.Equals(taskId, "color_constancy_adjustment", StringComparison.OrdinalIgnoreCase);
+            bool isNumerosity = string.Equals(taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase);
 
             if (taskLabel != null) taskLabel.text = $"任务: {taskId}";
             if (trialLabel != null) trialLabel.text = $"试次: {_trialId}";
@@ -262,6 +265,10 @@ namespace VRPerception.UI
                 {
                     taskPromptText.text = "请调节球体颜色至您认为的“视觉灰色”，并提交当前 RGB。";
                 }
+                else if (isNumerosity)
+                {
+                    taskPromptText.text = "请在黑屏后判断哪一侧点更多，并设置置信度（A=Left，B=Right）。";
+                }
                 else
                 {
                     taskPromptText.text = "请根据任务要求完成输入。";
@@ -276,6 +283,7 @@ namespace VRPerception.UI
                 EnsureColorWidgets();
             }
             if (colorGroup != null) colorGroup.SetActive(isColor);
+            if (sizeBiasGroup != null) sizeBiasGroup.SetActive(isSizeBias || isNumerosity);
 
             if (isDistance && distanceInput != null)
             {
@@ -321,6 +329,15 @@ namespace VRPerception.UI
             if (isSizeBias && sizeToggleGroup != null)
             {
                 // 默认选中 A
+                if (optionAToggle != null)
+                {
+                    optionAToggle.isOn = true;
+                    if (optionBToggle != null) optionBToggle.isOn = false;
+                }
+            }
+            else if (isNumerosity && sizeToggleGroup != null)
+            {
+                // 复用 A/B 两个选项作为 Left/Right
                 if (optionAToggle != null)
                 {
                     optionAToggle.isOn = true;
@@ -647,6 +664,12 @@ namespace VRPerception.UI
             }
 
             float confidence = confidenceSlider != null ? Mathf.Clamp01(confidenceSlider.value) : 0.9f;
+            long reactionMs = 0;
+            try
+            {
+                reactionMs = (long)Mathf.Max(0f, (Time.realtimeSinceStartup - _awaitingInputSinceRealtime) * 1000f);
+            }
+            catch { }
 
             if (distanceGroup != null && distanceGroup.activeSelf)
             {
@@ -659,12 +682,20 @@ namespace VRPerception.UI
                         return;
                     }
                 }
-                PublishDistance(distance, confidence);
+                PublishDistance(distance, confidence, reactionMs);
             }
             else if (sizeBiasGroup != null && sizeBiasGroup.activeSelf)
             {
-                string larger = optionAToggle != null && optionAToggle.isOn ? "A" : "B";
-                PublishSize(larger, confidence);
+                if (string.Equals(_taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
+                {
+                    string moreSide = optionAToggle != null && optionAToggle.isOn ? "left" : "right";
+                    PublishNumerosity(moreSide, confidence, reactionMs);
+                }
+                else
+                {
+                    string larger = optionAToggle != null && optionAToggle.isOn ? "A" : "B";
+                    PublishSize(larger, confidence, reactionMs);
+                }
             }
             else if (roughnessGroup != null && roughnessGroup.activeSelf)
             {
@@ -735,7 +766,7 @@ namespace VRPerception.UI
             HideDialog();
         }
 
-        private void PublishDistance(float distance, float confidence)
+        private void PublishDistance(float distance, float confidence, long reactionMs)
         {
             var response = new LLMResponse
             {
@@ -744,14 +775,14 @@ namespace VRPerception.UI
                 trialId = _trialId,
                 providerId = "human",
                 confidence = confidence,
-                latencyMs = 0,
+                latencyMs = reactionMs,
                 answer = new DistanceAnswer { distance_m = distance, confidence = confidence }
             };
 
             PublishResponse(response);
         }
 
-        private void PublishSize(string larger, float confidence)
+        private void PublishSize(string larger, float confidence, long reactionMs)
         {
             var response = new LLMResponse
             {
@@ -760,7 +791,7 @@ namespace VRPerception.UI
                 trialId = _trialId,
                 providerId = "human",
                 confidence = confidence,
-                latencyMs = 0,
+                latencyMs = reactionMs,
                 answer = new SizeAnswer { larger = larger, confidence = confidence }
             };
 
@@ -794,6 +825,22 @@ namespace VRPerception.UI
                 confidence = confidence,
                 latencyMs = 0,
                 answer = new ColorAnswer { color_name = "gray", rgb = new[] { r, g, b }, confidence = confidence }
+            };
+
+            PublishResponse(response);
+        }
+
+        private void PublishNumerosity(string moreSide, float confidence, long reactionMs)
+        {
+            var response = new LLMResponse
+            {
+                type = "inference",
+                taskId = _taskId,
+                trialId = _trialId,
+                providerId = "human",
+                confidence = confidence,
+                latencyMs = reactionMs,
+                answer = new NumerosityAnswer { more_side = moreSide, confidence = confidence }
             };
 
             PublishResponse(response);
@@ -859,6 +906,13 @@ namespace VRPerception.UI
         {
             public string color_name;
             public int[] rgb;
+            public float confidence;
+        }
+
+        [Serializable]
+        private class NumerosityAnswer
+        {
+            public string more_side;
             public float confidence;
         }
     }

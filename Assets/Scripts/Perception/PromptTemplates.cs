@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Text;
 using UnityEngine;
 
@@ -23,6 +24,8 @@ namespace VRPerception.Perception
                     return SemanticSizeBiasSystem();
                 case "relative_depth_order":
                     return RelativeDepthOrderSystem();
+                case "depth_jnd_staircase":
+                    return DepthJndStaircaseSystem();
                 case "change_detection":
                     return ChangeDetectionSystem();
                 case "occlusion_reasoning":
@@ -41,6 +44,12 @@ namespace VRPerception.Perception
                     return VisualSearchSystem();
                 case "object_counting":
                     return ObjectCountingSystem();
+                case "visual_crowding":
+                    return VisualCrowdingSystem();
+                case "numerosity_comparison":
+                    return NumerosityComparisonSystem();
+                case "horizon_cue_integration":
+                    return HorizonCueIntegrationSystem();
                 default:
                     return GenericSystem();
             }
@@ -48,19 +57,22 @@ namespace VRPerception.Perception
 
         private static string GenericSystem()
         {
-            // 统一要求：仅输出 JSON；不足信息时可给出 action_plan，但优先直接回答
-            return "You are a vision agent. ONLY output JSON for the given task. " +
-                   "If information is insufficient, output an action_plan array with tool calls; otherwise output an inference JSON. " +
-                   "Never output extra text.";
+            return "You are a participant in a controlled perception experiment. " +
+                   "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
+                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "Output must be STRICT JSON and must match the exact schema given in the user message. " +
+                   "Do not include any extra text outside the JSON. " +
+                   "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
         }
 
         private static string DistanceCompressionSystem()
         {
-            return "You are a vision agent for Distance Compression. ONLY output JSON. " +
-                   "Inference format: {\"type\":\"inference\",\"taskId\":\"distance_compression\",\"trialId\":<int>," +
-                   "\"answer\":{\"distance_m\":<number>},\"confidence\":<0..1>} " +
-                   "If more views are needed, you may output {\"type\":\"action_plan\", \"actions\":[...]} with provided tools. " +
-                   "Do NOT output any extra text.";
+            return "You are a participant in a controlled VR distance perception experiment. " +
+                   "Answer ONLY using information visible in the provided image. Do not use outside knowledge. " +
+                   "You get a single snapshot. Do NOT output any action_plan or tool calls. " +
+                   "Output must be STRICT JSON and must match the exact schema provided in the user message. " +
+                   "Do not include any extra text outside the JSON. " +
+                   "If the image is missing or unclear, output valid=false and confidence=0.0 in the required JSON schema.";
         }
 
         private static string SemanticSizeBiasSystem()
@@ -82,15 +94,24 @@ namespace VRPerception.Perception
                    "Do NOT output any extra text.";
         }
 
+        private static string DepthJndStaircaseSystem()
+        {
+            return "You are a participant in a controlled VR relative depth discrimination experiment. " +
+                   "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
+                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "Output must be STRICT JSON and must match the exact schema given in the user message. " +
+                   "Do not include any extra text outside the JSON. " +
+                   "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
+        }
+
         private static string ChangeDetectionSystem()
         {
-            return "You are a vision agent for Change Detection. ONLY output JSON. " +
-                   "You will see two versions of a scene in a single image: A (before) on the left and B (after) on the right. " +
-                   "Your goal is to decide whether the scene has changed between A and B, and if so, what type of change. " +
-                   "Inference format: {\"type\":\"inference\",\"taskId\":\"change_detection\",\"trialId\":<int>," +
-                   "\"answer\":{\"changed\":true|false,\"category\":\"none\"|\"appearance\"|\"disappearance\"|\"movement\"|\"replacement\"},\"confidence\":<0..1>} " +
-                   "If more information is needed, you may output {\"type\":\"action_plan\",\"actions\":[...]} with provided tools. " +
-                   "Do NOT output any extra text.";
+            return "You are a participant in a controlled VR visual change detection experiment. " +
+                   "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
+                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "Output must be STRICT JSON and must match the exact schema given in the user message. " +
+                   "Do not include any extra text outside the JSON. " +
+                   "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
         }
 
         private static string OcclusionReasoningSystem()
@@ -106,10 +127,12 @@ namespace VRPerception.Perception
 
         private static string MaterialRoughnessSystem()
         {
-            return "You are a vision agent for Material Roughness Estimation. ONLY output JSON. " +
-                   "Output format: {\"roughness\":<number 0..1>,\"confidence\":<0..1>} " +
-                   "Roughness definition: 0=perfectly smooth mirror-like, 1=fully rough matte. " +
-                   "Do NOT output any extra text.";
+            return "You are a participant in a controlled VR material perception experiment. " +
+                   "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
+                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "Output must be STRICT JSON and must match the exact schema given in the user message. " +
+                   "Do not include any extra text outside the JSON. " +
+                   "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
         }
 
         private static string ColorConstancySystem()
@@ -124,12 +147,12 @@ namespace VRPerception.Perception
 
         private static string ColorConstancyAdjustmentSystem()
         {
-            return "You are a vision agent for Color Constancy (Adjustment). ONLY output JSON. " +
-                   "Your goal is to select the labeled ball that appears most neutral gray under the current lighting. " +
-                   "Inference format: {\"type\":\"inference\",\"taskId\":\"color_constancy_adjustment\",\"trialId\":<int>," +
-                   "\"answer\":{\"choice\":\"A\"},\"confidence\":<0..1>} " +
-                   "Optionally include \"rgb\":[R,G,B] if available. " +
-                   "Do NOT output any extra text.";
+            return "You are a participant in a controlled VR color perception experiment. " +
+                   "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
+                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "Output must be STRICT JSON and must match the exact schema given in the user message. " +
+                   "Do not include any extra text outside the JSON. " +
+                   "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
         }
 
         private static string MaterialPerceptionSystem()
@@ -162,14 +185,57 @@ namespace VRPerception.Perception
                    "Do NOT output any extra text.";
         }
 
+        private static string VisualCrowdingSystem()
+        {
+            return "You are a participant in a controlled VR peripheral vision experiment. " +
+                   "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
+                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "Output must be STRICT JSON and must match the exact schema given in the user message. " +
+                   "Do not include any extra text outside the JSON. " +
+                   "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
+        }
+
+        private static string NumerosityComparisonSystem()
+        {
+            return "You are a participant in a controlled VR numerosity perception experiment. " +
+                   "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
+                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "Output must be STRICT JSON and must match the exact schema given in the user message. " +
+                   "Do not include any extra text outside the JSON. " +
+                   "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
+        }
+
+        private static string HorizonCueIntegrationSystem()
+        {
+            return "You are a participant in a controlled VR horizon cue integration experiment. " +
+                   "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
+                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "Output must be STRICT JSON and must match the exact schema given in the user message. " +
+                   "Do not include any extra text outside the JSON. " +
+                   "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
+        }
+
         // ============ Task Prompts ============
 
-        public static string BuildDistanceCompressionPrompt(string targetKind, float fovDeg, string environment)
+        public static string BuildDistanceCompressionPrompt(string targetKind, float fovDeg, string environment, int trialId)
         {
-            var envText = (environment ?? "open_field") == "corridor" ? "a long corridor" : "an open field";
-            return $"Task: Estimate the distance to the target object in meters.\n" +
-                   $"Scene: {envText}. Target kind: {targetKind}. Camera FOV: {fovDeg} deg.\n" +
-                   $"Output ONLY JSON with fields: type=inference, answer.distance_m (float), confidence (0..1).";
+            var id = trialId.ToString(CultureInfo.InvariantCulture);
+            return
+                $"Trial metadata: {{\"task\":\"distance_compression\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
+                "Estimate the distance from the camera to the ball in meters.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"distance_compression\",\"trial_id\":\"{id}\",\"response\":{{\"distance_m\": <number>}},\"confidence\": <0.0-1.0>,\"valid\": true}}";
+        }
+
+        public static string BuildDistanceCompressionCalibrationPrompt(string targetKind, float fovDeg, string environment, float trueDistanceM, int trialId)
+        {
+            var distText = trueDistanceM.ToString("0.###", CultureInfo.InvariantCulture);
+            var id = trialId.ToString(CultureInfo.InvariantCulture);
+
+            return
+                $"Trial metadata: {{\"task\":\"distance_calibration\",\"trial_id\":\"{id}\",\"phase\":\"calibration\"}}\n" +
+                $"This image shows a ball at a distance of {distText} meters from the camera.\n" +
+                "Study it to calibrate your sense of distance in this experiment.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"distance_calibration\",\"trial_id\":\"{id}\",\"response\":{{\"acknowledged_distance_m\": {distText}}},\"confidence\": <0.0-1.0>,\"valid\": true}}";
         }
 
         public static string BuildSemanticSizeBiasPrompt(string objectA, string objectB, string relation, string background)
@@ -197,19 +263,31 @@ namespace VRPerception.Perception
             return sb.ToString();
         }
 
-        public static string BuildChangeDetectionPrompt(string background, float fovDeg)
+        public static string BuildDepthJndStaircasePrompt(string background, float fovDeg, int trialId)
         {
-            var bg = string.IsNullOrEmpty(background) ? "none" : background;
-            var fov = fovDeg > 0 ? fovDeg : 60f;
+            var id = trialId.ToString(CultureInfo.InvariantCulture);
+            return
+                $"Trial metadata: {{\"task\":\"depth_jnd_staircase\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
+                "Two identical objects are shown in the same frame: A on the left and B on the right. Choose which object is closer to the camera.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"depth_jnd_staircase\",\"trial_id\":\"{id}\",\"response\":{{\"closer\":\"A\"|\"B\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
+        }
 
-            var sb = new StringBuilder();
-            sb.AppendLine("Task: Decide whether the scene has changed between A and B.");
-            sb.AppendLine("In the image, the left side shows scene A (before) and the right side shows scene B (after).");
-            sb.AppendLine($"Conditions: background={bg}, FOV={fov} deg.");
-            sb.AppendLine("Possible change categories: 'none', 'appearance', 'disappearance', 'movement', 'replacement'.");
-            sb.Append("Output ONLY JSON with fields: type=inference, answer.changed (true/false), ");
-            sb.Append("answer.category ('none'|'appearance'|'disappearance'|'movement'|'replacement'), confidence (0..1).");
-            return sb.ToString();
+        public static string BuildVisualCrowdingPrompt(float eccentricityDeg, float spacingDeg, string targetLetter, string[] flankers, int trialId)
+        {
+            var id = trialId.ToString(CultureInfo.InvariantCulture);
+            return
+                $"Trial metadata: {{\"task\":\"visual_crowding\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
+                "A central fixation mark is present. Keep attention on the fixation point. A horizontal 5-letter string appears in the right periphery; the middle letter is the target. Identify the target letter.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"visual_crowding\",\"trial_id\":\"{id}\",\"response\":{{\"letter\":\"<letter>\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
+        }
+
+        public static string BuildChangeDetectionPrompt(string background, float fovDeg, int trialId)
+        {
+            var id = trialId.ToString(CultureInfo.InvariantCulture);
+            return
+                $"Trial metadata: {{\"task\":\"change_detection\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
+                "The image shows two sub-scenes in the same frame: A on the left (before) and B on the right (after). Decide whether any change occurred from A to B. If changed, classify the change as one of: appearance, disappearance, movement, replacement. If no change, report category as none.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"change_detection\",\"trial_id\":\"{id}\",\"response\":{{\"changed\":true|false,\"category\":\"appearance\"|\"disappearance\"|\"movement\"|\"replacement\"|\"none\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
         }
 
         public static string BuildOcclusionReasoningPrompt(string targetCategory, string occluderType, float occlusionRatio, string background, float fovDeg)
@@ -289,19 +367,22 @@ namespace VRPerception.Perception
             return sb.ToString();
         }
 
-        public static string BuildColorConstancyAdjustmentPrompt(string phase, string background, string lighting, float fovDeg)
+        public static string BuildColorConstancyAdjustmentPrompt(string phase, string background, string lighting, float fovDeg, int trialId)
         {
-            var ph = string.IsNullOrEmpty(phase) ? "unknown" : phase;
-            var bg = string.IsNullOrEmpty(background) ? "none" : background;
-            var light = string.IsNullOrEmpty(lighting) ? "white_neutral" : lighting;
-            var fov = fovDeg > 0 ? fovDeg : 60f;
+            var id = trialId.ToString(CultureInfo.InvariantCulture);
+            return
+                $"Trial metadata: {{\"task\":\"color_constancy_adjustment\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
+                "Choose the labeled ball that appears most neutral gray under the current lighting.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"color_constancy_adjustment\",\"trial_id\":\"{id}\",\"response\":{{\"choice\":\"<letter>\",\"rgb\":[<R>,<G>,<B>]}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
+        }
 
-            var sb = new StringBuilder();
-            sb.AppendLine("Task: Choose the labeled ball that appears most neutral gray under the current lighting.");
-            sb.AppendLine($"Phase: {ph}. Scene: background={bg}, lighting={light}, FOV={fov} deg.");
-            sb.AppendLine("Each ball has a visible letter label (A, B, C, ...).");
-            sb.Append("Output ONLY JSON with fields: type=inference, answer.choice (single letter), optional answer.rgb ([R,G,B]), confidence (0..1).");
-            return sb.ToString();
+        public static string BuildNumerosityComparisonPrompt(float fovDeg, int trialId)
+        {
+            var id = trialId.ToString(CultureInfo.InvariantCulture);
+            return
+                $"Trial metadata: {{\"task\":\"numerosity_comparison\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
+                "The scene is split into left and right halves, each containing a set of similar items. Decide which side has more items at a glance; do not count one-by-one.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"numerosity_comparison\",\"trial_id\":\"{id}\",\"response\":{{\"more_side\":\"left\"|\"right\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
         }
 
         public static string BuildMaterialPerceptionPrompt(string targetKind, string background, string lighting, float yawDeg)
@@ -319,18 +400,22 @@ namespace VRPerception.Perception
             return sb.ToString();
         }
 
-        public static string BuildMaterialRoughnessPrompt(string environment, bool requireHeadMotion, float fovDeg)
+        public static string BuildMaterialRoughnessPrompt(string environment, bool requireHeadMotion, float fovDeg, int trialId)
         {
-            var env = string.IsNullOrWhiteSpace(environment) ? "unknown" : environment;
-            var fov = fovDeg > 0 ? fovDeg : 60f;
+            var id = trialId.ToString(CultureInfo.InvariantCulture);
+            return
+                $"Trial metadata: {{\"task\":\"material_roughness\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
+                "Estimate the surface roughness of the metallic sphere. Roughness: 0 = perfectly smooth mirror-like; 1 = completely rough matte.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"material_roughness\",\"trial_id\":\"{id}\",\"response\":{{\"roughness\":<0.0-1.0>}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
+        }
 
-            var sb = new StringBuilder();
-            sb.AppendLine("Task: Estimate the surface roughness of the main metallic sphere in the image.");
-            sb.AppendLine("Roughness definition: 0 = perfectly smooth mirror-like; 1 = completely rough matte.");
-            sb.AppendLine($"Scene conditions: environment={env}, FOV={fov} deg.");
-            sb.AppendLine($"Experimental flag (for human): head_motion_required={(requireHeadMotion ? "true" : "false")}.");
-            sb.Append("Output ONLY JSON with fields: roughness (number 0..1), confidence (0..1).");
-            return sb.ToString();
+        public static string BuildHorizonCueIntegrationPrompt(int trialId)
+        {
+            var id = trialId.ToString(CultureInfo.InvariantCulture);
+            return
+                $"Trial metadata: {{\"task\":\"horizon_cue_integration\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
+                "The red sphere is directly in front of the camera at the same height. Estimate its distance in meters.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"horizon_cue_integration\",\"trial_id\":\"{id}\",\"response\":{{\"distance_m\":<number>}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
         }
 
         // ============ Tool Specifications (for action_plan) ============
