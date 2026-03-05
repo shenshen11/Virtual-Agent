@@ -51,6 +51,8 @@ namespace VRPerception.Tasks
         private bool? _roomWasActive;
         private GameObject _roomGo;
         private bool _didDisableRoom;
+        private GameObject _openFieldGroundGo;
+        private bool? _openFieldGroundWasActive;
 
         public HorizonCueIntegrationTask(TaskRunnerContext ctx)
         {
@@ -86,6 +88,14 @@ namespace VRPerception.Tasks
                 }
             }
 
+            _openFieldGroundWasActive = null;
+            _openFieldGroundGo = GameObject.Find("env_open_field_ground");
+            if (_openFieldGroundGo != null)
+            {
+                _openFieldGroundWasActive = _openFieldGroundGo.activeSelf;
+                if (_openFieldGroundGo.activeSelf) _openFieldGroundGo.SetActive(false);
+            }
+
             // 任务运行时自建一套最小场景（根节点/环境Rig/天空球/红球）。
             // 黑场遮罩优先复用原场景（Bridge）中已有的 TrialBlackoutOverlay。
             EnsureRuntimeObjects();
@@ -103,6 +113,13 @@ namespace VRPerception.Tasks
 
             _didDisableRoom = false;
             _roomGo = null;
+
+            if (_openFieldGroundWasActive.HasValue)
+            {
+                if (_openFieldGroundGo != null) _openFieldGroundGo.SetActive(_openFieldGroundWasActive.Value);
+                _openFieldGroundWasActive = null;
+            }
+            _openFieldGroundGo = null;
 
             RestoreSceneBlackoutIfNeeded();
 
