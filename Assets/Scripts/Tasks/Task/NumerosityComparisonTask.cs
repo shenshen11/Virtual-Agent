@@ -136,19 +136,6 @@ namespace VRPerception.Tasks
             EnsureParticleObjects();
             PlaceStimuli(trial);
 
-            // Human 模式短时曝光：由 Overlay 负责延迟黑屏，防止二次观察（运行时也生效）。
-            // 若场景未挂载 TrialBlackoutOverlay，则不会影响任务执行。
-            try
-            {
-                var overlay = UnityEngine.Object.FindObjectOfType<VRPerception.UI.TrialBlackoutOverlay>();
-                if (overlay != null)
-                {
-                    int exposureMs = Mathf.Clamp(Mathf.RoundToInt(trial.exposureDurationMs > 0 ? trial.exposureDurationMs : 500f), 0, 60000);
-                    overlay.BeginBlackoutAfterMs(exposureMs);
-                }
-            }
-            catch { }
-
             return Task.CompletedTask;
         }
 
