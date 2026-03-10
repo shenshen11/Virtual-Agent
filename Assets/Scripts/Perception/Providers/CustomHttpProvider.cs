@@ -139,7 +139,9 @@ namespace VRPerception.Perception
                 systemPrompt = request.systemPrompt,
                 taskPrompt = request.taskPrompt,
                 imageBase64 = request.imageBase64,
+                imagesBase64 = request.imagesBase64,
                 metadata = request.metadata,
+                metadataList = request.metadataList,
                 tools = request.tools,
                 parameters = new CustomParameters
                 {
@@ -189,7 +191,9 @@ namespace VRPerception.Perception
         public string systemPrompt;
         public string taskPrompt;
         public string imageBase64;
+        public string[] imagesBase64;
         public FrameMetadata metadata;
+        public FrameMetadata[] metadataList;
         public ToolSpec[] tools;
         public CustomParameters parameters;
     }

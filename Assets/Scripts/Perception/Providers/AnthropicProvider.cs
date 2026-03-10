@@ -145,7 +145,8 @@ namespace VRPerception.Perception
                 });
             }
             
-            if (!string.IsNullOrEmpty(request.imageBase64))
+            var images = GetRequestImages(request);
+            for (int i = 0; i < images.Length; i++)
             {
                 content.Add(new AnthropicContent
                 {
@@ -154,7 +155,7 @@ namespace VRPerception.Perception
                     {
                         type = "base64",
                         media_type = "image/jpeg",
-                        data = request.imageBase64
+                        data = images[i]
                     }
                 });
             }
@@ -268,6 +269,33 @@ namespace VRPerception.Perception
                     latencyMs = latencyMs
                 };
             }
+        }
+
+        private static string[] GetRequestImages(LLMRequest request)
+        {
+            if (request?.imagesBase64 != null && request.imagesBase64.Length > 0)
+            {
+                var nonEmpty = new List<string>(request.imagesBase64.Length);
+                for (int i = 0; i < request.imagesBase64.Length; i++)
+                {
+                    if (!string.IsNullOrEmpty(request.imagesBase64[i]))
+                    {
+                        nonEmpty.Add(request.imagesBase64[i]);
+                    }
+                }
+
+                if (nonEmpty.Count > 0)
+                {
+                    return nonEmpty.ToArray();
+                }
+            }
+
+            if (!string.IsNullOrEmpty(request?.imageBase64))
+            {
+                return new[] { request.imageBase64 };
+            }
+
+            return Array.Empty<string>();
         }
         
         private ActionCommand[] ParseToolUse(AnthropicContent[] contents)

@@ -165,9 +165,10 @@ namespace VRPerception.Perception
             };
             
             // 添加图像
-            if (!string.IsNullOrEmpty(request.imageBase64))
+            var images = GetRequestImages(request);
+            if (images.Length > 0)
             {
-                requestBody.images = new string[] { request.imageBase64 };
+                requestBody.images = images;
             }
             
             return requestBody;
@@ -266,6 +267,33 @@ namespace VRPerception.Perception
                 answer = new { raw_content = content },
                 latencyMs = latencyMs
             };
+        }
+
+        private static string[] GetRequestImages(LLMRequest request)
+        {
+            if (request?.imagesBase64 != null && request.imagesBase64.Length > 0)
+            {
+                var nonEmpty = new System.Collections.Generic.List<string>(request.imagesBase64.Length);
+                for (int i = 0; i < request.imagesBase64.Length; i++)
+                {
+                    if (!string.IsNullOrEmpty(request.imagesBase64[i]))
+                    {
+                        nonEmpty.Add(request.imagesBase64[i]);
+                    }
+                }
+
+                if (nonEmpty.Count > 0)
+                {
+                    return nonEmpty.ToArray();
+                }
+            }
+
+            if (!string.IsNullOrEmpty(request?.imageBase64))
+            {
+                return new[] { request.imageBase64 };
+            }
+
+            return Array.Empty<string>();
         }
     }
     

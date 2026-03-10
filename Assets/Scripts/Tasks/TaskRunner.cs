@@ -45,6 +45,18 @@ namespace VRPerception.Tasks
         [Tooltip("Human 模式下等待用户输入的超时时间（毫秒），0 表示无限等待")]
         [SerializeField] private int humanInputTimeoutMs = 0; // 0 = 无限等待
 
+        [Header("MLLM Capture")]
+        [Tooltip("MLLM 抓帧数量：1=单帧，>1=多帧随机扫描")]
+        [SerializeField] private int mllmFrameCount = 1;
+        [Tooltip("MLLM 水平随机扫描范围（度），实际为 ±该值")]
+        [SerializeField] private float mllmScanYawRangeDeg = 4f;
+        [Tooltip("MLLM 俯仰随机扫描范围（度），实际为 ±该值")]
+        [SerializeField] private float mllmScanPitchRangeDeg = 2f;
+        [Tooltip("MLLM 每次转角后等待毫秒数，减小运动模糊")]
+        [SerializeField] private int mllmScanSettleMs = 30;
+        [Tooltip("MLLM 扫描随机种子；0 表示自动派生")]
+        [SerializeField] private int mllmScanSeed = 0;
+
         [Header("Subject")]
         [Tooltip("当前回合被试模式（Human 模式将由 UI 采集人类答案）")]
         [SerializeField] private SubjectMode subjectMode = SubjectMode.MLLM;
@@ -197,7 +209,12 @@ namespace VRPerception.Tasks
                             height = 720,
                             format = "jpeg",
                             quality = 75,
-                            includeMetadata = true
+                            includeMetadata = true,
+                            frameCount = Mathf.Max(1, mllmFrameCount),
+                            scanYawRangeDeg = Mathf.Max(0f, mllmScanYawRangeDeg),
+                            scanPitchRangeDeg = Mathf.Max(0f, mllmScanPitchRangeDeg),
+                            scanSettleMs = Mathf.Max(0, mllmScanSettleMs),
+                            scanSeed = mllmScanSeed
                         };
 
                         // 进入处理阶段（模型推理中）

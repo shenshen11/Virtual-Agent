@@ -67,7 +67,8 @@ namespace VRPerception.Perception
             {
                 var jsonBody = BuildRequestJson(request);
 #if UNITY_EDITOR
-                Debug.Log($"[OpenAIProvider] POST {_endpoint} model={_model} max_tokens={request.maxTokens} has_image={(string.IsNullOrEmpty(request.imageBase64) ? "no" : "yes")} tools={(request.tools?.Length ?? 0)}");
+                var imageCount = GetRequestImages(request).Length;
+                Debug.Log($"[OpenAIProvider] POST {_endpoint} model={_model} max_tokens={request.maxTokens} image_count={imageCount} tools={(request.tools?.Length ?? 0)}");
 #endif
                 using var webRequest = new UnityWebRequest(_endpoint, "POST");
                 webRequest.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(jsonBody));
@@ -172,14 +173,15 @@ namespace VRPerception.Perception
                 });
             }
 
-            if (!string.IsNullOrEmpty(request.imageBase64))
+            var images = GetRequestImages(request);
+            if (images.Length > 0)
             {
                 userContent.Add(new OpenAIContent
                 {
                     type = "image_url",
                     image_url = new OpenAIImageUrl
                     {
-                        url = $"data:image/jpeg;base64,{request.imageBase64}"
+                        url = $"data:image/jpeg;base64,{images[0]}"
                     }
                 });
             }
@@ -233,7 +235,8 @@ namespace VRPerception.Perception
             }
 
             // user
-            if (string.IsNullOrEmpty(request.imageBase64))
+            var images = GetRequestImages(request);
+            if (images.Length == 0)
             {
                 if (!first) sb.Append(',');
                 sb.Append("{\"role\":\"user\",\"content\":\"")
@@ -252,10 +255,14 @@ namespace VRPerception.Perception
                       .Append("\"}");
                     needComma = true;
                 }
-                if (needComma) sb.Append(',');
-                sb.Append("{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,")
-                  .Append(JsonEscape(request.imageBase64))
-                  .Append("\"}}");
+                for (int i = 0; i < images.Length; i++)
+                {
+                    if (needComma) sb.Append(',');
+                    sb.Append("{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,")
+                      .Append(JsonEscape(images[i] ?? string.Empty))
+                      .Append("\"}}");
+                    needComma = true;
+                }
                 sb.Append("]}");
             }
             sb.Append("]");
@@ -299,6 +306,33 @@ namespace VRPerception.Perception
                 }
             }
             return sb.ToString();
+        }
+
+        private static string[] GetRequestImages(LLMRequest request)
+        {
+            if (request?.imagesBase64 != null && request.imagesBase64.Length > 0)
+            {
+                var nonEmpty = new List<string>(request.imagesBase64.Length);
+                for (int i = 0; i < request.imagesBase64.Length; i++)
+                {
+                    if (!string.IsNullOrEmpty(request.imagesBase64[i]))
+                    {
+                        nonEmpty.Add(request.imagesBase64[i]);
+                    }
+                }
+
+                if (nonEmpty.Count > 0)
+                {
+                    return nonEmpty.ToArray();
+                }
+            }
+
+            if (!string.IsNullOrEmpty(request?.imageBase64))
+            {
+                return new[] { request.imageBase64 };
+            }
+
+            return Array.Empty<string>();
         }
         
         private OpenAITool[] ConvertTools(ToolSpec[] tools)

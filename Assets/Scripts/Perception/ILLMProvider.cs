@@ -51,7 +51,9 @@ namespace VRPerception.Perception
         public string systemPrompt;
         public string taskPrompt;
         public string imageBase64;
+        public string[] imagesBase64;
         public FrameMetadata metadata;
+        public FrameMetadata[] metadataList;
         public ToolSpec[] tools;
         public float temperature = 0;
         public float topP = 1;

@@ -31,6 +31,11 @@ namespace VRPerception.Infra.EventBus
         public int quality = 75; // for jpeg
         public bool includeMetadata = true;
         public string label; // 可选标签
+        public int frameCount = 1; // MLLM: 1=单帧，>1=多帧扫描
+        public float scanYawRangeDeg = 0f; // MLLM: 水平随机扫描范围（±）
+        public float scanPitchRangeDeg = 0f; // MLLM: 俯仰随机扫描范围（±）
+        public int scanSettleMs = 0; // MLLM: 每次变更角度后的稳定等待
+        public int scanSeed = 0; // MLLM: 0 表示使用 request/trial 派生种子
     }
     
     /// <summary>

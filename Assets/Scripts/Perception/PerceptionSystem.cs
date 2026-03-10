@@ -203,14 +203,14 @@ namespace VRPerception.Perception
             try
             {
                 // 1. 抓帧
-                var frameData = await CaptureFrameAsync(request, cancellationToken);
-                if (frameData == null)
+                var frames = await CaptureFramesAsync(request, cancellationToken);
+                if (frames == null || frames.Count == 0)
                 {
                     throw new InvalidOperationException("Frame capture failed");
                 }
                 
                 // 2. 构建LLM请求
-                var llmRequest = BuildLLMRequest(request, frameData);
+                var llmRequest = BuildLLMRequest(request, frames);
                 
                 // 3. 调用LLM Provider
                 var response = await providerRouter.RouteRequestAsync(llmRequest, cancellationToken);
@@ -229,18 +229,79 @@ namespace VRPerception.Perception
         /// <summary>
         /// 抓帧
         /// </summary>
-        private async Task<FrameCapturedEventData> CaptureFrameAsync(PerceptionRequest request, CancellationToken cancellationToken)
+        private async Task<List<FrameCapturedEventData>> CaptureFramesAsync(PerceptionRequest request, CancellationToken cancellationToken)
         {
             if (stimulusCapture == null)
             {
                 throw new InvalidOperationException("StimulusCapture not available");
             }
-            
-            _lastCaptureTime = Time.time;
-            
-            // 等待抓帧完成
+
+            var options = request.CaptureOptions ?? new FrameCaptureOptions();
+            var frameCount = Mathf.Max(1, options.frameCount);
+            var settleMs = Mathf.Max(0, options.scanSettleMs);
+            var perFrameTimeoutMs = Math.Max(5000, 5000 + settleMs);
+            var totalTimeoutMs = Math.Max(perFrameTimeoutMs, perFrameTimeoutMs * frameCount);
+            var captured = new List<FrameCapturedEventData>(frameCount);
+            var camera = stimulusCapture.HeadCamera;
+            var cameraTransform = camera != null ? camera.transform : null;
+            // In XR, head tracking continuously overwrites the HMD camera pose.
+            // Apply scan jitter on parent transform (camera offset/pivot) to keep offsets effective.
+            var scanRoot = cameraTransform != null
+                ? (cameraTransform.parent != null ? cameraTransform.parent : cameraTransform)
+                : null;
+            var originalScanLocalRotation = scanRoot != null ? scanRoot.localRotation : Quaternion.identity;
+            var rng = CreateScanRandom(request, options);
+
+            using var totalTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            totalTimeoutCts.CancelAfter(totalTimeoutMs);
+
+            try
+            {
+                for (int i = 0; i < frameCount; i++)
+                {
+                    if (scanRoot != null && frameCount > 1)
+                    {
+                        if (i == 0)
+                        {
+                            // Keep the first frame as the forward baseline view.
+                            scanRoot.localRotation = originalScanLocalRotation;
+                        }
+                        else
+                        {
+                            var yaw = SampleRange(rng, Mathf.Max(0f, options.scanYawRangeDeg));
+                            var pitch = SampleRange(rng, Mathf.Max(0f, options.scanPitchRangeDeg));
+                            scanRoot.localRotation = originalScanLocalRotation * Quaternion.Euler(pitch, yaw, 0f);
+                        }
+
+                        // Let transform updates settle for at least one frame before capture.
+                        await Task.Yield();
+
+                        if (settleMs > 0)
+                        {
+                            await Task.Delay(settleMs, totalTimeoutCts.Token);
+                        }
+                    }
+
+                    _lastCaptureTime = Time.time;
+                    var frameData = await CaptureSingleFrameAsync(request, totalTimeoutCts.Token, perFrameTimeoutMs);
+                    captured.Add(frameData);
+                }
+            }
+            finally
+            {
+                if (scanRoot != null && frameCount > 1)
+                {
+                    scanRoot.localRotation = originalScanLocalRotation;
+                }
+            }
+
+            return captured;
+        }
+
+        private async Task<FrameCapturedEventData> CaptureSingleFrameAsync(PerceptionRequest request, CancellationToken cancellationToken, int timeoutMs)
+        {
             var tcs = new TaskCompletionSource<FrameCapturedEventData>();
-            
+
             void OnFrameCaptured(FrameCapturedEventData data)
             {
                 if (data.requestId == request.RequestId)
@@ -249,34 +310,65 @@ namespace VRPerception.Perception
                     tcs.TrySetResult(data);
                 }
             }
-            
+
             eventBus.FrameCaptured.Subscribe(OnFrameCaptured);
-            
-            // 触发抓帧
             stimulusCapture.CaptureFrame(request.RequestId, request.TaskId, request.TrialId, request.CaptureOptions);
-            
-            // 等待结果或超时（兼容无 Task.WaitAsync 的环境）
+
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var timeoutMs = 5000;
             var delayTask = Task.Delay(timeoutMs, timeoutCts.Token);
             var completed = await Task.WhenAny(tcs.Task, delayTask);
             if (completed == tcs.Task)
             {
-                timeoutCts.Cancel(); // 取消延时任务
+                timeoutCts.Cancel();
                 return tcs.Task.Result;
             }
-            else
+
+            try { eventBus.FrameCaptured.Unsubscribe(OnFrameCaptured); } catch { }
+            if (cancellationToken.IsCancellationRequested)
             {
-                try { eventBus.FrameCaptured.Unsubscribe(OnFrameCaptured); } catch { }
-                throw new TimeoutException("Frame capture timeout");
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            throw new TimeoutException($"Frame capture timeout: {request.RequestId}");
+        }
+
+        private static float SampleRange(System.Random rng, float halfRange)
+        {
+            if (halfRange <= 0f) return 0f;
+            return (float)(rng.NextDouble() * 2.0 - 1.0) * halfRange;
+        }
+
+        private static System.Random CreateScanRandom(PerceptionRequest request, FrameCaptureOptions options)
+        {
+            if (options.scanSeed != 0)
+            {
+                return new System.Random(options.scanSeed);
+            }
+
+            unchecked
+            {
+                int hash = 17;
+                hash = hash * 31 + request.TrialId;
+                hash = hash * 31 + (request.TaskId?.GetHashCode() ?? 0);
+                hash = hash * 31 + (request.RequestId?.GetHashCode() ?? 0);
+                return new System.Random(hash);
             }
         }
         
         /// <summary>
         /// 构建LLM请求
         /// </summary>
-        private LLMRequest BuildLLMRequest(PerceptionRequest request, FrameCapturedEventData frameData)
+        private LLMRequest BuildLLMRequest(PerceptionRequest request, List<FrameCapturedEventData> frames)
         {
+            var first = frames[0];
+            var images = new string[frames.Count];
+            var metadataList = new FrameMetadata[frames.Count];
+            for (int i = 0; i < frames.Count; i++)
+            {
+                images[i] = frames[i]?.imageBase64;
+                metadataList[i] = frames[i]?.metadata;
+            }
+
             return new LLMRequest
             {
                 requestId = request.RequestId,
@@ -284,8 +376,10 @@ namespace VRPerception.Perception
                 trialId = request.TrialId,
                 systemPrompt = request.SystemPrompt ?? GetDefaultSystemPrompt(request.TaskId),
                 taskPrompt = request.TaskPrompt ?? GetDefaultTaskPrompt(request.TaskId, request.TrialId),
-                imageBase64 = frameData.imageBase64,
-                metadata = frameData.metadata,
+                imageBase64 = first?.imageBase64,
+                imagesBase64 = images,
+                metadata = first?.metadata,
+                metadataList = metadataList,
                 tools = request.Tools ?? GetDefaultTools(request.TaskId),
                 timeoutMs = requestTimeoutMs
             };
