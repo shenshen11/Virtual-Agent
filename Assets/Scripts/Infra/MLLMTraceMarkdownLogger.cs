@@ -113,6 +113,11 @@ namespace VRPerception.Infra
             if (!enableLogging || data == null) return;
             var base64Len = string.IsNullOrEmpty(data.imageBase64) ? 0 : data.imageBase64.Length;
             var details = $"success={data.success} base64Len={base64Len}";
+            if (data.metadata?.camera?.pose != null)
+            {
+                var r = data.metadata.camera.pose.rotationEuler;
+                details += $" rotEuler=({r.x:F1},{r.y:F1},{r.z:F1})";
+            }
             if (!data.success)
             {
                 details += $" error={data.errorMessage}";
@@ -245,7 +250,8 @@ namespace VRPerception.Infra
         private static string FormatOptions(FrameCaptureOptions options)
         {
             if (options == null) return "default";
-            return $"w={options.width} h={options.height} fov={options.fov} fmt={options.format} q={options.quality} label={options.label}";
+            return $"w={options.width} h={options.height} fov={options.fov} fmt={options.format} q={options.quality} label={options.label} " +
+                   $"frames={options.frameCount} yaw=+-{options.scanYawRangeDeg} pitch=+-{options.scanPitchRangeDeg} settleMs={options.scanSettleMs} seed={options.scanSeed}";
         }
 
         private static string FormatActionNames(ActionCommand[] actions)
