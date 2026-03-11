@@ -648,10 +648,8 @@ namespace VRPerception.Infra
                         // - background/fovDeg/lighting: 实验条件
                         // - trueR/trueG/trueB: 真值RGB（0-255）
                         // - predictedChoice: 模型选择的标签
-                        // - predictedR/G/B: 模型预测RGB（0-255）
-                        // - rgbError: RGB欧氏距离误差
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,phase,background,fovDeg,lighting,trueR,trueG,trueB,predictedChoice,predictedR,predictedG,predictedB,rgbError,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,phase,background,fovDeg,lighting,trueR,trueG,trueB,predictedChoice,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -662,7 +660,6 @@ namespace VRPerception.Infra
                             // 从 extraJson 解析数据
                             string phase = "unknown";
                             string predictedChoice = "";
-                            int[] predictedRgb = new int[] { 0, 0, 0 };
 
                             try
                             {
@@ -671,24 +668,9 @@ namespace VRPerception.Infra
                                 {
                                     phase = extra.phase ?? "unknown";
                                     predictedChoice = extra.choice ?? "";
-                                    if (extra.predictedRgb != null && extra.predictedRgb.Length >= 3)
-                                    {
-                                        predictedRgb = extra.predictedRgb;
-                                    }
                                 }
                             }
                             catch { }
-
-                            // 计算 RGB 误差（欧氏距离）
-                            float rgbError = 0f;
-                            if (predictedRgb != null && predictedRgb.Length >= 3)
-                            {
-                                rgbError = Mathf.Sqrt(
-                                    Mathf.Pow(predictedRgb[0] - t.trueR, 2) +
-                                    Mathf.Pow(predictedRgb[1] - t.trueG, 2) +
-                                    Mathf.Pow(predictedRgb[2] - t.trueB, 2)
-                                );
-                            }
 
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
@@ -701,10 +683,6 @@ namespace VRPerception.Infra
                                 t.trueG,
                                 t.trueB,
                                 Escape(predictedChoice),
-                                predictedRgb[0],
-                                predictedRgb[1],
-                                predictedRgb[2],
-                                rgbError.ToString("F3"),
                                 e.confidence.ToString("F3"),
                                 Escape(e.providerId),
                                 e.latencyMs

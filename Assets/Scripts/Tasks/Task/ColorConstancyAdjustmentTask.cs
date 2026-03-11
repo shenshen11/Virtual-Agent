@@ -221,12 +221,19 @@ namespace VRPerception.Tasks
 
             _metaByTrial.TryGetValue(trial, out var meta);
 
-            if (!TryExtractAnswer(response.answer, out choice, out predictedRgb))
+            if (!TryExtractAnswer(response.answer, out choice))
             {
-                TryExtractFromText(response.explanation, out choice, out predictedRgb);
+                TryExtractFromText(response.explanation, out choice);
             }
 
-            if (meta != null && predictedRgb == null && !string.IsNullOrEmpty(choice) && meta.candidateLabels != null && meta.candidateRgbs != null)
+            if (string.IsNullOrEmpty(choice))
+            {
+                eval.success = false;
+                eval.failureReason = "No choice information found in model output";
+                return eval;
+            }
+
+            if (meta != null && meta.candidateLabels != null && meta.candidateRgbs != null)
             {
                 for (int i = 0; i < meta.candidateLabels.Length && i < meta.candidateRgbs.Length; i++)
                 {
@@ -241,7 +248,7 @@ namespace VRPerception.Tasks
             if (predictedRgb == null || predictedRgb.Length < 3)
             {
                 eval.success = false;
-                eval.failureReason = "No rgb/choice information found in model output";
+                eval.failureReason = "Choice does not map to a valid candidate color";
                 return eval;
             }
 
@@ -589,10 +596,9 @@ namespace VRPerception.Tasks
             }
         }
 
-        private static bool TryExtractAnswer(object answer, out string choice, out int[] rgb)
+        private static bool TryExtractAnswer(object answer, out string choice)
         {
             choice = null;
-            rgb = null;
             if (answer == null) return false;
 
             try
@@ -605,27 +611,17 @@ namespace VRPerception.Tasks
                     if (!string.IsNullOrEmpty(v)) choice = v.Trim();
                 }
 
-                var rgbProp = t.GetProperty("rgb", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
-                if (rgbProp != null)
-                {
-                    if (TryConvertToIntArray(rgbProp.GetValue(answer), out var arr))
-                    {
-                        rgb = arr;
-                    }
-                }
-
-                if (!string.IsNullOrEmpty(choice) || rgb != null) return true;
+                if (!string.IsNullOrEmpty(choice)) return true;
 
                 var json = JsonUtility.ToJson(answer);
                 if (!string.IsNullOrEmpty(json))
                 {
-                    var parsed = JsonUtility.FromJson<ColorChoiceAnswer>(json);
-                    if (parsed != null)
-                    {
-                        if (!string.IsNullOrEmpty(parsed.choice)) choice = parsed.choice;
-                        if (parsed.rgb != null && parsed.rgb.Length >= 3) rgb = parsed.rgb;
-                        return !string.IsNullOrEmpty(choice) || rgb != null;
-                    }
+                        var parsed = JsonUtility.FromJson<ColorChoiceAnswer>(json);
+                        if (parsed != null)
+                        {
+                            if (!string.IsNullOrEmpty(parsed.choice)) choice = parsed.choice;
+                            return !string.IsNullOrEmpty(choice);
+                        }
                 }
             }
             catch
@@ -636,10 +632,9 @@ namespace VRPerception.Tasks
             return false;
         }
 
-        private static bool TryExtractFromText(string text, out string choice, out int[] rgb)
+        private static bool TryExtractFromText(string text, out string choice)
         {
             choice = null;
-            rgb = null;
             if (string.IsNullOrEmpty(text)) return false;
 
             var mChoice = Regex.Match(text, "\"?choice\"?\\s*[:=]\\s*\"?([A-Za-z])\"?");
@@ -653,53 +648,13 @@ namespace VRPerception.Tasks
                 if (mLetter.Success) choice = mLetter.Groups[1].Value;
             }
 
-            var mRgb = Regex.Match(text, @"\[\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\]");
-            if (mRgb.Success)
-            {
-                if (int.TryParse(mRgb.Groups[1].Value, out var r) &&
-                    int.TryParse(mRgb.Groups[2].Value, out var g) &&
-                    int.TryParse(mRgb.Groups[3].Value, out var b))
-                {
-                    rgb = new[] { r, g, b };
-                }
-            }
-
-            return !string.IsNullOrEmpty(choice) || rgb != null;
-        }
-
-        private static bool TryConvertToIntArray(object value, out int[] arr)
-        {
-            arr = null;
-            if (value == null) return false;
-
-            switch (value)
-            {
-                case int[] ia:
-                    arr = ia;
-                    return true;
-                case System.Collections.IEnumerable enumerable:
-                    var tmp = new List<int>();
-                    foreach (var v in enumerable)
-                    {
-                        if (v == null) continue;
-                        if (int.TryParse(v.ToString(), out var iv)) tmp.Add(iv);
-                    }
-                    if (tmp.Count > 0)
-                    {
-                        arr = tmp.ToArray();
-                        return true;
-                    }
-                    break;
-            }
-
-            return false;
+            return !string.IsNullOrEmpty(choice);
         }
 
         [Serializable]
         private class ColorChoiceAnswer
         {
             public string choice;
-            public int[] rgb;
             public float confidence;
         }
 
