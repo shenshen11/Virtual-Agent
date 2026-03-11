@@ -59,7 +59,7 @@ namespace VRPerception.Perception
         {
             return "You are a participant in a controlled perception experiment. " +
                    "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
-                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "You may receive one or more snapshots captured within the same trial from slightly different viewpoints. Use all provided snapshots jointly as evidence. Do NOT output any action_plan or tool calls. " +
                    "Output must be STRICT JSON and must match the exact schema given in the user message. " +
                    "Do not include any extra text outside the JSON. " +
                    "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
@@ -68,11 +68,11 @@ namespace VRPerception.Perception
         private static string DistanceCompressionSystem()
         {
             return "You are a participant in a controlled VR distance perception experiment. " +
-                   "Answer ONLY using information visible in the provided image. Do not use outside knowledge. " +
-                   "You get a single snapshot. Do NOT output any action_plan or tool calls. " +
+                   "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
+                   "You may receive one or more snapshots captured within the same trial from slightly different viewpoints. Use all provided snapshots jointly as evidence. Do NOT output any action_plan or tool calls. " +
                    "Output must be STRICT JSON and must match the exact schema provided in the user message. " +
                    "Do not include any extra text outside the JSON. " +
-                   "If the image is missing or unclear, output valid=false and confidence=0.0 in the required JSON schema.";
+                   "If the image(s) are missing or unclear, output valid=false and confidence=0.0 in the required JSON schema.";
         }
 
         private static string SemanticSizeBiasSystem()
@@ -98,7 +98,7 @@ namespace VRPerception.Perception
         {
             return "You are a participant in a controlled VR relative depth discrimination experiment. " +
                    "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
-                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "You may receive one or more snapshots captured within the same trial from slightly different viewpoints. Use all provided snapshots jointly as evidence. Do NOT output any action_plan or tool calls. " +
                    "Output must be STRICT JSON and must match the exact schema given in the user message. " +
                    "Do not include any extra text outside the JSON. " +
                    "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
@@ -108,7 +108,7 @@ namespace VRPerception.Perception
         {
             return "You are a participant in a controlled VR visual change detection experiment. " +
                    "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
-                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "You may receive one or more snapshots captured within the same trial from slightly different viewpoints. Use all provided snapshots jointly as evidence. Do NOT output any action_plan or tool calls. " +
                    "Output must be STRICT JSON and must match the exact schema given in the user message. " +
                    "Do not include any extra text outside the JSON. " +
                    "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
@@ -129,7 +129,7 @@ namespace VRPerception.Perception
         {
             return "You are a participant in a controlled VR material perception experiment. " +
                    "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
-                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "You may receive one or more snapshots captured within the same trial from slightly different viewpoints. Use all provided snapshots jointly as evidence. Do NOT output any action_plan or tool calls. " +
                    "Output must be STRICT JSON and must match the exact schema given in the user message. " +
                    "Do not include any extra text outside the JSON. " +
                    "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
@@ -149,7 +149,7 @@ namespace VRPerception.Perception
         {
             return "You are a participant in a controlled VR color perception experiment. " +
                    "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
-                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "You may receive one or more snapshots captured within the same trial from slightly different viewpoints. Use all provided snapshots jointly as evidence. Do NOT output any action_plan or tool calls. " +
                    "Output must be STRICT JSON and must match the exact schema given in the user message. " +
                    "Do not include any extra text outside the JSON. " +
                    "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
@@ -189,7 +189,7 @@ namespace VRPerception.Perception
         {
             return "You are a participant in a controlled VR peripheral vision experiment. " +
                    "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
-                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "You may receive one or more snapshots captured within the same trial from slightly different viewpoints. Use all provided snapshots jointly as evidence. Do NOT output any action_plan or tool calls. " +
                    "Output must be STRICT JSON and must match the exact schema given in the user message. " +
                    "Do not include any extra text outside the JSON. " +
                    "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
@@ -199,7 +199,7 @@ namespace VRPerception.Perception
         {
             return "You are a participant in a controlled VR numerosity perception experiment. " +
                    "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
-                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "You may receive one or more snapshots captured within the same trial from slightly different viewpoints. Use all provided snapshots jointly as evidence. Do NOT output any action_plan or tool calls. " +
                    "Output must be STRICT JSON and must match the exact schema given in the user message. " +
                    "Do not include any extra text outside the JSON. " +
                    "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
@@ -209,7 +209,7 @@ namespace VRPerception.Perception
         {
             return "You are a participant in a controlled VR horizon cue integration experiment. " +
                    "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge. " +
-                   "You get a single snapshot of each image. Do NOT output any action_plan or tool calls. " +
+                   "You may receive one or more snapshots captured within the same trial from slightly different viewpoints. Use all provided snapshots jointly as evidence. Do NOT output any action_plan or tool calls. " +
                    "Output must be STRICT JSON and must match the exact schema given in the user message. " +
                    "Do not include any extra text outside the JSON. " +
                    "If the image(s) are missing, unclear, or the task cannot be completed, output valid=false and confidence=0.0 in the required JSON schema.";
@@ -269,7 +269,9 @@ namespace VRPerception.Perception
             return
                 $"Trial metadata: {{\"task\":\"depth_jnd_staircase\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
                 "Two identical objects are shown in the same frame: A on the left and B on the right. Choose which object is closer to the camera.\n" +
-                $"Output STRICT JSON exactly in this schema: {{\"task\":\"depth_jnd_staircase\",\"trial_id\":\"{id}\",\"response\":{{\"closer\":\"A\"|\"B\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
+                "If multiple snapshots are provided, treat them as complementary views of the same trial and return one final judgment.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"depth_jnd_staircase\",\"trial_id\":\"{id}\",\"response\":{{\"closer\":\"<A_or_B>\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}. " +
+                "Set response.closer to exactly \"A\" or \"B\". Do not output \"|\" or placeholder text.";
         }
 
         public static string BuildVisualCrowdingPrompt(float eccentricityDeg, float spacingDeg, string targetLetter, string[] flankers, int trialId)
@@ -287,7 +289,10 @@ namespace VRPerception.Perception
             return
                 $"Trial metadata: {{\"task\":\"change_detection\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
                 "The image shows two sub-scenes in the same frame: A on the left (before) and B on the right (after). Decide whether any change occurred from A to B. If changed, classify the change as one of: appearance, disappearance, movement, replacement. If no change, report category as none.\n" +
-                $"Output STRICT JSON exactly in this schema: {{\"task\":\"change_detection\",\"trial_id\":\"{id}\",\"response\":{{\"changed\":true|false,\"category\":\"appearance\"|\"disappearance\"|\"movement\"|\"replacement\"|\"none\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
+                "If multiple snapshots are provided, each snapshot keeps the same left=A and right=B definition; aggregate evidence across snapshots and return one final judgment.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"change_detection\",\"trial_id\":\"{id}\",\"response\":{{\"changed\":<bool>,\"category\":\"<category>\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}. " +
+                "Set response.changed to true or false. Set response.category to exactly one of: \"appearance\", \"disappearance\", \"movement\", \"replacement\", \"none\". " +
+                "Do not output \"|\" or placeholder text.";
         }
 
         public static string BuildOcclusionReasoningPrompt(string targetCategory, string occluderType, float occlusionRatio, string background, float fovDeg)
@@ -373,7 +378,7 @@ namespace VRPerception.Perception
             return
                 $"Trial metadata: {{\"task\":\"color_constancy_adjustment\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
                 "Choose the labeled ball that appears most neutral gray under the current lighting.\n" +
-                $"Output STRICT JSON exactly in this schema: {{\"task\":\"color_constancy_adjustment\",\"trial_id\":\"{id}\",\"response\":{{\"choice\":\"<letter>\",\"rgb\":[<R>,<G>,<B>]}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"color_constancy_adjustment\",\"trial_id\":\"{id}\",\"response\":{{\"choice\":\"<letter>\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
         }
 
         public static string BuildNumerosityComparisonPrompt(float fovDeg, int trialId)
@@ -382,7 +387,8 @@ namespace VRPerception.Perception
             return
                 $"Trial metadata: {{\"task\":\"numerosity_comparison\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
                 "The scene is split into left and right halves, each containing a set of similar items. Decide which side has more items at a glance; do not count one-by-one.\n" +
-                $"Output STRICT JSON exactly in this schema: {{\"task\":\"numerosity_comparison\",\"trial_id\":\"{id}\",\"response\":{{\"more_side\":\"left\"|\"right\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"numerosity_comparison\",\"trial_id\":\"{id}\",\"response\":{{\"more_side\":\"<left_or_right>\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}. " +
+                "Set response.more_side to exactly \"left\" or \"right\". Do not output \"|\" or placeholder text.";
         }
 
         public static string BuildMaterialPerceptionPrompt(string targetKind, string background, string lighting, float yawDeg)

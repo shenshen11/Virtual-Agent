@@ -333,6 +333,18 @@ namespace VRPerception.Perception
                     var newFormat = JsonUtility.FromJson<NewFormatResponse>(jsonContent);
                     if (newFormat != null && newFormat.response != null)
                     {
+                        var resolvedConfidence = newFormat.confidence;
+                        if (resolvedConfidence <= 0f && newFormat.response.confidence > 0f)
+                        {
+                            resolvedConfidence = newFormat.response.confidence;
+                            Debug.LogWarning($"[AnthropicProvider] task={request.taskId} trial={request.trialId}: top-level confidence missing/zero, fallback to response.confidence={resolvedConfidence}");
+                        }
+
+                        if (!newFormat.valid && newFormat.response.valid)
+                        {
+                            Debug.LogWarning($"[AnthropicProvider] task={request.taskId} trial={request.trialId}: top-level valid missing/false, detected response.valid=true");
+                        }
+
                         // 保留模型输出的 JSON 原文，便于排查字段映射
                         newFormat.response.raw_json = jsonContent;
                         return new LLMResponse
@@ -341,7 +353,7 @@ namespace VRPerception.Perception
                             taskId = request.taskId,
                             trialId = request.trialId,
                             answer = newFormat.response,
-                            confidence = newFormat.confidence,
+                            confidence = resolvedConfidence,
                             latencyMs = latencyMs
                         };
                     }
@@ -352,14 +364,21 @@ namespace VRPerception.Perception
                 }
             }
 
+            Debug.LogWarning($"[AnthropicProvider] task={request.taskId} trial={request.trialId}: inference JSON parse failed, falling back to raw_content");
             return new LLMResponse
             {
                 type = "inference",
                 taskId = request.taskId,
                 trialId = request.trialId,
-                answer = new { raw_content = content },
+                answer = new RawContentAnswer { raw_content = content },
                 latencyMs = latencyMs
             };
+        }
+
+        [Serializable]
+        private class RawContentAnswer
+        {
+            public string raw_content;
         }
     }
     
