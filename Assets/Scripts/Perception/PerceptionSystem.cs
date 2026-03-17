@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,6 +22,10 @@ namespace VRPerception.Perception
         [SerializeField] private int maxConcurrentRequests = 3;
         [SerializeField] private bool enableThrottling = true;
         [SerializeField] private int requestTimeoutMs = 30000;
+
+        [Header("Video Payload")]
+        [SerializeField] private string ffmpegExecutable = "ffmpeg";
+        [SerializeField] private bool keepVideoPayloadSourceFrames = false;
         
         [Header("Event Bus")]
         [SerializeField] private EventBusManager eventBus;
@@ -203,14 +206,14 @@ namespace VRPerception.Perception
             try
             {
                 // 1. 抓帧
-                var frames = await CaptureFramesAsync(request, cancellationToken);
-                if (frames == null || frames.Count == 0)
+                var capturePayload = await CapturePayloadAsync(request, cancellationToken);
+                if (capturePayload == null || !capturePayload.HasContent)
                 {
-                    throw new InvalidOperationException("Frame capture failed");
+                    throw new InvalidOperationException("Capture payload assembly failed");
                 }
                 
                 // 2. 构建LLM请求
-                var llmRequest = BuildLLMRequest(request, frames);
+                var llmRequest = BuildLLMRequest(request, capturePayload);
                 
                 // 3. 调用LLM Provider
                 var response = await providerRouter.RouteRequestAsync(llmRequest, cancellationToken);
@@ -229,7 +232,30 @@ namespace VRPerception.Perception
         /// <summary>
         /// 抓帧
         /// </summary>
-        private async Task<List<FrameCapturedEventData>> CaptureFramesAsync(PerceptionRequest request, CancellationToken cancellationToken)
+        private async Task<CapturePayload> CapturePayloadAsync(PerceptionRequest request, CancellationToken cancellationToken)
+        {
+            var options = request.CaptureOptions ?? new FrameCaptureOptions();
+            return options.captureMode switch
+            {
+                CaptureMode.MultiImage => await CaptureMultiImagePayloadAsync(request, cancellationToken),
+                CaptureMode.Video => await CaptureVideoPayloadAsync(request, cancellationToken),
+                _ => await CaptureSingleImagePayloadAsync(request, cancellationToken)
+            };
+        }
+
+        private async Task<CapturePayload> CaptureSingleImagePayloadAsync(PerceptionRequest request, CancellationToken cancellationToken)
+        {
+            var perFrameTimeoutMs = Math.Max(5000, requestTimeoutMs);
+            _lastCaptureTime = Time.time;
+            var frame = await CaptureSingleFrameAsync(request, cancellationToken, perFrameTimeoutMs);
+            return new CapturePayload
+            {
+                PayloadMode = PayloadMode.Image,
+                SingleFrame = frame
+            };
+        }
+
+        private async Task<CapturePayload> CaptureMultiImagePayloadAsync(PerceptionRequest request, CancellationToken cancellationToken)
         {
             if (stimulusCapture == null)
             {
@@ -295,7 +321,94 @@ namespace VRPerception.Perception
                 }
             }
 
-            return captured;
+            return new CapturePayload
+            {
+                PayloadMode = captured.Count > 1 ? PayloadMode.Images : PayloadMode.Image,
+                SingleFrame = captured.Count > 0 ? captured[0] : null,
+                Frames = captured
+            };
+        }
+
+        private async Task<CapturePayload> CaptureVideoPayloadAsync(PerceptionRequest request, CancellationToken cancellationToken)
+        {
+            if (stimulusCapture == null)
+            {
+                throw new InvalidOperationException("StimulusCapture not available");
+            }
+
+            var options = request.CaptureOptions ?? new FrameCaptureOptions();
+            var fps = Mathf.Max(1, options.videoFps);
+            var durationMs = Mathf.Max(200, options.videoDurationMs);
+            var frameCount = Mathf.Max(2, Mathf.RoundToInt(fps * durationMs / 1000f));
+            var perFrameTimeoutMs = Math.Max(5000, 5000 + Mathf.Max(0, options.scanSettleMs));
+            var totalTimeoutMs = Math.Max(requestTimeoutMs, perFrameTimeoutMs * frameCount);
+            var captured = new List<FrameCapturedEventData>(frameCount);
+
+            var camera = stimulusCapture.HeadCamera;
+            var cameraTransform = camera != null ? camera.transform : null;
+            var scanRoot = cameraTransform != null
+                ? (cameraTransform.parent != null ? cameraTransform.parent : cameraTransform)
+                : null;
+            var originalScanLocalRotation = scanRoot != null ? scanRoot.localRotation : Quaternion.identity;
+            var targetIntervalMs = Math.Max(1, Mathf.RoundToInt(1000f / fps));
+            var startTime = DateTime.UtcNow;
+
+            using var totalTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            totalTimeoutCts.CancelAfter(totalTimeoutMs);
+
+            try
+            {
+                for (int i = 0; i < frameCount; i++)
+                {
+                    var targetElapsedMs = i * targetIntervalMs;
+                    var elapsedMs = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                    var delayMs = Mathf.Max(0, Mathf.RoundToInt((float)(targetElapsedMs - elapsedMs)));
+                    if (delayMs > 0)
+                    {
+                        await Task.Delay(delayMs, totalTimeoutCts.Token);
+                    }
+
+                    if (scanRoot != null)
+                    {
+                        var t = frameCount <= 1 ? 0f : (float)i / (frameCount - 1);
+                        var yaw = Mathf.Lerp(-Mathf.Max(0f, options.scanYawRangeDeg), Mathf.Max(0f, options.scanYawRangeDeg), t);
+                        var pitch = Mathf.Lerp(-Mathf.Max(0f, options.scanPitchRangeDeg), Mathf.Max(0f, options.scanPitchRangeDeg), t);
+                        scanRoot.localRotation = originalScanLocalRotation * Quaternion.Euler(pitch, yaw, 0f);
+                        await Task.Yield();
+                    }
+
+                    _lastCaptureTime = Time.time;
+                    captured.Add(await CaptureSingleFrameAsync(request, totalTimeoutCts.Token, perFrameTimeoutMs));
+                }
+            }
+            finally
+            {
+                if (scanRoot != null)
+                {
+                    scanRoot.localRotation = originalScanLocalRotation;
+                }
+            }
+
+            var videoPayload = await VideoPayloadBuilder.BuildFromFramesAsync(
+                request.RequestId,
+                captured,
+                fps,
+                options.format,
+                options.videoFormat,
+                ffmpegExecutable,
+                keepVideoPayloadSourceFrames,
+                totalTimeoutCts.Token);
+
+            return new CapturePayload
+            {
+                PayloadMode = PayloadMode.Video,
+                SingleFrame = captured.Count > 0 ? captured[0] : null,
+                Frames = options.includeKeyframes ? SelectKeyframes(captured, options.keyframeCount) : null,
+                VideoBase64 = videoPayload.base64,
+                VideoMimeType = videoPayload.mimeType,
+                VideoFps = fps,
+                VideoDurationMs = durationMs
+            };
         }
 
         private async Task<FrameCapturedEventData> CaptureSingleFrameAsync(PerceptionRequest request, CancellationToken cancellationToken, int timeoutMs)
@@ -320,7 +433,18 @@ namespace VRPerception.Perception
             if (completed == tcs.Task)
             {
                 timeoutCts.Cancel();
-                return tcs.Task.Result;
+                var frame = tcs.Task.Result;
+                if (frame == null)
+                {
+                    throw new InvalidOperationException("Frame capture returned null data");
+                }
+
+                if (!frame.success || string.IsNullOrEmpty(frame.imageBase64))
+                {
+                    throw new InvalidOperationException(string.IsNullOrEmpty(frame.errorMessage) ? "Frame capture failed" : frame.errorMessage);
+                }
+
+                return frame;
             }
 
             try { eventBus.FrameCaptured.Unsubscribe(OnFrameCaptured); } catch { }
@@ -358,16 +482,20 @@ namespace VRPerception.Perception
         /// <summary>
         /// 构建LLM请求
         /// </summary>
-        private LLMRequest BuildLLMRequest(PerceptionRequest request, List<FrameCapturedEventData> frames)
+        private LLMRequest BuildLLMRequest(PerceptionRequest request, CapturePayload capturePayload)
         {
-            var first = frames[0];
-            var images = new string[frames.Count];
-            var metadataList = new FrameMetadata[frames.Count];
+            var frames = capturePayload.Frames ?? (capturePayload.SingleFrame != null ? new List<FrameCapturedEventData> { capturePayload.SingleFrame } : new List<FrameCapturedEventData>());
+            var first = capturePayload.SingleFrame ?? (frames.Count > 0 ? frames[0] : null);
+            var images = frames.Count > 0 ? new string[frames.Count] : null;
+            var metadataList = frames.Count > 0 ? new FrameMetadata[frames.Count] : null;
             for (int i = 0; i < frames.Count; i++)
             {
                 images[i] = frames[i]?.imageBase64;
-                metadataList[i] = frames[i]?.metadata;
+                metadataList[i] = EnrichMetadata(frames[i]?.metadata, request.CaptureOptions, capturePayload.PayloadMode);
             }
+
+            var shouldSendImageList = capturePayload.PayloadMode == PayloadMode.Images
+                || (capturePayload.PayloadMode == PayloadMode.Video && images != null && images.Length > 0);
 
             return new LLMRequest
             {
@@ -376,13 +504,53 @@ namespace VRPerception.Perception
                 trialId = request.TrialId,
                 systemPrompt = request.SystemPrompt ?? GetDefaultSystemPrompt(request.TaskId),
                 taskPrompt = request.TaskPrompt ?? GetDefaultTaskPrompt(request.TaskId, request.TrialId),
-                imageBase64 = first?.imageBase64,
-                imagesBase64 = images,
-                metadata = first?.metadata,
+                payloadMode = capturePayload.PayloadMode,
+                imageBase64 = capturePayload.PayloadMode == PayloadMode.Image ? first?.imageBase64 : null,
+                imagesBase64 = shouldSendImageList ? images : null,
+                videoBase64 = capturePayload.VideoBase64,
+                videoMimeType = capturePayload.VideoMimeType,
+                videoFps = capturePayload.VideoFps,
+                videoDurationMs = capturePayload.VideoDurationMs,
+                metadata = EnrichMetadata(first?.metadata, request.CaptureOptions, capturePayload.PayloadMode),
                 metadataList = metadataList,
                 tools = request.Tools ?? GetDefaultTools(request.TaskId),
                 timeoutMs = requestTimeoutMs
             };
+        }
+
+        private static List<FrameCapturedEventData> SelectKeyframes(List<FrameCapturedEventData> frames, int requestedCount)
+        {
+            if (frames == null || frames.Count == 0)
+            {
+                return null;
+            }
+
+            var count = requestedCount > 0 ? Mathf.Min(requestedCount, frames.Count) : frames.Count;
+            if (count >= frames.Count)
+            {
+                return new List<FrameCapturedEventData>(frames);
+            }
+
+            var selected = new List<FrameCapturedEventData>(count);
+            for (int i = 0; i < count; i++)
+            {
+                var index = Mathf.RoundToInt(i * (frames.Count - 1f) / Mathf.Max(1, count - 1));
+                selected.Add(frames[index]);
+            }
+
+            return selected;
+        }
+
+        private static FrameMetadata EnrichMetadata(FrameMetadata metadata, FrameCaptureOptions options, PayloadMode payloadMode)
+        {
+            if (metadata?.meta == null)
+            {
+                return metadata;
+            }
+
+            metadata.meta.captureMode = (options?.captureMode ?? CaptureMode.SingleImage).ToString();
+            metadata.meta.payloadMode = payloadMode.ToString();
+            return metadata;
         }
         
         /// <summary>
@@ -499,5 +667,24 @@ namespace VRPerception.Perception
         public string SystemPrompt { get; set; }
         public string TaskPrompt { get; set; }
         public ToolSpec[] Tools { get; set; }
+    }
+
+    internal sealed class CapturePayload
+    {
+        public PayloadMode PayloadMode { get; set; }
+        public FrameCapturedEventData SingleFrame { get; set; }
+        public List<FrameCapturedEventData> Frames { get; set; }
+        public string VideoBase64 { get; set; }
+        public string VideoMimeType { get; set; }
+        public int VideoFps { get; set; }
+        public int VideoDurationMs { get; set; }
+
+        public bool HasContent =>
+            PayloadMode switch
+            {
+                PayloadMode.Video => !string.IsNullOrEmpty(VideoBase64),
+                PayloadMode.Images => Frames != null && Frames.Count > 0,
+                _ => SingleFrame != null && !string.IsNullOrEmpty(SingleFrame.imageBase64)
+            };
     }
 }
