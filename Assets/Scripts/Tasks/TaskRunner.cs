@@ -15,6 +15,13 @@ namespace VRPerception.Tasks
     /// </summary>
     public class TaskRunner : MonoBehaviour
     {
+        private enum MllmCaptureMode
+        {
+            Single,
+            MultiFrame,
+            Video
+        }
+
         [Serializable]
         public class TaskRunConfig
         {
@@ -46,16 +53,22 @@ namespace VRPerception.Tasks
         [SerializeField] private int humanInputTimeoutMs = 0; // 0 = 无限等待
 
         [Header("MLLM Capture")]
-        [Tooltip("MLLM 抓帧数量：1=单帧，>1=多帧随机扫描")]
+        [Tooltip("MLLM 采集模式：单帧、多帧离散采样、连续视频")]
+        [SerializeField] private MllmCaptureMode mllmCaptureMode = MllmCaptureMode.Single;
+        [Tooltip("MLLM 抓帧数量：多帧模式下使用")]
         [SerializeField] private int mllmFrameCount = 1;
-        [Tooltip("MLLM 水平随机扫描范围（度），实际为 ±该值")]
+        [Tooltip("MLLM 水平扫描范围（度），实际为 ±该值")]
         [SerializeField] private float mllmScanYawRangeDeg = 4f;
-        [Tooltip("MLLM 俯仰随机扫描范围（度），实际为 ±该值")]
+        [Tooltip("MLLM 俯仰扫描范围（度），实际为 ±该值")]
         [SerializeField] private float mllmScanPitchRangeDeg = 2f;
         [Tooltip("MLLM 每次转角后等待毫秒数，减小运动模糊")]
         [SerializeField] private int mllmScanSettleMs = 30;
         [Tooltip("MLLM 扫描随机种子；0 表示自动派生")]
         [SerializeField] private int mllmScanSeed = 0;
+        [Tooltip("MLLM 视频采样帧率")]
+        [SerializeField] private int mllmVideoFps = 10;
+        [Tooltip("MLLM 视频采样时长（毫秒）")]
+        [SerializeField] private int mllmVideoDurationMs = 1500;
 
         [Header("Subject")]
         [Tooltip("当前回合被试模式（Human 模式将由 UI 采集人类答案）")]
@@ -201,20 +214,28 @@ namespace VRPerception.Tasks
 
                     if (subjectMode == SubjectMode.MLLM)
                     {
+                        var captureMode = ResolveCaptureMode();
+                        var trajectoryMode = ResolveTrajectoryMode(captureMode);
+
                         // 一次推理
                         var captureOptions = new FrameCaptureOptions
                         {
+                            captureMode = captureMode,
+                            trajectoryMode = trajectoryMode,
                             fov = trial.fovDeg > 0 ? trial.fovDeg : 60f,
                             width = 1280,
                             height = 720,
                             format = "jpeg",
                             quality = 75,
                             includeMetadata = true,
-                            frameCount = Mathf.Max(1, mllmFrameCount),
+                            frameCount = captureMode == CaptureMode.SingleImage ? 1 : Mathf.Max(1, mllmFrameCount),
                             scanYawRangeDeg = Mathf.Max(0f, mllmScanYawRangeDeg),
                             scanPitchRangeDeg = Mathf.Max(0f, mllmScanPitchRangeDeg),
                             scanSettleMs = Mathf.Max(0, mllmScanSettleMs),
-                            scanSeed = mllmScanSeed
+                            scanSeed = mllmScanSeed,
+                            videoFps = Mathf.Max(1, mllmVideoFps),
+                            videoDurationMs = Mathf.Max(200, mllmVideoDurationMs),
+                            videoFormat = "mp4"
                         };
 
                         // 进入处理阶段（模型推理中）
@@ -348,6 +369,27 @@ namespace VRPerception.Tasks
         {
             _runCts?.Cancel();
         }
+
+        private CaptureMode ResolveCaptureMode()
+        {
+            return mllmCaptureMode switch
+            {
+                MllmCaptureMode.MultiFrame => CaptureMode.MultiImage,
+                MllmCaptureMode.Video => CaptureMode.Video,
+                _ => CaptureMode.SingleImage
+            };
+        }
+
+        private static CaptureTrajectoryMode ResolveTrajectoryMode(CaptureMode captureMode)
+        {
+            return captureMode switch
+            {
+                CaptureMode.MultiImage => CaptureTrajectoryMode.RandomJitter,
+                CaptureMode.Video => CaptureTrajectoryMode.Sweep,
+                _ => CaptureTrajectoryMode.Fixed
+            };
+        }
+
         public void ApplyRunConfig(TaskRunConfig config)
         {
             if (config == null) return;

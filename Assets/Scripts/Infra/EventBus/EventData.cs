@@ -22,8 +22,29 @@ namespace VRPerception.Infra.EventBus
     /// 帧捕获选项
     /// </summary>
     [Serializable]
+    public enum CaptureMode
+    {
+        SingleImage,
+        MultiImage,
+        Video
+    }
+
+    [Serializable]
+    public enum CaptureTrajectoryMode
+    {
+        Fixed,
+        RandomJitter,
+        Sweep
+    }
+
+    /// <summary>
+    /// 帧捕获选项
+    /// </summary>
+    [Serializable]
     public class FrameCaptureOptions
     {
+        public CaptureMode captureMode = CaptureMode.SingleImage;
+        public CaptureTrajectoryMode trajectoryMode = CaptureTrajectoryMode.Fixed;
         public int width = 1280;
         public int height = 720;
         public float fov = 60f;
@@ -36,6 +57,11 @@ namespace VRPerception.Infra.EventBus
         public float scanPitchRangeDeg = 0f; // MLLM: 俯仰随机扫描范围（±）
         public int scanSettleMs = 0; // MLLM: 每次变更角度后的稳定等待
         public int scanSeed = 0; // MLLM: 0 表示使用 request/trial 派生种子
+        public int videoFps = 10;
+        public int videoDurationMs = 1500;
+        public string videoFormat = "mp4";
+        public bool includeKeyframes = false;
+        public int keyframeCount = 0;
     }
     
     /// <summary>

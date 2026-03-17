@@ -151,6 +151,7 @@ namespace VRPerception.Perception
                 var originalTargetTexture = headCamera.targetTexture;
                 
                 // 应用捕获设置
+                var effectiveFov = options.fov > 0 ? options.fov : originalFOV;
                 if (options.fov > 0)
                 {
                     headCamera.fieldOfView = options.fov;
@@ -188,7 +189,7 @@ namespace VRPerception.Perception
                 var imageBase64 = Convert.ToBase64String(imageBytes);
                 
                 // 收集元数据
-                var metadata = CollectMetadata(taskId, trialId, options);
+                var metadata = CollectMetadata(taskId, trialId, options, effectiveFov);
                 
                 // 清理资源
                 DestroyImmediate(texture2D);
@@ -230,7 +231,7 @@ namespace VRPerception.Perception
         /// <summary>
         /// 收集元数据
         /// </summary>
-        private FrameMetadata CollectMetadata(string taskId, int trialId, FrameCaptureOptions options)
+        private FrameMetadata CollectMetadata(string taskId, int trialId, FrameCaptureOptions options, float effectiveFov)
         {
             var cameraTransform = headCamera.transform;
             
@@ -239,7 +240,7 @@ namespace VRPerception.Perception
                 timestamp = DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds,
                 camera = new CameraInfo
                 {
-                    fov = headCamera.fieldOfView,
+                    fov = effectiveFov,
                     resolution = new int[] { options.width, options.height },
                     pose = new PoseInfo
                     {
@@ -254,7 +255,8 @@ namespace VRPerception.Perception
                     seed = UnityEngine.Random.seed,
                     fpsCap = (int)(1f / Time.fixedDeltaTime),
                     transport = "event_bus",
-                    provider = "stimulus_capture"
+                    provider = "stimulus_capture",
+                    captureMode = (options?.captureMode ?? CaptureMode.SingleImage).ToString()
                 }
             };
         }

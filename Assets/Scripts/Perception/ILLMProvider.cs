@@ -5,6 +5,13 @@ using UnityEngine;
 
 namespace VRPerception.Perception
 {
+    public enum PayloadMode
+    {
+        Image,
+        Images,
+        Video
+    }
+
     /// <summary>
     /// LLM Provider 抽象接口，统一不同后端的推理调用
     /// </summary>
@@ -50,8 +57,13 @@ namespace VRPerception.Perception
         public int trialId;
         public string systemPrompt;
         public string taskPrompt;
+        public PayloadMode payloadMode = PayloadMode.Image;
         public string imageBase64;
         public string[] imagesBase64;
+        public string videoBase64;
+        public string videoMimeType;
+        public int videoFps;
+        public int videoDurationMs;
         public FrameMetadata metadata;
         public FrameMetadata[] metadataList;
         public ToolSpec[] tools;
@@ -135,6 +147,8 @@ namespace VRPerception.Perception
         public int fpsCap;
         public string transport;
         public string provider;
+        public string captureMode;
+        public string payloadMode;
     }
 
     /// <summary>
