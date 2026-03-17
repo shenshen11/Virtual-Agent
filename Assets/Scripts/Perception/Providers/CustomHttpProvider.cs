@@ -138,8 +138,13 @@ namespace VRPerception.Perception
                 trialId = request.trialId,
                 systemPrompt = request.systemPrompt,
                 taskPrompt = request.taskPrompt,
+                payloadMode = request.payloadMode.ToString(),
                 imageBase64 = request.imageBase64,
                 imagesBase64 = request.imagesBase64,
+                videoBase64 = request.videoBase64,
+                videoMimeType = request.videoMimeType,
+                videoFps = request.videoFps,
+                videoDurationMs = request.videoDurationMs,
                 metadata = request.metadata,
                 metadataList = request.metadataList,
                 tools = request.tools,
@@ -190,8 +195,13 @@ namespace VRPerception.Perception
         public int trialId;
         public string systemPrompt;
         public string taskPrompt;
+        public string payloadMode;
         public string imageBase64;
         public string[] imagesBase64;
+        public string videoBase64;
+        public string videoMimeType;
+        public int videoFps;
+        public int videoDurationMs;
         public FrameMetadata metadata;
         public FrameMetadata[] metadataList;
         public ToolSpec[] tools;

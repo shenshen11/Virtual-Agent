@@ -68,7 +68,8 @@ namespace VRPerception.Perception
                 var jsonBody = BuildRequestJson(request);
 #if UNITY_EDITOR
                 var imageCount = GetRequestImages(request).Length;
-                Debug.Log($"[OpenAIProvider] POST {_endpoint} model={_model} max_tokens={request.maxTokens} image_count={imageCount} tools={(request.tools?.Length ?? 0)}");
+                var hasVideo = !string.IsNullOrEmpty(request?.videoBase64);
+                Debug.Log($"[OpenAIProvider] POST {_endpoint} model={_model} payload={request?.payloadMode} max_tokens={request.maxTokens} image_count={imageCount} has_video={hasVideo} tools={(request.tools?.Length ?? 0)}");
 #endif
                 using var webRequest = new UnityWebRequest(_endpoint, "POST");
                 webRequest.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(jsonBody));
@@ -236,7 +237,8 @@ namespace VRPerception.Perception
 
             // user
             var images = GetRequestImages(request);
-            if (images.Length == 0)
+            var hasVideo = request != null && request.payloadMode == PayloadMode.Video && !string.IsNullOrEmpty(request.videoBase64);
+            if (images.Length == 0 && !hasVideo)
             {
                 if (!first) sb.Append(',');
                 sb.Append("{\"role\":\"user\",\"content\":\"")
@@ -262,6 +264,15 @@ namespace VRPerception.Perception
                       .Append(JsonEscape(images[i] ?? string.Empty))
                       .Append("\"}}");
                     needComma = true;
+                }
+                if (hasVideo)
+                {
+                    if (needComma) sb.Append(',');
+                    sb.Append("{\"type\":\"input_video\",\"input_video\":{\"data\":\"")
+                      .Append(JsonEscape(request.videoBase64))
+                      .Append("\",\"mime_type\":\"")
+                      .Append(JsonEscape(string.IsNullOrEmpty(request.videoMimeType) ? "video/mp4" : request.videoMimeType))
+                      .Append("\"}}");
                 }
                 sb.Append("]}");
             }

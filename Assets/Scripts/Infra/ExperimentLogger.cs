@@ -44,14 +44,10 @@ namespace VRPerception.Infra
         {
             if (eventBus == null) eventBus = EventBusManager.Instance;
 
-            var root = Path.Combine(Application.persistentDataPath, rootFolderName);
-            Directory.CreateDirectory(root);
-
-            var session = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-            _sessionDir = Path.Combine(root, session);
+            var session = LogSessionPaths.GetOrCreateSessionId(rootFolderName);
+            _sessionDir = LogSessionPaths.GetOrCreateSessionDirectory(rootFolderName);
             _imagesDir = Path.Combine(_sessionDir, "images");
             Directory.CreateDirectory(_sessionDir);
-            Directory.CreateDirectory(_imagesDir);
 
             _jsonlPath = Path.Combine(_sessionDir, jsonlFileName);
 
@@ -217,11 +213,13 @@ namespace VRPerception.Infra
         private void OnFrameCaptured(FrameCapturedEventData data)
         {
             if (!saveScreenshots || data == null || !data.success) return;
+            if (IsVideoCapture(data)) return;
 
             try
             {
                 if (string.IsNullOrEmpty(data.imageBase64)) return;
                 var bytes = Convert.FromBase64String(data.imageBase64);
+                Directory.CreateDirectory(_imagesDir);
 
                 var safeTask = string.IsNullOrEmpty(data.taskId) ? "unknown" : data.taskId;
                 var file = $"{safeTask}_{data.trialId}_{data.timestamp:yyyyMMdd_HHmmssfff}.jpg";
@@ -245,6 +243,14 @@ namespace VRPerception.Infra
             {
                 Debug.LogWarning($"[ExperimentLogger] Save screenshot failed: {ex.Message}");
             }
+        }
+
+        private static bool IsVideoCapture(FrameCapturedEventData data)
+        {
+            return string.Equals(
+                data?.metadata?.meta?.captureMode,
+                CaptureMode.Video.ToString(),
+                StringComparison.OrdinalIgnoreCase);
         }
 
         // ============ JSONL Buffering ============

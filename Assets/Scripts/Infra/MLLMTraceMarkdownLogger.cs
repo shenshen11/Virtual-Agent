@@ -49,12 +49,8 @@ namespace VRPerception.Infra
             if (providerRouter == null) providerRouter = FindObjectOfType<ProviderRouter>();
 
             // 每次会话独立目录，避免不同运行混杂
-            var root = Path.Combine(Application.persistentDataPath, rootFolderName);
-            Directory.CreateDirectory(root);
-
-            var session = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-            _sessionDir = Path.Combine(root, session);
-            Directory.CreateDirectory(_sessionDir);
+            var session = LogSessionPaths.GetOrCreateSessionId(rootFolderName);
+            _sessionDir = LogSessionPaths.GetOrCreateSessionDirectory(rootFolderName);
 
             _tracePath = Path.Combine(_sessionDir, fileName);
             AppendLines(
