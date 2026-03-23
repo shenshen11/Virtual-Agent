@@ -51,6 +51,16 @@ namespace VRPerception.Tasks
     }
 
     /// <summary>
+    /// 可选：需要显式控制时序呈现的任务。
+    /// 用于 A -> mask -> B 这类先播放刺激、再采集人类/MLLM 判断的任务。
+    /// </summary>
+    public interface ITemporalInferenceTask
+    {
+        Task RunTemporalHumanPresentationAsync(TrialSpec trial, CancellationToken ct);
+        Task<LLMResponse> RunTemporalMllmInferenceAsync(TrialSpec trial, CancellationToken ct);
+    }
+
+    /// <summary>
     /// 通用试次规格（不同任务可扩展其字段）
     /// </summary>
     [Serializable]

@@ -43,6 +43,10 @@ namespace VRPerception.UI
         // material_roughness*
         private float _roughness = 0.5f;
 
+        // change_detection
+        private int _changeDetectedIndex = 1; // 0=no, 1=yes
+        private int _changeCategoryIndex = 0; // 0=appearance,1=disappearance,2=movement,3=replacement
+
         // shared
         private float _confidence = 0.9f;
         private Vector2 _scroll;
@@ -103,6 +107,8 @@ namespace VRPerception.UI
                 _distanceText = "10.0";
                 _largerIndex = 0;
                 _roughness = 0.5f;
+                _changeDetectedIndex = 1;
+                _changeCategoryIndex = 0;
                 _confidence = 0.9f;
             }
             else if (data.state == TrialLifecycleState.Completed ||
@@ -186,9 +192,39 @@ namespace VRPerception.UI
                     SubmitRoughness(Mathf.Clamp01(_roughness), Mathf.Clamp01(_confidence));
                 }
             }
+            else if (string.Equals(_taskId, "change_detection", StringComparison.OrdinalIgnoreCase))
+            {
+                GUILayout.Label("是否发生变化:");
+                _changeDetectedIndex = GUILayout.Toolbar(_changeDetectedIndex, new[] { "否", "是" });
+                GUILayout.Space(4);
+
+                if (_changeDetectedIndex == 1)
+                {
+                    GUILayout.Label("变化类别:");
+                    _changeCategoryIndex = GUILayout.Toolbar(_changeCategoryIndex, new[] { "appearance", "disappearance", "movement", "replacement" });
+                    GUILayout.Space(4);
+                }
+                else
+                {
+                    GUILayout.Label("变化类别: none");
+                    GUILayout.Space(4);
+                }
+
+                DrawConfidence();
+                GUILayout.Space(6);
+
+                if (GUILayout.Button("提交答案", GUILayout.Height(26)))
+                {
+                    var changed = _changeDetectedIndex == 1;
+                    var category = changed
+                        ? new[] { "appearance", "disappearance", "movement", "replacement" }[_changeCategoryIndex]
+                        : "none";
+                    SubmitChangeDetection(changed, category, Mathf.Clamp01(_confidence));
+                }
+            }
             else
             {
-                GUILayout.Label("该组件仅支持 distance_compression / semantic_size_bias / material_roughness*。");
+                GUILayout.Label("该组件仅支持 distance_compression / semantic_size_bias / material_roughness* / change_detection。");
                 if (GUILayout.Button("关闭", GUILayout.Height(24)))
                 {
                     _awaitingInput = false;
@@ -249,6 +285,27 @@ namespace VRPerception.UI
                 confidence = conf,
                 latencyMs = 0,
                 answer = new RoughnessAnswer { roughness = roughness, confidence = conf }
+            };
+
+            PublishInference(response);
+        }
+
+        private void SubmitChangeDetection(bool changed, string category, float conf)
+        {
+            var response = new LLMResponse
+            {
+                type = "inference",
+                taskId = _taskId,
+                trialId = _trialId,
+                providerId = "human",
+                confidence = conf,
+                latencyMs = 0,
+                answer = new ChangeDetectionAnswer
+                {
+                    changed = changed,
+                    category = changed ? category : "none",
+                    confidence = conf
+                }
             };
 
             PublishInference(response);
@@ -326,6 +383,14 @@ namespace VRPerception.UI
         private class RoughnessAnswer
         {
             public float roughness;
+            public float confidence;
+        }
+
+        [Serializable]
+        private class ChangeDetectionAnswer
+        {
+            public bool changed;
+            public string category;
             public float confidence;
         }
     }

@@ -288,8 +288,8 @@ namespace VRPerception.Perception
             var id = trialId.ToString(CultureInfo.InvariantCulture);
             return
                 $"Trial metadata: {{\"task\":\"change_detection\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
-                "The image shows two sub-scenes in the same frame: A on the left (before) and B on the right (after). Decide whether any change occurred from A to B. If changed, classify the change as one of: appearance, disappearance, movement, replacement. If no change, report category as none.\n" +
-                "If multiple snapshots are provided, each snapshot keeps the same left=A and right=B definition; aggregate evidence across snapshots and return one final judgment.\n" +
+                "You are given two sequential views from the same viewpoint within one trial. The first image is scene A (before), then a brief mask occurred, then the second image is scene B (after). Decide whether any change occurred from A to B. If changed, classify the change as one of: appearance, disappearance, movement, replacement. If no change, report category as none.\n" +
+                "If two images are provided, interpret them strictly in temporal order: first=before, second=after. Aggregate evidence across the provided images and return one final judgment.\n" +
                 $"Output STRICT JSON exactly in this schema: {{\"task\":\"change_detection\",\"trial_id\":\"{id}\",\"response\":{{\"changed\":<bool>,\"category\":\"<category>\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}. " +
                 "Set response.changed to true or false. Set response.category to exactly one of: \"appearance\", \"disappearance\", \"movement\", \"replacement\", \"none\". " +
                 "Do not output \"|\" or placeholder text.";

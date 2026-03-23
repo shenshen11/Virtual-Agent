@@ -5,36 +5,72 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using VRPerception.Infra.EventBus;
 using VRPerception.Perception;
+using VRPerception.UI;
 
 namespace VRPerception.Tasks
 {
     /// <summary>
     /// 变化检测任务（Change Detection）
-    /// - 同一帧中展示场景 A/B：左侧为 A（before），右侧为 B（after）
+    /// - 单场景时序：A -> mask -> B
+    /// - 人类与 MLLM 共享相同的时序呈现；MLLM 额外抓取 before/after 两帧作为输入
     /// - 目标：判断是否发生变化，并给出变化类别（appearance/disappearance/movement/replacement/none）
-    /// - 对应文档场景 8：变化检测（Change Detection）
     /// </summary>
-    public class ChangeDetectionTask : ITask
+    public class ChangeDetectionTask : ITask, ITemporalInferenceTask
     {
         public string TaskId => "change_detection";
+
+        private const string SceneObjectPrefix = "cd_";
+        private const int SceneRenderSettleFrames = 5;
+        private const int SceneRenderSettleDelayMs = 50;
+        private const int SceneAExposureMs = 1000;
+        private const int MaskDurationMs = 500;
+        private const int SceneBExposureMs = 1000;
+        private const float ClusterDistance = 9f;
 
         private TaskRunnerContext _ctx;
         private System.Random _rand = new System.Random(1234);
 
         private ExperimentSceneManager _scene;
         private ObjectPlacer _placer;
+        private TrialBlackoutOverlay _blackoutOverlay;
 
-        // Phase 1: 高对比度颜色池，用于区分不同物体
-        private static readonly Color[] s_objectColors = new Color[]
+        // 统一灰色材质（去掉颜色线索，迫使依赖空间/形状检测变化）
+        private static readonly Color s_grayColor = new Color(0.5f, 0.5f, 0.5f);
+
+        // 空间层级名称（front/middle/back 实际深度 = ClusterDistance + z偏移）
+        private static readonly string[] s_layerNames = { "front", "middle", "back" };
+
+        // 形状池（每层 2 个物体，共 6 个，预分配不同形状）
+        private static readonly string[] s_shapePool = { "cube", "sphere", "cylinder", "capsule", "cube", "sphere" };
+
+        // 大小池：front=0.65、middle=0.62、back=0.78（back层加大补偿透视缩小）
+        private static readonly float[] s_scalePool = { 0.65f, 0.65f, 0.62f, 0.62f, 0.78f, 0.78f };
+
+        // movement 视角等比偏移量（每层按深度缩放，保持约 12° 视觉跳变）
+        // 实际深度：front≈6.5m, middle≈9m, back≈12m；Δx = depth × tan(12°) ≈ depth × 0.213
+        private static readonly float[] s_movementDeltaX = { 1.38f, 1.92f, 2.55f };
+
+        private static readonly string[] s_changeCategories = { "appearance", "disappearance", "movement", "replacement" };
+
+        // 三层物体偏移（相对 sceneCenter）：
+        //   每层两个物体关于 x=0 对称；z 偏移决定层深度（ClusterDistance=9m）
+        //   front:  实际深度 ≈ 6.5m，横向间距 2.2m
+        //   middle: 实际深度 ≈ 9.0m，横向间距 2.4m
+        //   back:   实际深度 ≈ 12.0m，横向间距 2.6m
+        private static readonly Vector3[][] s_layerOffsets =
         {
-            new Color(1.0f, 0.2f, 0.2f),   // 红色
-            new Color(0.2f, 0.5f, 1.0f),   // 蓝色
-            new Color(0.2f, 0.9f, 0.3f),   // 绿色
-            new Color(1.0f, 0.9f, 0.2f),   // 黄色
-            new Color(0.7f, 0.2f, 0.9f),   // 紫色
-            new Color(1.0f, 0.6f, 0.1f),   // 橙色
+            new[] { new Vector3(-1.10f, 0f, -2.5f), new Vector3(+1.10f, 0f, -2.5f) }, // front
+            new[] { new Vector3(-1.20f, 0f,  0.0f), new Vector3(+1.20f, 0f,  0.0f) }, // middle
+            new[] { new Vector3(-1.30f, 0f, +3.0f), new Vector3(+1.30f, 0f, +3.0f) }, // back
         };
+
+        private Vector3 _sceneCenter;
+        private Vector3 _sceneForward;
+        private Vector3 _sceneRight;
+        private float _sceneGroundY;
+        private bool _sceneAnchorReady;
 
         public ChangeDetectionTask(TaskRunnerContext ctx)
         {
@@ -64,36 +100,43 @@ namespace VRPerception.Tasks
 
             var backgrounds = new[] { "none", "indoor", "street" };
             var fovs = new[] { 60f };
-            var categories = new[] { "none", "appearance", "disappearance", "movement", "replacement" };
-            var textures = new[] { 0.5f, 1.0f, 1.5f };
 
             var trials = new List<TrialSpec>();
-            int texIndex = 0;
 
-            // 简单均衡设计：背景 × FOV × 变化类别
             foreach (var bg in backgrounds)
             {
                 foreach (var fov in fovs)
                 {
-                    foreach (var cat in categories)
+                    // none 类别：无层级
+                    trials.Add(new TrialSpec
                     {
-                        bool changed = !string.Equals(cat, "none", StringComparison.OrdinalIgnoreCase);
-                        var lighting = BackgroundToLighting(bg);
-                        var tex = textures[texIndex % textures.Length];
-                        texIndex++;
+                        taskId = TaskId,
+                        environment = "open_field",
+                        background = bg,
+                        fovDeg = fov,
+                        lighting = BackgroundToLighting(bg),
+                        occlusion = false,
+                        changed = false,
+                        changeCategory = "none"
+                    });
 
-                        trials.Add(new TrialSpec
+                    // 其他类别 × 空间层级
+                    foreach (var cat in s_changeCategories)
+                    {
+                        foreach (var layer in s_layerNames)
                         {
-                            taskId = TaskId,
-                            environment = "open_field",
-                            background = bg,
-                            fovDeg = fov,
-                            textureDensity = tex,
-                            lighting = lighting,
-                            occlusion = false,
-                            changed = changed,
-                            changeCategory = cat
-                        });
+                            trials.Add(new TrialSpec
+                            {
+                                taskId = TaskId,
+                                environment = "open_field",
+                                background = bg,
+                                fovDeg = fov,
+                                lighting = BackgroundToLighting(bg),
+                                occlusion = false,
+                                changed = true,
+                                changeCategory = $"{cat}_{layer}"
+                            });
+                        }
                     }
                 }
             }
@@ -109,8 +152,8 @@ namespace VRPerception.Tasks
 
         public ToolSpec[] GetTools()
         {
-            // 可根据需要启用动作闭环（snapshot/head_look_at/focus_target）
-            return PromptTemplates.GetToolsForChangeDetection();
+            // 变化检测为纯推理任务：模型直接看 before/after 双帧作答，不需要工具调用
+            return null;
         }
 
         public string BuildTaskPrompt(TrialSpec trial)
@@ -137,39 +180,47 @@ namespace VRPerception.Tasks
             var fov = trial.fovDeg > 0 ? trial.fovDeg : 60f;
             _ctx?.stimulus?.SetCameraFOV(fov);
 
-            // 同一帧中布置 A/B 两个子场景（左右并排）
-            PlaceChangeScene(trial);
+            PrepareSceneAnchor();
+            PlaceSceneA();
 
-            // 等待渲染完成（关键修复：确保物体完全渲染后再抓帧）
-            await WaitForRenderingComplete();
-        }
-
-        /// <summary>
-        /// 等待渲染完成
-        /// 确保物体完全渲染后再进行抓帧操作
-        /// </summary>
-        private async System.Threading.Tasks.Task WaitForRenderingComplete()
-        {
-            // 等待至少5帧，确保物体完全渲染
-            for (int i = 0; i < 5; i++)
-            {
-                await System.Threading.Tasks.Task.Yield();
-            }
+            // 等待渲染完成（确保物体完全渲染后再进入 A->mask->B 时序）
+            await WaitForRenderingComplete(ct);
         }
 
         public async Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
         {
-            if (_placer != null)
+            HideBlackout();
+            ClearChangeScene();
+            _sceneAnchorReady = false;
+            await Task.Yield();
+        }
+
+        public async Task RunTemporalHumanPresentationAsync(TrialSpec trial, CancellationToken ct)
+        {
+            await RunTemporalSequenceAsync(trial, captureFrames: false, ct);
+            ShowBlackout();
+        }
+
+        public async Task<LLMResponse> RunTemporalMllmInferenceAsync(TrialSpec trial, CancellationToken ct)
+        {
+            var frames = await RunTemporalSequenceAsync(trial, captureFrames: true, ct);
+            if (_ctx?.perception == null)
             {
-                _placer.ClearAll();
-            }
-            else
-            {
-                TryDestroyByPrefix("cd_A_");
-                TryDestroyByPrefix("cd_B_");
+                throw new InvalidOperationException("PerceptionSystem not available for change_detection temporal inference.");
             }
 
-            await Task.Yield();
+            HideBlackout();
+
+            return await _ctx.perception.RequestInferenceFromFramesAsync(
+                trial.taskId,
+                trial.trialId,
+                GetSystemPrompt(),
+                BuildTaskPrompt(trial),
+                GetTools(),
+                frames,
+                CreateCaptureOptions(trial, "temporal_pair"),
+                ct
+            );
         }
 
         public TrialEvaluation Evaluate(TrialSpec trial, LLMResponse response)
@@ -180,9 +231,12 @@ namespace VRPerception.Tasks
                 providerId = response?.providerId,
                 latencyMs = response?.latencyMs ?? 0,
                 confidence = response?.confidence ?? 0,
-                trueChanged = trial.changed,
-                trueChangeCategory = string.IsNullOrEmpty(trial.changeCategory) ? "none" : trial.changeCategory
+                trueChanged = trial.changed
             };
+
+            // 从复合编码中提取纯 category（模型只需回答 category，不需要回答 layer）
+            ParseCategoryAndLayer(trial.changeCategory, out var trueCategory, out _);
+            eval.trueChangeCategory = string.IsNullOrEmpty(trueCategory) ? "none" : trueCategory;
 
             bool hasPrediction = false;
             bool predictedChanged = false;
@@ -244,127 +298,284 @@ namespace VRPerception.Tasks
 
             if (_scene == null) _scene = UnityEngine.Object.FindObjectOfType<ExperimentSceneManager>();
             if (_placer == null) _placer = UnityEngine.Object.FindObjectOfType<ObjectPlacer>();
+            if (_blackoutOverlay == null) _blackoutOverlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
         }
 
-        private void PlaceChangeScene(TrialSpec trial)
+        private async Task<List<FrameCapturedEventData>> RunTemporalSequenceAsync(TrialSpec trial, bool captureFrames, CancellationToken ct)
         {
+            TryBindHelpers();
+            PrepareSceneAnchor();
+            HideBlackout();
+
+            await WaitForRenderingComplete(ct);
+
+            List<FrameCapturedEventData> frames = captureFrames ? new List<FrameCapturedEventData>(2) : null;
+
+            if (captureFrames)
+            {
+                frames.Add(await CaptureCurrentFrameAsync(trial, "before", ct));
+            }
+
+            if (SceneAExposureMs > 0)
+            {
+                await Task.Delay(SceneAExposureMs, ct);
+            }
+
+            ShowBlackout();
+            ApplySceneB(trial);
+            await WaitForRenderingComplete(ct);
+
+            if (MaskDurationMs > 0)
+            {
+                await Task.Delay(MaskDurationMs, ct);
+            }
+
+            HideBlackout();
+            await WaitForRenderingComplete(ct);
+
+            if (captureFrames)
+            {
+                frames.Add(await CaptureCurrentFrameAsync(trial, "after", ct));
+            }
+
+            if (SceneBExposureMs > 0)
+            {
+                await Task.Delay(SceneBExposureMs, ct);
+            }
+
+            return frames;
+        }
+
+        private async Task<FrameCapturedEventData> CaptureCurrentFrameAsync(TrialSpec trial, string label, CancellationToken ct)
+        {
+            if (_ctx?.perception == null)
+            {
+                throw new InvalidOperationException("PerceptionSystem not available for change_detection frame capture.");
+            }
+
+            return await _ctx.perception.CaptureFrameAsync(
+                trial.taskId,
+                trial.trialId,
+                CreateCaptureOptions(trial, label),
+                ct
+            );
+        }
+
+        private static FrameCaptureOptions CreateCaptureOptions(TrialSpec trial, string label)
+        {
+            return new FrameCaptureOptions
+            {
+                captureMode = CaptureMode.SingleImage,
+                trajectoryMode = CaptureTrajectoryMode.Fixed,
+                fov = trial.fovDeg > 0 ? trial.fovDeg : 60f,
+                width = 1280,
+                height = 720,
+                format = "jpeg",
+                quality = 75,
+                includeMetadata = true,
+                label = label
+            };
+        }
+
+        private async Task WaitForRenderingComplete(CancellationToken ct)
+        {
+            for (int i = 0; i < SceneRenderSettleFrames; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                await Task.Yield();
+            }
+
+            if (SceneRenderSettleDelayMs > 0)
+            {
+                await Task.Delay(SceneRenderSettleDelayMs, ct);
+            }
+        }
+
+        private void PrepareSceneAnchor()
+        {
+            if (_sceneAnchorReady) return;
+
             var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
-            if (cam == null) return;
+            if (cam == null)
+            {
+                throw new InvalidOperationException("No head camera available for change_detection.");
+            }
 
             var origin = cam.transform.position;
-            var forward = cam.transform.forward;
-            var right = cam.transform.right;
-
-            float baseDepth = 8f;
-            float clusterOffsetX = 2.5f;
-            float y = origin.y;
-
-            var centerA = origin + forward * baseDepth - right * clusterOffsetX;
-            var centerB = origin + forward * baseDepth + right * clusterOffsetX;
-            centerA.y = y;
-            centerB.y = y;
-
-            // 基准局部位置与形状（A 场景）
-            var baseLocals = new[]
+            _sceneForward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
+            if (_sceneForward.sqrMagnitude < 0.0001f)
             {
-                new Vector3(-0.6f, 0f, 0f),
-                new Vector3(0.6f, 0f, 0f),
-                new Vector3(0f, 0f, 0.8f)
-            };
-            var baseKinds = new[] { "cube", "cube", "cube" };
-
-            // A：始终使用基准配置
-            PlaceCluster("cd_A_", centerA, baseLocals, baseKinds, baseLocals.Length, forward, right, y);
-
-            // B：根据变化类别修改
-            string cat = string.IsNullOrEmpty(trial.changeCategory)
-                ? "none"
-                : trial.changeCategory.ToLowerInvariant();
-
-            var localsB = (Vector3[])baseLocals.Clone();
-            var kindsB = (string[])baseKinds.Clone();
-            int countB = baseLocals.Length;
-
-            switch (cat)
-            {
-                case "appearance":
-                    // 在 B 中新增一个物体
-                    localsB = new[]
-                    {
-                        baseLocals[0],
-                        baseLocals[1],
-                        baseLocals[2],
-                        new Vector3(0f, 0f, -0.8f)
-                    };
-                    kindsB = new[] { "cube", "cube", "cube", "cube" };
-                    countB = 4;
-                    break;
-
-                case "disappearance":
-                    // 在 B 中移除最后一个物体
-                    countB = 2;
-                    break;
-
-                case "movement":
-                    // 在 B 中将最后一个物体大幅横向移动（从0.9m增加到1.5m）
-                    localsB[2] = new Vector3(localsB[2].x + 1.5f, localsB[2].y, localsB[2].z);
-                    break;
-
-                case "replacement":
-                    // 在 B 中将最后一个物体替换为 sphere
-                    kindsB[2] = "sphere";
-                    break;
-
-                case "none":
-                default:
-                    // B 与 A 完全相同
-                    break;
+                _sceneForward = Vector3.forward;
             }
 
-            PlaceCluster("cd_B_", centerB, localsB, kindsB, countB, forward, right, y);
+            _sceneRight = Vector3.Cross(Vector3.up, _sceneForward).normalized;
+            _sceneGroundY = origin.y;
+            _sceneCenter = origin + _sceneForward * ClusterDistance;
+            _sceneCenter.y = _sceneGroundY;
+            _sceneAnchorReady = true;
         }
 
-        private void PlaceCluster(string prefix, Vector3 center, Vector3[] locals, string[] kinds, int count,
-            Vector3 forward, Vector3 right, float y)
+        private void PlaceSceneA()
         {
-            if (locals == null || kinds == null) return;
-            count = Mathf.Clamp(count, 0, Math.Min(locals.Length, kinds.Length));
+            ClearChangeScene();
+            PlaceLayeredCluster(SceneObjectPrefix, null, -1);
+        }
 
-            for (int i = 0; i < count; i++)
+        private void ApplySceneB(TrialSpec trial)
+        {
+            ClearChangeScene();
+            ParseCategoryAndLayer(trial.changeCategory, out var category, out var layer);
+            var targetLayerIdx = Array.IndexOf(s_layerNames, layer);
+            PlaceLayeredCluster(SceneObjectPrefix, category, targetLayerIdx);
+        }
+
+        /// <summary>
+        /// 放置三层物体群。changeCategory 和 targetLayerIdx 控制 B 场景的变化。
+        /// </summary>
+        private void PlaceLayeredCluster(string prefix, string changeCategory, int targetLayerIdx)
+        {
+            var grayMat = CreateObjectMaterial();
+            int objIdx = 0;
+
+            for (int li = 0; li < s_layerOffsets.Length; li++)
             {
-                var local = locals[i];
-                var pos = center + right * local.x + forward * local.z;
-                pos.y = y;
+                var offsets = s_layerOffsets[li];
+                bool isTargetLayer = (li == targetLayerIdx && !string.IsNullOrEmpty(changeCategory));
 
-                var kind = kinds[i] ?? "cube";
-                var name = $"{prefix}{i}";
-
-                // Phase 1: 为每个物体分配不同颜色
-                var color = s_objectColors[i % s_objectColors.Length];
-                var material = new Material(Shader.Find("Standard")) { color = color };
-
-                if (_placer != null)
+                for (int oi = 0; oi < offsets.Length; oi++)
                 {
-                    _placer.Place(kind, pos, 1.0f, material, name);
-                }
-                else
-                {
-                    var go = CreatePrimitiveForKind(kind);
-                    if (go != null)
+                    int baseIdx = objIdx;
+                    bool isChangeTarget = isTargetLayer && oi == 1; // 变化作用于每层第 2 个物体
+                    var local = offsets[oi];
+                    var kind = GetBaseKind(baseIdx);
+                    float objScale = GetBaseScale(baseIdx);
+
+                    if (isChangeTarget)
                     {
-                        go.name = name;
-                        go.transform.position = pos;
-                        go.transform.localScale = Vector3.one;
-
-                        // 应用颜色到材质
-                        var renderer = go.GetComponent<Renderer>();
-                        if (renderer != null && renderer.material != null)
+                        switch (changeCategory)
                         {
-                            renderer.material.color = color;
+                            case "disappearance":
+                                objIdx++;
+                                continue; // 跳过，不放置
+                            case "movement":
+                                // 按层深度等比缩放偏移，保持各层约 12° 视觉跳变
+                                var deltaX = li < s_movementDeltaX.Length ? s_movementDeltaX[li] : 1.92f;
+                                local = new Vector3(local.x + deltaX, local.y, local.z);
+                                break;
+                            case "replacement":
+                                kind = GetReplacementKind(baseIdx);
+                                break;
                         }
                     }
+
+                    var pos = _sceneCenter + _sceneRight * local.x + _sceneForward * local.z;
+                    pos.y = _sceneGroundY;
+                    var name = $"{prefix}{objIdx}";
+
+                    if (_placer != null)
+                    {
+                        var placed = _placer.Place(kind, pos, objScale, grayMat, name);
+                        AdjustShapeTransform(placed, kind, objScale, pos, _sceneGroundY);
+                    }
+                    else
+                    {
+                        var go = CreatePrimitiveForKind(kind);
+                        if (go != null)
+                        {
+                            go.name = name;
+                            AdjustShapeTransform(go, kind, objScale, pos, _sceneGroundY);
+                            var renderer = go.GetComponent<Renderer>();
+                            if (renderer != null) renderer.material = grayMat;
+                        }
+                    }
+                    objIdx++;
+                }
+
+                // appearance：在目标层两物体之间插入第 3 个物体（x=0，贴近该层深度）
+                if (isTargetLayer && changeCategory == "appearance")
+                {
+                    var extraLocal = new Vector3(0f, 0f, offsets[0].z + 0.15f);
+                    var pos = _sceneCenter + _sceneRight * extraLocal.x + _sceneForward * extraLocal.z;
+                    pos.y = _sceneGroundY;
+                    var name = $"{prefix}{objIdx}";
+                    const float extraScale = 0.58f;
+
+                    if (_placer != null)
+                    {
+                        var placed = _placer.Place("cylinder", pos, extraScale, grayMat, name);
+                        AdjustShapeTransform(placed, "cylinder", extraScale, pos, _sceneGroundY);
+                    }
+                    else
+                    {
+                        var go = CreatePrimitiveForKind("cylinder");
+                        if (go != null)
+                        {
+                            go.name = name;
+                            AdjustShapeTransform(go, "cylinder", extraScale, pos, _sceneGroundY);
+                            var renderer = go.GetComponent<Renderer>();
+                            if (renderer != null) renderer.material = grayMat;
+                        }
+                    }
+                    objIdx++;
                 }
             }
+        }
+
+        private static Material CreateObjectMaterial()
+        {
+            var mat = new Material(Shader.Find("Standard"))
+            {
+                color = s_grayColor
+            };
+            mat.SetFloat("_Glossiness", 0.12f);
+            return mat;
+        }
+
+        private static void AdjustShapeTransform(GameObject go, string kind, float baseScale, Vector3 basePos, float groundY)
+        {
+            if (go == null) return;
+
+            var scale = GetShapeScale(kind, baseScale);
+            var pos = basePos;
+            pos.y = groundY + scale.y * 0.5f;
+
+            go.transform.position = pos;
+            go.transform.localScale = scale;
+        }
+
+        private static Vector3 GetShapeScale(string kind, float baseScale)
+        {
+            var k = (kind ?? "cube").ToLowerInvariant();
+            return k switch
+            {
+                "sphere" => Vector3.one * (baseScale * 0.95f),
+                "cylinder" => new Vector3(baseScale * 0.78f, baseScale * 1.55f, baseScale * 0.78f),
+                "capsule" => new Vector3(baseScale * 0.82f, baseScale * 1.42f, baseScale * 0.82f),
+                _ => Vector3.one * baseScale
+            };
+        }
+
+        private static string GetBaseKind(int idx)
+        {
+            return s_shapePool[idx % s_shapePool.Length];
+        }
+
+        private static float GetBaseScale(int idx)
+        {
+            return s_scalePool[idx % s_scalePool.Length];
+        }
+
+        private static string GetReplacementKind(int idx)
+        {
+            var current = GetBaseKind(idx);
+            return current switch
+            {
+                "cube" => "sphere",
+                "sphere" => "cylinder",
+                "cylinder" => "capsule",
+                "capsule" => "cube",
+                _ => "sphere"
+            };
         }
 
         private static GameObject CreatePrimitiveForKind(string kind)
@@ -378,6 +589,23 @@ namespace VRPerception.Tasks
                 case "capsule": return GameObject.CreatePrimitive(PrimitiveType.Capsule);
                 default: return GameObject.CreatePrimitive(PrimitiveType.Cube);
             }
+        }
+
+        private void ClearChangeScene()
+        {
+            TryDestroyByPrefix(SceneObjectPrefix);
+        }
+
+        private void ShowBlackout()
+        {
+            TryBindHelpers();
+            _blackoutOverlay?.Show();
+        }
+
+        private void HideBlackout()
+        {
+            TryBindHelpers();
+            _blackoutOverlay?.Hide();
         }
 
         private static void TryDestroyByPrefix(string prefix)
@@ -422,6 +650,31 @@ namespace VRPerception.Tasks
                 "street" => "hdr",
                 _ => "bright"
             };
+        }
+
+        /// <summary>
+        /// 从复合编码 "category_layer" 中解析出纯 category 和 layer。
+        /// 例如 "movement_back" → category="movement", layer="back"；"none" → category="none", layer=null。
+        /// </summary>
+        private static void ParseCategoryAndLayer(string raw, out string category, out string layer)
+        {
+            category = "none";
+            layer = null;
+            if (string.IsNullOrEmpty(raw)) return;
+
+            var s = raw.Trim().ToLowerInvariant();
+            int idx = s.LastIndexOf('_');
+            if (idx > 0)
+            {
+                var suffix = s.Substring(idx + 1);
+                if (suffix == "front" || suffix == "middle" || suffix == "back")
+                {
+                    category = s.Substring(0, idx);
+                    layer = suffix;
+                    return;
+                }
+            }
+            category = s;
         }
 
         private static bool TryExtractChangeFromAnswer(object answer, out bool changed, out string category)

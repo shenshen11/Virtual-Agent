@@ -565,11 +565,12 @@ namespace VRPerception.Infra
                         // change_detection_summary.csv 字段说明：
                         // - taskId/trialId: 同上
                         // - background/fovDeg: 实验条件
-                        // - trueChanged/trueChangeCategory: 真值变化与类别
+                        // - changeLayer: 变化发生的空间层级（front/middle/back，none 时为空）
+                        // - trueChanged/trueChangeCategory: 真值变化与纯类别（不含 layer 后缀）
                         // - predictedChanged/predictedChangeCategory: 模型预测
                         // - isCorrect: 正确性（先比较 changed；若 changed=true 再比较类别）
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,background,fovDeg,trueChanged,trueChangeCategory,predictedChanged,predictedChangeCategory,isCorrect,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,background,fovDeg,changeLayer,trueChanged,trueChangeCategory,predictedChanged,predictedChangeCategory,isCorrect,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -578,13 +579,28 @@ namespace VRPerception.Infra
                             var e = r.evaluation;
 
                             var trueChanged = e.trueChanged;
+
+                            // 从 trial.changeCategory 解析层级和纯类别
+                            var changeLayer = "";
                             var trueCat = string.IsNullOrEmpty(e.trueChangeCategory) ? (t.changeCategory ?? "none") : e.trueChangeCategory;
+                            var fullCat = (t.changeCategory ?? "").Trim().ToLowerInvariant();
+                            var lastUnderscore = fullCat.LastIndexOf('_');
+                            if (lastUnderscore > 0)
+                            {
+                                var suffix = fullCat.Substring(lastUnderscore + 1);
+                                if (suffix == "front" || suffix == "middle" || suffix == "back")
+                                {
+                                    changeLayer = suffix;
+                                    trueCat = fullCat.Substring(0, lastUnderscore);
+                                }
+                            }
 
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
                                 r.trialId,
                                 Escape(t.background),
                                 t.fovDeg.ToString("F0"),
+                                Escape(changeLayer),
                                 trueChanged ? "1" : "0",
                                 Escape(trueCat),
                                 e.predictedChanged ? "1" : "0",

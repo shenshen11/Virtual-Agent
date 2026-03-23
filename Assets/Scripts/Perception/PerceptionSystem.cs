@@ -135,6 +135,79 @@ namespace VRPerception.Perception
 
             return await ProcessRequestAsync(request, cancellationToken);
         }
+
+        /// <summary>
+        /// 由任务自行控制时序后，主动抓取当前画面单帧。
+        /// </summary>
+        public async Task<FrameCapturedEventData> CaptureFrameAsync(string taskId, int trialId, FrameCaptureOptions captureOptions, CancellationToken cancellationToken = default)
+        {
+            var request = new PerceptionRequest
+            {
+                RequestId = GenerateRequestId(),
+                TaskId = taskId,
+                TrialId = trialId,
+                Requester = "TaskControlled",
+                CaptureOptions = captureOptions ?? new FrameCaptureOptions(),
+                Timestamp = DateTime.UtcNow
+            };
+
+            var timeoutMs = Math.Max(5000, requestTimeoutMs);
+            _lastCaptureTime = Time.time;
+            return await CaptureSingleFrameAsync(request, cancellationToken, timeoutMs);
+        }
+
+        /// <summary>
+        /// 使用已由任务准备好的帧直接发起一次推理。
+        /// </summary>
+        public async Task<LLMResponse> RequestInferenceFromFramesAsync(
+            string taskId,
+            int trialId,
+            string systemPrompt,
+            string taskPrompt,
+            ToolSpec[] tools,
+            IReadOnlyList<FrameCapturedEventData> frames,
+            FrameCaptureOptions captureOptions = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (frames == null || frames.Count == 0)
+            {
+                throw new ArgumentException("At least one frame is required", nameof(frames));
+            }
+
+            var request = new PerceptionRequest
+            {
+                RequestId = GenerateRequestId(),
+                TaskId = taskId,
+                TrialId = trialId,
+                Requester = "TaskControlled",
+                CaptureOptions = captureOptions ?? new FrameCaptureOptions(),
+                Timestamp = DateTime.UtcNow,
+                SystemPrompt = systemPrompt,
+                TaskPrompt = taskPrompt,
+                Tools = tools
+            };
+
+            _activeRequests[request.RequestId] = request;
+
+            try
+            {
+                var payload = new CapturePayload
+                {
+                    PayloadMode = frames.Count > 1 ? PayloadMode.Images : PayloadMode.Image,
+                    SingleFrame = frames[0],
+                    Frames = new List<FrameCapturedEventData>(frames)
+                };
+
+                var llmRequest = BuildLLMRequest(request, payload);
+                var response = await providerRouter.RouteRequestAsync(llmRequest, cancellationToken);
+                PublishResponse(request, response);
+                return response;
+            }
+            finally
+            {
+                _activeRequests.Remove(request.RequestId);
+            }
+        }
         
         /// <summary>
         /// 将请求加入队列

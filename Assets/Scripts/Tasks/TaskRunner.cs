@@ -214,42 +214,47 @@ namespace VRPerception.Tasks
 
                     if (subjectMode == SubjectMode.MLLM)
                     {
-                        var captureMode = ResolveCaptureMode();
-                        var trajectoryMode = ResolveTrajectoryMode(captureMode);
-
-                        // 一次推理
-                        var captureOptions = new FrameCaptureOptions
-                        {
-                            captureMode = captureMode,
-                            trajectoryMode = trajectoryMode,
-                            fov = trial.fovDeg > 0 ? trial.fovDeg : 60f,
-                            width = 1280,
-                            height = 720,
-                            format = "jpeg",
-                            quality = 75,
-                            includeMetadata = true,
-                            frameCount = captureMode == CaptureMode.SingleImage ? 1 : Mathf.Max(1, mllmFrameCount),
-                            scanYawRangeDeg = Mathf.Max(0f, mllmScanYawRangeDeg),
-                            scanPitchRangeDeg = Mathf.Max(0f, mllmScanPitchRangeDeg),
-                            scanSettleMs = Mathf.Max(0, mllmScanSettleMs),
-                            scanSeed = mllmScanSeed,
-                            videoFps = Mathf.Max(1, mllmVideoFps),
-                            videoDurationMs = Mathf.Max(200, mllmVideoDurationMs),
-                            videoFormat = "mp4"
-                        };
-
-                        // 进入处理阶段（模型推理中）
                         PublishTrialState(trial, TrialLifecycleState.Processing, trialConfig: trial);
 
-                        finalResponse = await perception.RequestInferenceAsync(
-                            trial.taskId,
-                            trial.trialId,
-                            _task.GetSystemPrompt(),
-                            _task.BuildTaskPrompt(trial),
-                            null,
-                            captureOptions,
-                            _runCts.Token
-                        );
+                        if (_task is ITemporalInferenceTask temporalTask)
+                        {
+                            finalResponse = await temporalTask.RunTemporalMllmInferenceAsync(trial, _runCts.Token);
+                        }
+                        else
+                        {
+                            var captureMode = ResolveCaptureMode();
+                            var trajectoryMode = ResolveTrajectoryMode(captureMode);
+
+                            var captureOptions = new FrameCaptureOptions
+                            {
+                                captureMode = captureMode,
+                                trajectoryMode = trajectoryMode,
+                                fov = trial.fovDeg > 0 ? trial.fovDeg : 60f,
+                                width = 1280,
+                                height = 720,
+                                format = "jpeg",
+                                quality = 75,
+                                includeMetadata = true,
+                                frameCount = captureMode == CaptureMode.SingleImage ? 1 : Mathf.Max(1, mllmFrameCount),
+                                scanYawRangeDeg = Mathf.Max(0f, mllmScanYawRangeDeg),
+                                scanPitchRangeDeg = Mathf.Max(0f, mllmScanPitchRangeDeg),
+                                scanSettleMs = Mathf.Max(0, mllmScanSettleMs),
+                                scanSeed = mllmScanSeed,
+                                videoFps = Mathf.Max(1, mllmVideoFps),
+                                videoDurationMs = Mathf.Max(200, mllmVideoDurationMs),
+                                videoFormat = "mp4"
+                            };
+
+                            finalResponse = await perception.RequestInferenceAsync(
+                                trial.taskId,
+                                trial.trialId,
+                                _task.GetSystemPrompt(),
+                                _task.BuildTaskPrompt(trial),
+                                null,
+                                captureOptions,
+                                _runCts.Token
+                            );
+                        }
 
                         // 若返回动作计划，进入一次闭环等待：等待下一次 inference
                         if (enableActionPlanLoop && finalResponse != null && finalResponse.type == "action_plan")
@@ -261,7 +266,11 @@ namespace VRPerception.Tasks
                     else
                     {
                         // Human 模式：等待必要的曝光/遮罩时序后，发布 WaitingForInput，UI 负责收集答案
-                        if (string.Equals(trial.taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
+                        if (_task is ITemporalInferenceTask temporalTask)
+                        {
+                            await temporalTask.RunTemporalHumanPresentationAsync(trial, _runCts.Token);
+                        }
+                        else if (string.Equals(trial.taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
                         {
                             // Numerosity: 先短时展示刺激，再进入“黑屏后作答”阶段
                             int exposureMs = Mathf.Clamp(Mathf.RoundToInt(trial.exposureDurationMs > 0 ? trial.exposureDurationMs : 500f), 0, 60000);
