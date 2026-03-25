@@ -48,9 +48,9 @@ namespace VRPerception.Tasks
         // 大小池：front=0.65、middle=0.62、back=0.78（back层加大补偿透视缩小）
         private static readonly float[] s_scalePool = { 0.65f, 0.65f, 0.62f, 0.62f, 0.78f, 0.78f };
 
-        // movement 视角等比偏移量（每层按深度缩放，保持约 12° 视觉跳变）
-        // 实际深度：front≈6.5m, middle≈9m, back≈12m；Δx = depth × tan(12°) ≈ depth × 0.213
-        private static readonly float[] s_movementDeltaX = { 1.38f, 1.92f, 2.55f };
+        // movement 视角等比偏移量（每层按深度缩放，保持轻微但仍可察觉的视觉跳变）
+        // 实际深度：front≈6.5m, middle≈9m, back≈12m；当前约对应 4.9° 的横向变化
+        private static readonly float[] s_movementDeltaX = { 0.56f, 0.78f, 1.03f };
 
         private static readonly string[] s_changeCategories = { "appearance", "disappearance", "movement", "replacement" };
 
@@ -117,7 +117,9 @@ namespace VRPerception.Tasks
                         lighting = BackgroundToLighting(bg),
                         occlusion = false,
                         changed = false,
-                        changeCategory = "none"
+                        changeCategory = "none",
+                        sceneVariantSeed = _rand.Next(),
+                        changeTargetObjectIndex = _rand.Next(0, 2)
                     });
 
                     // 其他类别 × 空间层级
@@ -134,7 +136,9 @@ namespace VRPerception.Tasks
                                 lighting = BackgroundToLighting(bg),
                                 occlusion = false,
                                 changed = true,
-                                changeCategory = $"{cat}_{layer}"
+                                changeCategory = $"{cat}_{layer}",
+                                sceneVariantSeed = _rand.Next(),
+                                changeTargetObjectIndex = _rand.Next(0, 2)
                             });
                         }
                     }
@@ -181,7 +185,7 @@ namespace VRPerception.Tasks
             _ctx?.stimulus?.SetCameraFOV(fov);
 
             PrepareSceneAnchor();
-            PlaceSceneA();
+            PlaceSceneA(trial);
 
             // 等待渲染完成（确保物体完全渲染后再进入 A->mask->B 时序）
             await WaitForRenderingComplete(ct);
@@ -189,7 +193,18 @@ namespace VRPerception.Tasks
 
         public async Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
         {
-            HideBlackout();
+            bool keepMaskedBetweenTrials = response == null ||
+                                           string.Equals(response.providerId, "human", StringComparison.OrdinalIgnoreCase);
+
+            if (keepMaskedBetweenTrials)
+            {
+                ShowBlackout();
+            }
+            else
+            {
+                HideBlackout();
+            }
+
             ClearChangeScene();
             _sceneAnchorReady = false;
             await Task.Yield();
@@ -198,7 +213,6 @@ namespace VRPerception.Tasks
         public async Task RunTemporalHumanPresentationAsync(TrialSpec trial, CancellationToken ct)
         {
             await RunTemporalSequenceAsync(trial, captureFrames: false, ct);
-            ShowBlackout();
         }
 
         public async Task<LLMResponse> RunTemporalMllmInferenceAsync(TrialSpec trial, CancellationToken ct)
@@ -415,10 +429,15 @@ namespace VRPerception.Tasks
             _sceneAnchorReady = true;
         }
 
-        private void PlaceSceneA()
+        private void PlaceSceneA(TrialSpec trial)
         {
             ClearChangeScene();
-            PlaceLayeredCluster(SceneObjectPrefix, null, -1);
+            PlaceLayeredCluster(
+                SceneObjectPrefix,
+                null,
+                -1,
+                trial != null ? trial.sceneVariantSeed : 0,
+                trial != null ? Mathf.Clamp(trial.changeTargetObjectIndex, 0, 1) : 0);
         }
 
         private void ApplySceneB(TrialSpec trial)
@@ -426,16 +445,22 @@ namespace VRPerception.Tasks
             ClearChangeScene();
             ParseCategoryAndLayer(trial.changeCategory, out var category, out var layer);
             var targetLayerIdx = Array.IndexOf(s_layerNames, layer);
-            PlaceLayeredCluster(SceneObjectPrefix, category, targetLayerIdx);
+            PlaceLayeredCluster(
+                SceneObjectPrefix,
+                category,
+                targetLayerIdx,
+                trial.sceneVariantSeed,
+                Mathf.Clamp(trial.changeTargetObjectIndex, 0, 1));
         }
 
         /// <summary>
         /// 放置三层物体群。changeCategory 和 targetLayerIdx 控制 B 场景的变化。
         /// </summary>
-        private void PlaceLayeredCluster(string prefix, string changeCategory, int targetLayerIdx)
+        private void PlaceLayeredCluster(string prefix, string changeCategory, int targetLayerIdx, int sceneVariantSeed, int changeTargetObjectIndex)
         {
             var grayMat = CreateObjectMaterial();
-            int objIdx = 0;
+            var shapePool = BuildShapePoolVariant(sceneVariantSeed);
+            int placedObjectIdx = 0;
 
             for (int li = 0; li < s_layerOffsets.Length; li++)
             {
@@ -444,18 +469,17 @@ namespace VRPerception.Tasks
 
                 for (int oi = 0; oi < offsets.Length; oi++)
                 {
-                    int baseIdx = objIdx;
-                    bool isChangeTarget = isTargetLayer && oi == 1; // 变化作用于每层第 2 个物体
+                    int slotIdx = li * offsets.Length + oi;
+                    bool isChangeTarget = isTargetLayer && oi == changeTargetObjectIndex;
                     var local = offsets[oi];
-                    var kind = GetBaseKind(baseIdx);
-                    float objScale = GetBaseScale(baseIdx);
+                    var kind = GetBaseKind(shapePool, slotIdx);
+                    float objScale = GetBaseScale(slotIdx);
 
                     if (isChangeTarget)
                     {
                         switch (changeCategory)
                         {
                             case "disappearance":
-                                objIdx++;
                                 continue; // 跳过，不放置
                             case "movement":
                                 // 按层深度等比缩放偏移，保持各层约 12° 视觉跳变
@@ -463,14 +487,14 @@ namespace VRPerception.Tasks
                                 local = new Vector3(local.x + deltaX, local.y, local.z);
                                 break;
                             case "replacement":
-                                kind = GetReplacementKind(baseIdx);
+                                kind = GetReplacementKind(shapePool, slotIdx);
                                 break;
                         }
                     }
 
                     var pos = _sceneCenter + _sceneRight * local.x + _sceneForward * local.z;
                     pos.y = _sceneGroundY;
-                    var name = $"{prefix}{objIdx}";
+                    var name = $"{prefix}{placedObjectIdx}";
 
                     if (_placer != null)
                     {
@@ -488,7 +512,7 @@ namespace VRPerception.Tasks
                             if (renderer != null) renderer.material = grayMat;
                         }
                     }
-                    objIdx++;
+                    placedObjectIdx++;
                 }
 
                 // appearance：在目标层两物体之间插入第 3 个物体（x=0，贴近该层深度）
@@ -497,7 +521,7 @@ namespace VRPerception.Tasks
                     var extraLocal = new Vector3(0f, 0f, offsets[0].z + 0.15f);
                     var pos = _sceneCenter + _sceneRight * extraLocal.x + _sceneForward * extraLocal.z;
                     pos.y = _sceneGroundY;
-                    var name = $"{prefix}{objIdx}";
+                    var name = $"{prefix}{placedObjectIdx}";
                     const float extraScale = 0.58f;
 
                     if (_placer != null)
@@ -516,7 +540,7 @@ namespace VRPerception.Tasks
                             if (renderer != null) renderer.material = grayMat;
                         }
                     }
-                    objIdx++;
+                    placedObjectIdx++;
                 }
             }
         }
@@ -549,8 +573,8 @@ namespace VRPerception.Tasks
             return k switch
             {
                 "sphere" => Vector3.one * (baseScale * 0.95f),
-                "cylinder" => new Vector3(baseScale * 0.78f, baseScale * 1.55f, baseScale * 0.78f),
-                "capsule" => new Vector3(baseScale * 0.82f, baseScale * 1.42f, baseScale * 0.82f),
+                "cylinder" => new Vector3(baseScale * 0.84f, baseScale * 0.76f, baseScale * 0.84f),
+                "capsule" => new Vector3(baseScale * 0.82f, baseScale * 0.80f, baseScale * 0.82f),
                 _ => Vector3.one * baseScale
             };
         }
@@ -558,6 +582,16 @@ namespace VRPerception.Tasks
         private static string GetBaseKind(int idx)
         {
             return s_shapePool[idx % s_shapePool.Length];
+        }
+
+        private static string GetBaseKind(IReadOnlyList<string> shapePool, int idx)
+        {
+            if (shapePool == null || shapePool.Count == 0)
+            {
+                return GetBaseKind(idx);
+            }
+
+            return shapePool[idx % shapePool.Count];
         }
 
         private static float GetBaseScale(int idx)
@@ -571,11 +605,38 @@ namespace VRPerception.Tasks
             return current switch
             {
                 "cube" => "sphere",
-                "sphere" => "cylinder",
+                "sphere" => "capsule",
                 "cylinder" => "capsule",
                 "capsule" => "cube",
                 _ => "sphere"
             };
+        }
+
+        private static string GetReplacementKind(IReadOnlyList<string> shapePool, int idx)
+        {
+            var current = GetBaseKind(shapePool, idx);
+            return current switch
+            {
+                "cube" => "sphere",
+                "sphere" => "capsule",
+                "cylinder" => "capsule",
+                "capsule" => "cube",
+                _ => "sphere"
+            };
+        }
+
+        private static string[] BuildShapePoolVariant(int seed)
+        {
+            var variant = (string[])s_shapePool.Clone();
+            var rand = new System.Random(seed);
+
+            for (int i = variant.Length - 1; i > 0; i--)
+            {
+                int j = rand.Next(i + 1);
+                (variant[i], variant[j]) = (variant[j], variant[i]);
+            }
+
+            return variant;
         }
 
         private static GameObject CreatePrimitiveForKind(string kind)

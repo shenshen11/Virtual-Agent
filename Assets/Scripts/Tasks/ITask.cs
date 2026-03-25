@@ -102,6 +102,8 @@ namespace VRPerception.Tasks
         // Change Detection 可能用到
         public bool changed;              // 场景是否发生变化（A->B）
         public string changeCategory;     // "appearance"|"disappearance"|"movement"|"replacement"|"none"
+        public int sceneVariantSeed;      // Scene A/B 共享的基线布局随机种子（如形状排列）
+        public int changeTargetObjectIndex; // 目标层内发生变化的对象索引（0 或 1）
 
         // Occlusion Reasoning & Counting 可能用到
         public float occlusionRatio;      // 遮挡率（0..0.8）
