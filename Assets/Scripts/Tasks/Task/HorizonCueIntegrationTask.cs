@@ -32,7 +32,6 @@ namespace VRPerception.Tasks
         private const int InterTrialBlackoutHoldMs = 600;
 
         private TaskRunnerContext _ctx;
-
         private GameObject _runtimeRoot;
         private Transform _environmentRig;
         private Transform _skySphere;
@@ -544,11 +543,17 @@ namespace VRPerception.Tasks
 
         private void CreateImprovedGradientSkybox()
         {
-            // 使用Unlit/Texture shader创建天空盒材质
-            var shader = Shader.Find("Unlit/Texture") ?? Shader.Find("Universal Render Pipeline/Unlit");
+            // Android/PICO 打包时，纯靠字符串查找的 shader 可能被裁剪。
+            // 这里优先选取内置管线和项目里更稳定可用的纹理 shader，避免天空球退回默认白材质。
+            var shader =
+                Shader.Find("Unlit/Texture") ??
+                Shader.Find("Sprites/Default") ??
+                Shader.Find("Mobile/Unlit (Supports Lightmap)") ??
+                Shader.Find("Standard") ??
+                Shader.Find("Universal Render Pipeline/Unlit");
             if (shader == null)
             {
-                Debug.LogError("[HorizonCueIntegrationTask] No suitable shader found");
+                Debug.LogError("[HorizonCueIntegrationTask] No suitable shader found for runtime sky material.");
                 return;
             }
 
@@ -602,7 +607,10 @@ namespace VRPerception.Tasks
             _runtimeSkyTexture.Apply(true, false);
 
             _runtimeSkyMaterial = new Material(shader);
-            _runtimeSkyMaterial.SetColor("_BaseColor", Color.white);
+
+            if (_runtimeSkyMaterial.HasProperty("_BaseColor")) _runtimeSkyMaterial.SetColor("_BaseColor", Color.white);
+            else if (_runtimeSkyMaterial.HasProperty("_Color")) _runtimeSkyMaterial.SetColor("_Color", Color.white);
+            else _runtimeSkyMaterial.color = Color.white;
 
             if (_runtimeSkyMaterial.HasProperty("_BaseMap"))
                 _runtimeSkyMaterial.SetTexture("_BaseMap", _runtimeSkyTexture);
@@ -615,7 +623,7 @@ namespace VRPerception.Tasks
             if (_runtimeSkyMaterial.HasProperty("_CullMode"))
                 _runtimeSkyMaterial.SetFloat("_CullMode", (float)CullMode.Off);
 
-            Debug.Log("[HorizonCueIntegrationTask] Using improved gradient skybox (2048x1024)");
+            Debug.Log($"[HorizonCueIntegrationTask] Using runtime sky material shader: {shader.name}");
         }
 
         private static bool TryExtractDistanceM(object answerObj, out float distanceM)
