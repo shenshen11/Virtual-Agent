@@ -15,7 +15,7 @@ namespace VRPerception.Tasks
     /// - Human/Model answers: {"type":"inference","answer":{"closer":"A|B"},"confidence":0..1}
     /// - Adaptive staircase (1-up / 2-down) updates Δd after each response.
     /// </summary>
-    public sealed class DepthJndStaircaseTask : ITask
+    public sealed class DepthJndStaircaseTask : ITask, ITaskRunLifecycle
     {
         public string TaskId => "depth_jnd_staircase";
 
@@ -24,6 +24,10 @@ namespace VRPerception.Tasks
 
         private ExperimentSceneManager _scene;
         private ObjectPlacer _placer;
+        private bool _referenceFrameInitialized;
+        private Vector3 _referenceOrigin;
+        private Vector3 _referenceForward;
+        private float _referenceEyeY;
 
         // ---- Staircase config (minimal hard-coded defaults) ----
         private const int DefaultMaxTrials = 60;
@@ -64,11 +68,33 @@ namespace VRPerception.Tasks
                     runner = runner,
                     eventBus = eventBus,
                     perception = runner ? runner.GetComponent<PerceptionSystem>() : null,
-                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null
+                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null,
+                    humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null
                 };
+            }
+            else if (_ctx.humanReferenceFrame == null)
+            {
+                _ctx.humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null;
             }
 
             TryBindHelpers();
+        }
+
+        public Task OnRunBeginAsync(CancellationToken ct)
+        {
+            TryBindHelpers();
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: true);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task OnRunEndAsync(CancellationToken ct)
+        {
+            _referenceFrameInitialized = false;
+            return Task.CompletedTask;
         }
 
         public TrialSpec[] BuildTrials(int seed)
@@ -139,6 +165,11 @@ namespace VRPerception.Tasks
             }
 
             _ctx?.stimulus?.SetCameraFOV(DefaultFovDeg);
+
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: false);
+            }
 
             ConfigureTrialDepths(trial);
             PlacePair(trial);
@@ -269,6 +300,25 @@ namespace VRPerception.Tasks
             _reversalDeltas.Clear();
         }
 
+        private void CaptureReferenceFrameIfNeeded(bool forceRefresh)
+        {
+            if (_referenceFrameInitialized && !forceRefresh) return;
+
+            var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
+            if (cam == null)
+            {
+                _referenceFrameInitialized = false;
+                return;
+            }
+
+            _referenceOrigin = cam.transform.position;
+            _referenceForward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = cam.transform.position.y;
+            _referenceFrameInitialized = true;
+        }
+
         private void ConfigureTrialDepths(TrialSpec trial)
         {
             float delta = Mathf.Clamp(_deltaM, DeltaMinM, DeltaMaxM);
@@ -297,15 +347,18 @@ namespace VRPerception.Tasks
             var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
             if (cam == null) return;
 
+            ResolvePlacementReference(cam, out var origin, out var forward, out var eyeY);
+
             float depthA = trial.depthA > 0 ? trial.depthA : 4.0f;
             float depthB = trial.depthB > 0 ? trial.depthB : 4.5f;
-
-            var origin = cam.transform.position;
-            var forward = cam.transform.forward;
-            var right = cam.transform.right;
+            var right = Vector3.Cross(Vector3.up, forward).normalized;
+            if (right.sqrMagnitude < 1e-6f)
+            {
+                right = Vector3.right;
+            }
 
             float horizontalOffset = 0.7f;
-            float y = origin.y;
+            float y = eyeY;
 
             var posA = origin + forward * depthA - right * horizontalOffset;
             var posB = origin + forward * depthB + right * horizontalOffset;
@@ -333,6 +386,44 @@ namespace VRPerception.Tasks
                 goA.transform.localScale = Vector3.one * scaleA;
                 goB.transform.localScale = Vector3.one * scaleB;
             }
+        }
+
+        private bool TryUseHumanSharedReferenceFrame()
+        {
+            if (!IsHumanMode()) return false;
+
+            var humanRef = _ctx?.humanReferenceFrame;
+            if (humanRef == null || !humanRef.HasReferenceFrame) return false;
+
+            _referenceOrigin = humanRef.Origin;
+            _referenceForward = humanRef.Forward;
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = humanRef.EyeY;
+            _referenceFrameInitialized = true;
+            return true;
+        }
+
+        private void ResolvePlacementReference(Camera cam, out Vector3 origin, out Vector3 forward, out float eyeY)
+        {
+            if (TryUseHumanSharedReferenceFrame())
+            {
+                origin = _referenceOrigin;
+                forward = _referenceForward;
+                eyeY = _referenceEyeY;
+                return;
+            }
+
+            origin = _referenceFrameInitialized ? _referenceOrigin : cam.transform.position;
+            forward = _referenceFrameInitialized ? _referenceForward : Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
+            forward.Normalize();
+            eyeY = _referenceFrameInitialized ? _referenceEyeY : cam.transform.position.y;
+        }
+
+        private bool IsHumanMode()
+        {
+            return _ctx?.runner != null && _ctx.runner.CurrentSubjectMode == SubjectMode.Human;
         }
 
         private bool UpdateStaircase(bool isCorrect, out string direction, out bool reversalHappened)
