@@ -433,7 +433,8 @@ namespace VRPerception.Tasks
             bool requiresCalibration =
                 string.Equals(task.TaskId, "distance_compression", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(task.TaskId, "horizon_cue_integration", StringComparison.OrdinalIgnoreCase);
+                string.Equals(task.TaskId, "horizon_cue_integration", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(task.TaskId, "visual_crowding", StringComparison.OrdinalIgnoreCase);
             if (!requiresCalibration) return;
             if (humanReferenceFrame == null) return;
 

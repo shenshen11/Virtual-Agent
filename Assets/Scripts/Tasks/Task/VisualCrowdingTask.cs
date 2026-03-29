@@ -15,7 +15,7 @@ namespace VRPerception.Tasks
     /// - 被试输出：{"type":"inference","answer":{"letter":"A-Z"},"confidence":0..1}
     /// - 自变量：离心率（deg）× 间距（deg），单帧 one-shot，无 action_plan
     /// </summary>
-    public class VisualCrowdingTask : ITask
+    public class VisualCrowdingTask : ITask, ITaskRunLifecycle
     {
         public string TaskId => "visual_crowding";
 
@@ -28,6 +28,10 @@ namespace VRPerception.Tasks
         private System.Random _rand = new System.Random(1234);
         private ExperimentSceneManager _scene;
         private readonly List<GameObject> _spawned = new List<GameObject>();
+        private bool _referenceFrameInitialized;
+        private Vector3 _referenceOrigin;
+        private Vector3 _referenceForward;
+        private float _referenceEyeY;
 
         public VisualCrowdingTask(TaskRunnerContext ctx)
         {
@@ -44,11 +48,33 @@ namespace VRPerception.Tasks
                     runner = runner,
                     eventBus = eventBus,
                     perception = runner ? runner.GetComponent<PerceptionSystem>() : null,
-                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null
+                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null,
+                    humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null
                 };
+            }
+            else if (_ctx.humanReferenceFrame == null)
+            {
+                _ctx.humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null;
             }
 
             TryBindHelpers();
+        }
+
+        public Task OnRunBeginAsync(CancellationToken ct)
+        {
+            TryBindHelpers();
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: true);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task OnRunEndAsync(CancellationToken ct)
+        {
+            _referenceFrameInitialized = false;
+            return Task.CompletedTask;
         }
 
         public TrialSpec[] BuildTrials(int seed)
@@ -128,15 +154,22 @@ namespace VRPerception.Tasks
             var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
             if (cam == null) return;
 
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: false);
+            }
+
             var fov = trial.fovDeg > 0 ? trial.fovDeg : 60f;
             _ctx?.stimulus?.SetCameraFOV(fov);
+
+            ResolvePlacementReference(cam, out var origin, out var forward, out var right, out var eyeY);
 
             // 固定深度布置：注视点靠近，字母串稍远，保证视角换算稳定
             const float fixationDepth = 7.0f;
             const float lettersDepth = 7.0f;
 
-            PlaceFixation(cam, fixationDepth);
-            PlaceLetters(cam, lettersDepth, trial);
+            PlaceFixation(origin, forward, eyeY, fixationDepth);
+            PlaceLetters(origin, forward, right, eyeY, lettersDepth, trial);
 
             await Task.Yield();
         }
@@ -201,6 +234,69 @@ namespace VRPerception.Tasks
             }
         }
 
+        private void CaptureReferenceFrameIfNeeded(bool forceRefresh)
+        {
+            if (_referenceFrameInitialized && !forceRefresh) return;
+
+            var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
+            if (cam == null)
+            {
+                _referenceFrameInitialized = false;
+                return;
+            }
+
+            _referenceOrigin = cam.transform.position;
+            _referenceForward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = cam.transform.position.y;
+            _referenceFrameInitialized = true;
+        }
+
+        private bool TryUseHumanSharedReferenceFrame()
+        {
+            if (!IsHumanMode()) return false;
+
+            var humanRef = _ctx?.humanReferenceFrame;
+            if (humanRef == null || !humanRef.HasReferenceFrame) return false;
+
+            _referenceOrigin = humanRef.Origin;
+            _referenceForward = humanRef.Forward;
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = humanRef.EyeY;
+            _referenceFrameInitialized = true;
+            return true;
+        }
+
+        private void ResolvePlacementReference(Camera cam, out Vector3 origin, out Vector3 forward, out Vector3 right, out float eyeY)
+        {
+            if (TryUseHumanSharedReferenceFrame())
+            {
+                origin = _referenceOrigin;
+                forward = _referenceForward;
+                eyeY = _referenceEyeY;
+            }
+            else
+            {
+                origin = _referenceFrameInitialized ? _referenceOrigin : cam.transform.position;
+                forward = _referenceFrameInitialized ? _referenceForward : Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+                if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
+                forward.Normalize();
+                eyeY = _referenceFrameInitialized ? _referenceEyeY : cam.transform.position.y;
+            }
+
+            right = Vector3.Cross(Vector3.up, forward);
+            if (right.sqrMagnitude < 1e-6f) right = cam.transform.right;
+            if (right.sqrMagnitude < 1e-6f) right = Vector3.right;
+            right.Normalize();
+        }
+
+        private bool IsHumanMode()
+        {
+            return _ctx?.runner != null && _ctx.runner.CurrentSubjectMode == SubjectMode.Human;
+        }
+
         private string SampleLetter()
         {
             var idx = _rand.Next(_letterPool.Length);
@@ -236,10 +332,10 @@ namespace VRPerception.Tasks
             return arr;
         }
 
-        private void PlaceFixation(Camera cam, float depth)
+        private void PlaceFixation(Vector3 origin, Vector3 forward, float eyeY, float depth)
         {
-            var pos = cam.transform.position + cam.transform.forward * depth;
-            pos.y = cam.transform.position.y; // 保持与字母同一高度
+            var pos = origin + forward * depth;
+            pos.y = eyeY; // 保持与字母同一高度
             var root = new GameObject("vc_fixation");
             root.transform.position = pos;
 
@@ -260,14 +356,9 @@ namespace VRPerception.Tasks
             _spawned.Add(root);
         }
 
-        private void PlaceLetters(Camera cam, float depth, TrialSpec trial)
+        private void PlaceLetters(Vector3 origin, Vector3 forward, Vector3 right, float eyeY, float depth, TrialSpec trial)
         {
             if (trial == null || trial.flankerLetters == null || trial.flankerLetters.Length < 5) return;
-
-            var origin = cam.transform.position;
-            var forward = cam.transform.forward;
-            var right = cam.transform.right;
-            var up = cam.transform.up;
 
             var basePos = origin + forward * depth;
 
@@ -283,9 +374,9 @@ namespace VRPerception.Tasks
                 var idxOffset = i - trial.targetIndex;
                 var offset = eccOffset + spacingOffset * idxOffset;
                 var pos = basePos + right * offset;
-                pos.y = origin.y; // 与相机等高，模拟水平字母串
+                pos.y = eyeY; // 与参考眼高等高，模拟水平字母串
 
-                var go = CreateLetterObject(trial.flankerLetters[i], pos, cam, up);
+                var go = CreateLetterObject(trial.flankerLetters[i], pos, forward);
                 if (go != null)
                 {
                     go.name = $"vc_letter_{i}";
@@ -294,11 +385,11 @@ namespace VRPerception.Tasks
             }
         }
 
-        private GameObject CreateLetterObject(string letter, Vector3 position, Camera cam, Vector3 up)
+        private GameObject CreateLetterObject(string letter, Vector3 position, Vector3 forward)
         {
             var go = new GameObject("vc_letter", typeof(TextMesh));
             go.transform.position = position;
-            go.transform.rotation = Quaternion.LookRotation(cam.transform.forward, up);
+            go.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
 
             var tm = go.GetComponent<TextMesh>();
             tm.text = string.IsNullOrEmpty(letter) ? "?" : letter.ToUpperInvariant();
