@@ -16,7 +16,7 @@ namespace VRPerception.Tasks
     /// - 距离范围：2–30 m
     /// - FOV：50 / 60 / 90 度
     /// </summary>
-    public class DistanceCompressionTask : ITask
+    public class DistanceCompressionTask : ITask, ITaskRunLifecycle
     {
         public string TaskId => "distance_compression";
 
@@ -24,6 +24,10 @@ namespace VRPerception.Tasks
         private System.Random _rand = new System.Random(12345);
         private ExperimentSceneManager _scene;
         private ObjectPlacer _placer;
+        private bool _referenceFrameInitialized;
+        private Vector3 _referenceOrigin;
+        private Vector3 _referenceForward;
+        private float _referenceEyeY;
         
         public DistanceCompressionTask(TaskRunnerContext ctx)
         {
@@ -40,10 +44,28 @@ namespace VRPerception.Tasks
                     runner = runner,
                     eventBus = eventBus,
                     perception = runner ? runner.GetComponent<PerceptionSystem>() : null,
-                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null
+                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null,
+                    humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null
                 };
             }
             TryBindHelpers();
+        }
+
+        public Task OnRunBeginAsync(CancellationToken ct)
+        {
+            TryBindHelpers();
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: true);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task OnRunEndAsync(CancellationToken ct)
+        {
+            _referenceFrameInitialized = false;
+            return Task.CompletedTask;
         }
 
         public TrialSpec[] BuildTrials(int seed)
@@ -171,6 +193,10 @@ namespace VRPerception.Tasks
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
         {
             TryBindHelpers();
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: false);
+            }
 
             // 场景布置（通过 ExperimentSceneManager）
             if (_scene != null)
@@ -256,16 +282,34 @@ namespace VRPerception.Tasks
             if (_placer == null) _placer = UnityEngine.Object.FindObjectOfType<ObjectPlacer>();
         }
 
+        private void CaptureReferenceFrameIfNeeded(bool forceRefresh)
+        {
+            if (_referenceFrameInitialized && !forceRefresh) return;
+
+            var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
+            if (cam == null)
+            {
+                _referenceFrameInitialized = false;
+                return;
+            }
+
+            // Use horizontal forward so head pitch does not change target bearing.
+            _referenceOrigin = cam.transform.position;
+            _referenceForward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = cam.transform.position.y;
+            _referenceFrameInitialized = true;
+        }
+
         private void PlaceTarget(TrialSpec trial)
         {
             var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
             if (cam == null) return;
 
-            var origin = cam.transform.position;
-            var forward = cam.transform.forward;
+            ResolvePlacementReference(cam, out var origin, out var forward, out var eyeY);
 
             var pos = origin + forward * Mathf.Max(0.1f, trial.trueDistanceM);
-            float yCenter = 1.0f;
             float scale = 1.0f;
 
             switch (trial.targetKind)
@@ -277,8 +321,8 @@ namespace VRPerception.Tasks
                 case "sphere":
                 case "cube":
                 default:
-                    pos.y = cam.transform.position.y;
-                    scale = 1.0f;
+                    pos.y = eyeY;
+                    scale = 0.9f;
                     break;
             }
 
@@ -332,6 +376,44 @@ namespace VRPerception.Tasks
                 go.name = "dc_target_" + kind;
                 go.transform.position = pos;
             }
+        }
+
+        private bool TryUseHumanSharedReferenceFrame()
+        {
+            if (!IsHumanMode()) return false;
+
+            var humanRef = _ctx?.humanReferenceFrame;
+            if (humanRef == null || !humanRef.HasReferenceFrame) return false;
+
+            _referenceOrigin = humanRef.Origin;
+            _referenceForward = humanRef.Forward;
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = humanRef.EyeY;
+            _referenceFrameInitialized = true;
+            return true;
+        }
+
+        private void ResolvePlacementReference(Camera cam, out Vector3 origin, out Vector3 forward, out float eyeY)
+        {
+            if (TryUseHumanSharedReferenceFrame())
+            {
+                origin = _referenceOrigin;
+                forward = _referenceForward;
+                eyeY = _referenceEyeY;
+                return;
+            }
+
+            origin = _referenceFrameInitialized ? _referenceOrigin : cam.transform.position;
+            forward = _referenceFrameInitialized ? _referenceForward : Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
+            forward.Normalize();
+            eyeY = _referenceFrameInitialized ? _referenceEyeY : cam.transform.position.y;
+        }
+
+        private bool IsHumanMode()
+        {
+            return _ctx?.runner != null && _ctx.runner.CurrentSubjectMode == SubjectMode.Human;
         }
 
         private static void TryDestroyByPrefix(string prefix)

@@ -2636,7 +2636,7 @@ MonoBehaviour:
   m_UpdateTrackingType: 0
   m_EnableInputTracking: 1
   m_EnableInputActions: 1
-  m_ModelPrefab: {fileID: 0}
+  m_ModelPrefab: {fileID: 8270855663187062767, guid: 1392f805216c47742996d4742c80721c, type: 3}
   m_ModelParent: {fileID: 0}
   m_Model: {fileID: 0}
   m_AnimateModel: 0
@@ -4044,7 +4044,7 @@ MonoBehaviour:
   corridorWallHeight: 5
   corridorLength: 200
   corridorWallThickness: 0.2
-  openFieldSize: {x: 50, y: 50}
+  openFieldSize: {x: 150, y: 150}
   createDefaultOccluders: 1
   occluderPositions:
   - {x: 1.5, y: 1, z: 5}
@@ -4082,7 +4082,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   orchestrator: {fileID: 1824977592}
   taskRunner: {fileID: 1824977593}
-  autoStartIfNoPlaylist: 0
+  autoStartIfNoPlaylist: 1
 --- !u!1 &903762573
 GameObject:
   m_ObjectHideFlags: 0
@@ -5482,6 +5482,8 @@ GameObject:
   - component: {fileID: 1119791765}
   - component: {fileID: 1119791764}
   - component: {fileID: 1119791766}
+  - component: {fileID: 1119791767}
+  - component: {fileID: 1119791769}
   m_Layer: 0
   m_Name: Bridge
   m_TagString: Untagged
@@ -5511,21 +5513,25 @@ MonoBehaviour:
   defaultDistanceMeters: 10
   defaultConfidence: 0.9
   minTriggerIntervalSeconds: 1
---- !u!4 &1119791763
-Transform:
+--- !u!224 &1119791763
+RectTransform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1119791761}
-  serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 19.909239, y: 17.117073, z: 179.71529}
+  m_LocalPosition: {x: 0, y: 0, z: 179.71529}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 19.909239, y: 17.117073}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1119791764
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5540,7 +5546,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   configSource: 2
   taskRunnerOverride: {fileID: 1824977593}
-  playlist: {fileID: 11400000, guid: f5b3b04837c20314f95fcb294eccb9ca, type: 2}
+  playlist: {fileID: 11400000, guid: 5747fed546c2f754780bc0e773e054b5, type: 2}
   playlistEntryIndex: 0
   taskId: distance_compression
   seed: 12345
@@ -5590,6 +5596,53 @@ MonoBehaviour:
   headCamera: {fileID: 1962211336}
   quadOverscan: 2
   quadNearOffset: 0.02
+--- !u!114 &1119791767
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1119791761}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d7e026c59aaab2641b037167a889da61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rootFolderName: VRP_Logs
+  fileName: mllm_trace.md
+  enableLogging: 1
+  includePrompts: 1
+  maxPromptChars: 1000
+  includeMetadataJson: 1
+  maxMetadataChars: 1000
+  includeAnswerJson: 1
+  maxAnswerChars: 1000
+  includeImageHash: 1
+  eventBus: {fileID: 719105663}
+  providerRouter: {fileID: 1588881899}
+--- !u!223 &1119791769
+Canvas:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1119791761}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_RenderMode: 2
+  m_Camera: {fileID: 0}
+  m_PlaneDistance: 100
+  m_PixelPerfect: 0
+  m_ReceivesEvents: 1
+  m_OverrideSorting: 0
+  m_OverridePixelPerfect: 0
+  m_SortingBucketNormalizedSize: 0
+  m_VertexColorAlwaysGammaSpace: 0
+  m_AdditionalShaderChannelsFlag: 0
+  m_UpdateRectTransformForStandalone: 0
+  m_SortingLayerID: 0
+  m_SortingOrder: 0
+  m_TargetDisplay: 0
 --- !u!1 &1147251934
 GameObject:
   m_ObjectHideFlags: 0
@@ -6888,7 +6941,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f405fac43f7c6247aae92f61dfbf228, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  eventBus: {fileID: 0}
+  eventBus: {fileID: 719105663}
   autoSubscribe: 0
 --- !u!114 &1588881898
 MonoBehaviour:
@@ -6908,7 +6961,7 @@ MonoBehaviour:
   saveScreenshots: 1
   jsonlFileName: events.jsonl
   flushEveryNLines: 20
-  eventBus: {fileID: 0}
+  eventBus: {fileID: 719105663}
 --- !u!114 &1588881899
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6928,7 +6981,7 @@ MonoBehaviour:
   retryDelaySeconds: 1
   enableFallback: 1
   enableRateLimit: 1
-  requestsPerMinute: 60
+  requestsPerMinute: 120
 --- !u!114 &1588881900
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6942,13 +6995,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   providerConfigs:
-  - id: qwen_vllm
+  - id: Qwen2.5-VL-72B-Instruct-AWQ
     type: local_vllm
     name: Qwen vLLM
-    enabled: 0
-    endpoint: http://10.15.1.143:8000/v1/chat/completions
+    enabled: 1
+    endpoint: http://10.15.34.224:8010/v1/chat/completions
     apiKey: 
-    model: qwen-vl
+    model: qwen-vl-72b-safe
   healthCheckIntervalSeconds: 60
   healthCheckTimeoutMs: 5000
 --- !u!114 &1588881901
@@ -6970,7 +7023,9 @@ MonoBehaviour:
   maxConcurrentRequests: 3
   enableThrottling: 1
   requestTimeoutMs: 30000
-  eventBus: {fileID: 0}
+  ffmpegExecutable: D:/APP/APP_tool/ffmpeg/bin/ffmpeg.exe
+  keepVideoPayloadSourceFrames: 1
+  eventBus: {fileID: 719105663}
 --- !u!114 &1588881902
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6983,7 +7038,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e9fca0fb9a9d25e4d9f62951d0ea8d75, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  headCamera: {fileID: 0}
+  headCamera: {fileID: 1962211336}
   autoFindHeadCamera: 1
   defaultWidth: 1280
   defaultHeight: 720
@@ -7776,7 +7831,7 @@ MonoBehaviour:
   m_UpdateTrackingType: 0
   m_EnableInputTracking: 1
   m_EnableInputActions: 1
-  m_ModelPrefab: {fileID: 0}
+  m_ModelPrefab: {fileID: -8679921383154817045, guid: be3083a5f26d4e859d594ecbe632f87e, type: 3}
   m_ModelParent: {fileID: 0}
   m_Model: {fileID: 0}
   m_AnimateModel: 0
@@ -8199,7 +8254,7 @@ MonoBehaviour:
   onPlaylistCompleted:
     m_PersistentCalls:
       m_Calls: []
-  disableRunnerAutoRun: 1
+  disableRunnerAutoRun: 0
   autoRestoreCheckpoint: 0
   deleteCheckpointOnPlaylistCompleted: 1
   saveCheckpointOnPause: 1
@@ -8222,13 +8277,23 @@ MonoBehaviour:
   eventBus: {fileID: 719105663}
   perception: {fileID: 1588881901}
   stimulus: {fileID: 1588881902}
-  autoRun: 1
+  humanReferenceFrame: {fileID: 0}
+  xrOrigin: {fileID: 0}
+  autoRun: 0
   taskMode: 0
   randomSeed: 12345
-  maxTrials: 20
-  enableActionPlanLoop: 1
+  maxTrials: 0
+  enableActionPlanLoop: 0
   actionPlanLoopTimeoutMs: 20000
   humanInputTimeoutMs: 0
+  mllmCaptureMode: 0
+  mllmFrameCount: 5
+  mllmScanYawRangeDeg: 5
+  mllmScanPitchRangeDeg: 5
+  mllmScanSettleMs: 30
+  mllmScanSeed: 12345
+  mllmVideoFps: 50
+  mllmVideoDurationMs: 1500
   subjectMode: 1
 --- !u!4 &1824977594
 Transform:
@@ -8278,7 +8343,7 @@ MonoBehaviour:
   switchOnStart: 0
   moduleId: black_simple
   clearOnDisable: 1
-  enableToggleKey: 1
+  enableToggleKey: 0
   toggleKey: 109
   fallbackEnvironment: open_field
 --- !u!4 &1854491876
@@ -8835,7 +8900,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1962211332}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -10007,7 +10072,7 @@ SceneRoots:
   - {fileID: 1824977594}
   - {fileID: 648029826}
   - {fileID: 780086399}
-  - {fileID: 1119791763}
   - {fileID: 83612500}
   - {fileID: 1854491876}
   - {fileID: 1876818260}
+  - {fileID: 1119791763}

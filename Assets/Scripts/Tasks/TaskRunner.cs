@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using Unity.XR.CoreUtils;
 using VRPerception.Infra.EventBus;
 using VRPerception.Perception;
 using VRPerception.Tasks;
@@ -40,6 +41,8 @@ namespace VRPerception.Tasks
         [SerializeField] private EventBusManager eventBus;
         [SerializeField] private PerceptionSystem perception;
         [SerializeField] private StimulusCapture stimulus;
+        [SerializeField] private HumanReferenceFrameService humanReferenceFrame;
+        [SerializeField] private XROrigin xrOrigin;
 
         [Header("Execution")]
         [SerializeField] private bool autoRun = true;
@@ -108,6 +111,8 @@ namespace VRPerception.Tasks
         /// </summary>
         public TaskMode CurrentTaskMode => taskMode;
 
+        public SubjectMode CurrentSubjectMode => subjectMode;
+
         public bool IsRunning => _runCts != null;
 
         private void Awake()
@@ -115,11 +120,24 @@ namespace VRPerception.Tasks
             if (eventBus == null) eventBus = EventBusManager.Instance;
             if (perception == null) perception = GetComponent<PerceptionSystem>();
             if (stimulus == null) stimulus = GetComponent<StimulusCapture>();
+            if (humanReferenceFrame == null)
+            {
+                humanReferenceFrame = GetComponent<HumanReferenceFrameService>();
+            }
+            if (humanReferenceFrame == null)
+            {
+                humanReferenceFrame = gameObject.AddComponent<HumanReferenceFrameService>();
+            }
+            if (xrOrigin == null)
+            {
+                xrOrigin = FindObjectOfType<XROrigin>();
+            }
 
             Context.runner = this;
             Context.eventBus = eventBus;
             Context.perception = perception;
             Context.stimulus = stimulus;
+            Context.humanReferenceFrame = humanReferenceFrame;
         }
 
         private void Start()
@@ -174,204 +192,213 @@ namespace VRPerception.Tasks
             _runCts = new CancellationTokenSource();
             bool runLifecycleBegun = false;
 
-            // Wait briefly for EventBus channels to be created by EventBusBootstrap (handles late initialization)
-            var ebDeadline = DateTime.UtcNow.AddMilliseconds(2000);
-            while ((eventBus == null || eventBus.TrialLifecycle == null || eventBus.InferenceReceived == null) && DateTime.UtcNow < ebDeadline)
+            try
             {
-                await Task.Yield();
-                if (_runCts.IsCancellationRequested) throw new OperationCanceledException();
-            }
-
-            if (_task is ITaskRunLifecycle lifecycle)
-            {
-                await lifecycle.OnRunBeginAsync(_runCts.Token);
-                runLifecycleBegun = true;
-            }
-
-            for (int i = 0; i < trials.Length; i++)
-            {
-                var trial = trials[i];
-                trial.trialId = i;       // 规范化编号
-                trial.taskId = _task.TaskId;
-
-                // 记录 trial 起始时间并在 catch 中可见
-                DateTime trialStartUtc = DateTime.UtcNow;
-                double trialElapsedMs = 0;
-
-                try
+                // Wait briefly for EventBus channels to be created by EventBusBootstrap (handles late initialization)
+                var ebDeadline = DateTime.UtcNow.AddMilliseconds(2000);
+                while ((eventBus == null || eventBus.TrialLifecycle == null || eventBus.InferenceReceived == null) && DateTime.UtcNow < ebDeadline)
                 {
-                    PublishTrialState(trial, TrialLifecycleState.Initialized, trialConfig: trial);
+                    await Task.Yield();
+                    if (_runCts.IsCancellationRequested) throw new OperationCanceledException();
+                }
 
-                    // 前置布置
-                    PublishTrialState(trial, TrialLifecycleState.SceneSetup, trialConfig: trial);
-                    await _task.OnBeforeTrialAsync(trial, _runCts.Token);
+                if (_task is ITaskRunLifecycle lifecycle)
+                {
+                    await lifecycle.OnRunBeginAsync(_runCts.Token);
+                    runLifecycleBegun = true;
+                }
 
-                    PublishTrialState(trial, TrialLifecycleState.Started, trialConfig: trial);
+                await RunHumanReferenceCalibrationIfNeededAsync(_task, _runCts.Token);
 
-                    trialStartUtc = DateTime.UtcNow;
+                for (int i = 0; i < trials.Length; i++)
+                {
+                    var trial = trials[i];
+                    trial.trialId = i;       // 规范化编号
+                    trial.taskId = _task.TaskId;
 
-                    LLMResponse finalResponse = null;
+                    // 记录 trial 起始时间并在 catch 中可见
+                    DateTime trialStartUtc = DateTime.UtcNow;
+                    double trialElapsedMs = 0;
 
-                    if (subjectMode == SubjectMode.MLLM)
+                    try
                     {
-                        PublishTrialState(trial, TrialLifecycleState.Processing, trialConfig: trial);
+                        PublishTrialState(trial, TrialLifecycleState.Initialized, trialConfig: trial);
 
-                        if (_task is ITemporalInferenceTask temporalTask)
+                        // 前置布置
+                        PublishTrialState(trial, TrialLifecycleState.SceneSetup, trialConfig: trial);
+                        await _task.OnBeforeTrialAsync(trial, _runCts.Token);
+
+                        PublishTrialState(trial, TrialLifecycleState.Started, trialConfig: trial);
+
+                        trialStartUtc = DateTime.UtcNow;
+
+                        LLMResponse finalResponse = null;
+
+                        if (subjectMode == SubjectMode.MLLM)
                         {
-                            finalResponse = await temporalTask.RunTemporalMllmInferenceAsync(trial, _runCts.Token);
+                            PublishTrialState(trial, TrialLifecycleState.Processing, trialConfig: trial);
+
+                            if (_task is ITemporalInferenceTask temporalTask)
+                            {
+                                finalResponse = await temporalTask.RunTemporalMllmInferenceAsync(trial, _runCts.Token);
+                            }
+                            else
+                            {
+                                var captureMode = ResolveCaptureMode();
+                                var trajectoryMode = ResolveTrajectoryMode(captureMode);
+
+                                var captureOptions = new FrameCaptureOptions
+                                {
+                                    captureMode = captureMode,
+                                    trajectoryMode = trajectoryMode,
+                                    fov = trial.fovDeg > 0 ? trial.fovDeg : 60f,
+                                    width = 1280,
+                                    height = 720,
+                                    format = "jpeg",
+                                    quality = 75,
+                                    includeMetadata = true,
+                                    frameCount = captureMode == CaptureMode.SingleImage ? 1 : Mathf.Max(1, mllmFrameCount),
+                                    scanYawRangeDeg = Mathf.Max(0f, mllmScanYawRangeDeg),
+                                    scanPitchRangeDeg = Mathf.Max(0f, mllmScanPitchRangeDeg),
+                                    scanSettleMs = Mathf.Max(0, mllmScanSettleMs),
+                                    scanSeed = mllmScanSeed,
+                                    videoFps = Mathf.Max(1, mllmVideoFps),
+                                    videoDurationMs = Mathf.Max(200, mllmVideoDurationMs),
+                                    videoFormat = "mp4"
+                                };
+
+                                finalResponse = await perception.RequestInferenceAsync(
+                                    trial.taskId,
+                                    trial.trialId,
+                                    _task.GetSystemPrompt(),
+                                    _task.BuildTaskPrompt(trial),
+                                    null,
+                                    captureOptions,
+                                    _runCts.Token
+                                );
+                            }
+
+                            // 若返回动作计划，进入一次闭环等待：等待下一次 inference
+                            if (enableActionPlanLoop && finalResponse != null && finalResponse.type == "action_plan")
+                            {
+                                var followUp = await WaitForInferenceAsync(trial.taskId, trial.trialId, actionPlanLoopTimeoutMs, _runCts.Token);
+                                if (followUp != null) finalResponse = followUp;
+                            }
                         }
                         else
                         {
-                            var captureMode = ResolveCaptureMode();
-                            var trajectoryMode = ResolveTrajectoryMode(captureMode);
-
-                            var captureOptions = new FrameCaptureOptions
+                            // Human 模式：等待必要的曝光/遮罩时序后，发布 WaitingForInput，UI 负责收集答案
+                            if (_task is ITemporalInferenceTask temporalTask)
                             {
-                                captureMode = captureMode,
-                                trajectoryMode = trajectoryMode,
-                                fov = trial.fovDeg > 0 ? trial.fovDeg : 60f,
-                                width = 1280,
-                                height = 720,
-                                format = "jpeg",
-                                quality = 75,
-                                includeMetadata = true,
-                                frameCount = captureMode == CaptureMode.SingleImage ? 1 : Mathf.Max(1, mllmFrameCount),
-                                scanYawRangeDeg = Mathf.Max(0f, mllmScanYawRangeDeg),
-                                scanPitchRangeDeg = Mathf.Max(0f, mllmScanPitchRangeDeg),
-                                scanSettleMs = Mathf.Max(0, mllmScanSettleMs),
-                                scanSeed = mllmScanSeed,
-                                videoFps = Mathf.Max(1, mllmVideoFps),
-                                videoDurationMs = Mathf.Max(200, mllmVideoDurationMs),
-                                videoFormat = "mp4"
-                            };
-
-                            finalResponse = await perception.RequestInferenceAsync(
-                                trial.taskId,
-                                trial.trialId,
-                                _task.GetSystemPrompt(),
-                                _task.BuildTaskPrompt(trial),
-                                null,
-                                captureOptions,
-                                _runCts.Token
-                            );
-                        }
-
-                        // 若返回动作计划，进入一次闭环等待：等待下一次 inference
-                        if (enableActionPlanLoop && finalResponse != null && finalResponse.type == "action_plan")
-                        {
-                            var followUp = await WaitForInferenceAsync(trial.taskId, trial.trialId, actionPlanLoopTimeoutMs, _runCts.Token);
-                            if (followUp != null) finalResponse = followUp;
-                        }
-                    }
-                    else
-                    {
-                        // Human 模式：等待必要的曝光/遮罩时序后，发布 WaitingForInput，UI 负责收集答案
-                        if (_task is ITemporalInferenceTask temporalTask)
-                        {
-                            await temporalTask.RunTemporalHumanPresentationAsync(trial, _runCts.Token);
-                        }
-                        else if (string.Equals(trial.taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Numerosity: 先短时展示刺激，再进入“黑屏后作答”阶段
-                            int exposureMs = Mathf.Clamp(Mathf.RoundToInt(trial.exposureDurationMs > 0 ? trial.exposureDurationMs : 500f), 0, 60000);
-                            bool maskArmed = TryArmTrialBlackoutOverlay(exposureMs);
-                            if (exposureMs > 0)
+                                await temporalTask.RunTemporalHumanPresentationAsync(trial, _runCts.Token);
+                            }
+                            else if (string.Equals(trial.taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
                             {
-                                await Task.Delay(exposureMs, _runCts.Token);
+                                // Numerosity: 先短时展示刺激，再进入“黑屏后作答”阶段
+                                int exposureMs = Mathf.Clamp(Mathf.RoundToInt(trial.exposureDurationMs > 0 ? trial.exposureDurationMs : 500f), 0, 60000);
+                                bool maskArmed = TryArmTrialBlackoutOverlay(exposureMs);
+                                if (exposureMs > 0)
+                                {
+                                    await Task.Delay(exposureMs, _runCts.Token);
+                                }
+
+                                if (!maskArmed)
+                                {
+                                    Debug.LogWarning("[TaskRunner] TrialBlackoutOverlay not found/disabled; human numerosity trial will not be masked.");
+                                }
                             }
 
-                            if (!maskArmed)
-                            {
-                                Debug.LogWarning("[TaskRunner] TrialBlackoutOverlay not found/disabled; human numerosity trial will not be masked.");
-                            }
+                            PublishTrialState(trial, TrialLifecycleState.WaitingForInput, trialConfig: trial, error: "Waiting for input");
+
+                            // 使用专门的 humanInputTimeoutMs，0 表示无限等待
+                            int timeout = humanInputTimeoutMs > 0 ? humanInputTimeoutMs : int.MaxValue;
+                            finalResponse = await WaitForInferenceAsync(trial.taskId, trial.trialId, timeout, _runCts.Token);
                         }
 
-                        PublishTrialState(trial, TrialLifecycleState.WaitingForInput, trialConfig: trial, error: "Waiting for input");
-                        
-                        // 使用专门的 humanInputTimeoutMs，0 表示无限等待
-                        int timeout = humanInputTimeoutMs > 0 ? humanInputTimeoutMs : int.MaxValue;
-                        finalResponse = await WaitForInferenceAsync(trial.taskId, trial.trialId, timeout, _runCts.Token);
-                    }
+                        // 如果未收到任何响应（超时或通道不可用），标记失败
+                        // ⚠️ 重要：即使超时，也要执行清理逻辑，避免物体残留
+                        if (finalResponse == null)
+                        {
+                            PublishTrialState(trial, TrialLifecycleState.Failed, trialConfig: trial, error: "No inference received within timeout or channel unavailable");
 
-                    // 如果未收到任何响应（超时或通道不可用），标记失败
-                    // ⚠️ 重要：即使超时，也要执行清理逻辑，避免物体残留
-                    if (finalResponse == null)
-                    {
-                        PublishTrialState(trial, TrialLifecycleState.Failed, trialConfig: trial, error: "No inference received within timeout or channel unavailable");
+                            // 执行清理逻辑（即使没有响应）
+                            await _task.OnAfterTrialAsync(trial, null, _runCts.Token);
 
-                        // 执行清理逻辑（即使没有响应）
-                        await _task.OnAfterTrialAsync(trial, null, _runCts.Token);
+                            // 采样指标：trial 耗时（超时/无响应）
+                            trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
+                            eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
+                                new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "timeout" });
+                            continue;
+                        }
 
-                        // 采样指标：trial 耗时（超时/无响应）
+                        // 后置清理 / 记录
+                        await _task.OnAfterTrialAsync(trial, finalResponse, _runCts.Token);
+
+                        // 评测
+                        var eval = _task.Evaluate(trial, finalResponse);
+                        PublishTrialState(trial, TrialLifecycleState.Completed, trialConfig: trial, results: eval);
+                        // 采样指标：trial 耗时（完成）
                         trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
                         eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
-                            new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "timeout" });
-                        continue;
+                            new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "completed", actionPlanLoop = enableActionPlanLoop });
                     }
-
-                    // 后置清理 / 记录
-                    await _task.OnAfterTrialAsync(trial, finalResponse, _runCts.Token);
-
-                    // 评测
-                    var eval = _task.Evaluate(trial, finalResponse);
-                    PublishTrialState(trial, TrialLifecycleState.Completed, trialConfig: trial, results: eval);
-                    // 采样指标：trial 耗时（完成）
-                    trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
-                    eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
-                        new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "completed", actionPlanLoop = enableActionPlanLoop });
-                }
-                catch (OperationCanceledException)
-                {
-                    PublishTrialState(trial, TrialLifecycleState.Cancelled, trialConfig: trial, error: "Cancelled");
-                    // 采样指标：trial 耗时（取消）
-                    trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
-                    eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
-                        new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "cancelled" });
-                    // 确保取消时也执行清理，移除已生成的场景物体
-                    try
+                    catch (OperationCanceledException)
                     {
-                        if (_task != null)
+                        PublishTrialState(trial, TrialLifecycleState.Cancelled, trialConfig: trial, error: "Cancelled");
+                        // 采样指标：trial 耗时（取消）
+                        trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
+                        eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
+                            new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "cancelled" });
+                        // 确保取消时也执行清理，移除已生成的场景物体
+                        try
                         {
-                            await _task.OnAfterTrialAsync(trial, null, CancellationToken.None);
+                            if (_task != null)
+                            {
+                                await _task.OnAfterTrialAsync(trial, null, CancellationToken.None);
+                            }
                         }
+                        catch (Exception cleanupEx)
+                        {
+                            Debug.LogWarning($"[TaskRunner] Cleanup after cancellation failed: {cleanupEx.Message}");
+                        }
+                        break;
                     }
-                    catch (Exception cleanupEx)
+                    catch (Exception ex)
                     {
-                        Debug.LogWarning($"[TaskRunner] Cleanup after cancellation failed: {cleanupEx.Message}");
+                        //Debug.LogError($"[TaskRunner] Trial failed: {ex.Message}");
+                        PublishTrialState(trial, TrialLifecycleState.Failed, trialConfig: trial, error: ex.Message);
+                        // 采样指标：trial 耗时（失败）
+                        trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
+                        eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
+                            new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "failed" });
                     }
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    //Debug.LogError($"[TaskRunner] Trial failed: {ex.Message}");
-                    PublishTrialState(trial, TrialLifecycleState.Failed, trialConfig: trial, error: ex.Message);
-                    // 采样指标：trial 耗时（失败）
-                    trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
-                    eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
-                        new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "failed" });
                 }
             }
-
-            if (runLifecycleBegun && _task is ITaskRunLifecycle lifecycleEnd)
+            finally
             {
-                try { await lifecycleEnd.OnRunEndAsync(CancellationToken.None); } catch { }
-            }
-
-            // 运行结束后请求一次日志刷盘（与 Orchestrator 的 checkpoint 刷盘相互独立，二者兼容）
-            try
-            {
-                eventBus?.LogFlush?.Publish(new LogFlushEventData
+                if (runLifecycleBegun && _task is ITaskRunLifecycle lifecycleEnd)
                 {
-                    requestId = Guid.NewGuid().ToString("N"),
-                    timestamp = DateTime.UtcNow,
-                    logType = "run",
-                    forceFlush = true
-                });
-            }
-            catch { }
+                    try { await lifecycleEnd.OnRunEndAsync(CancellationToken.None); } catch { }
+                }
 
-            _runCts.Dispose();
-            _runCts = null;
+                humanReferenceFrame?.Clear();
+
+                // 运行结束后请求一次日志刷盘（与 Orchestrator 的 checkpoint 刷盘相互独立，二者兼容）
+                try
+                {
+                    eventBus?.LogFlush?.Publish(new LogFlushEventData
+                    {
+                        requestId = Guid.NewGuid().ToString("N"),
+                        timestamp = DateTime.UtcNow,
+                        logType = "run",
+                        forceFlush = true
+                    });
+                }
+                catch { }
+
+                _runCts.Dispose();
+                _runCts = null;
+            }
         }
 
         public void CancelRun()
@@ -397,6 +424,40 @@ namespace VRPerception.Tasks
                 CaptureMode.Video => CaptureTrajectoryMode.Sweep,
                 _ => CaptureTrajectoryMode.Fixed
             };
+        }
+
+        private async Task RunHumanReferenceCalibrationIfNeededAsync(ITask task, CancellationToken ct)
+        {
+            if (subjectMode != SubjectMode.Human) return;
+            if (task == null) return;
+            if (!string.Equals(task.TaskId, "distance_compression", StringComparison.OrdinalIgnoreCase)) return;
+            if (humanReferenceFrame == null) return;
+
+            var headCamera = stimulus != null ? stimulus.HeadCamera : Camera.main;
+            if (headCamera == null)
+            {
+                Debug.LogWarning("[TaskRunner] Human fixation calibration skipped: HeadCamera is missing. Falling back to task-local reference.");
+                return;
+            }
+
+            Transform xrRigTransform = ResolveHumanCalibrationRigTransform();
+            await humanReferenceFrame.CalibrateAsync(headCamera, xrRigTransform, ct);
+        }
+
+        private Transform ResolveHumanCalibrationRigTransform()
+        {
+            if (xrOrigin == null)
+            {
+                xrOrigin = FindObjectOfType<XROrigin>();
+            }
+
+            if (xrOrigin != null)
+            {
+                return xrOrigin.transform;
+            }
+
+            Debug.LogWarning("[TaskRunner] XROrigin not found. Human fixation calibration will fall back to HeadCamera forward.");
+            return null;
         }
 
         public void ApplyRunConfig(TaskRunConfig config)

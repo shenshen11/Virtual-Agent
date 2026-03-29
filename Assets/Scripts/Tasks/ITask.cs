@@ -233,5 +233,6 @@ namespace VRPerception.Tasks
         public EventBusManager eventBus;
         public PerceptionSystem perception;
         public StimulusCapture stimulus;
+        public HumanReferenceFrameService humanReferenceFrame;
     }
 }
