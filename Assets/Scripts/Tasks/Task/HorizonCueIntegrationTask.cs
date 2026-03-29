@@ -52,6 +52,10 @@ namespace VRPerception.Tasks
         private bool _didDisableRoom;
         private GameObject _openFieldGroundGo;
         private bool? _openFieldGroundWasActive;
+        private bool _referenceFrameInitialized;
+        private Vector3 _referenceOrigin;
+        private Vector3 _referenceForward;
+        private float _referenceEyeY;
 
         public HorizonCueIntegrationTask(TaskRunnerContext ctx)
         {
@@ -67,13 +71,23 @@ namespace VRPerception.Tasks
                     runner = runner,
                     eventBus = eventBus,
                     perception = runner ? runner.GetComponent<PerceptionSystem>() : null,
-                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null
+                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null,
+                    humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null
                 };
+            }
+            else if (_ctx.humanReferenceFrame == null)
+            {
+                _ctx.humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null;
             }
         }
 
         public Task OnRunBeginAsync(CancellationToken ct)
         {
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: true);
+            }
+
             _roomWasActive = null;
             _didDisableRoom = false;
             _roomGo = GameObject.Find("Room");
@@ -95,14 +109,12 @@ namespace VRPerception.Tasks
                 if (_openFieldGroundGo.activeSelf) _openFieldGroundGo.SetActive(false);
             }
 
-            // 任务运行时自建一套最小场景（根节点/环境Rig/天空球/红球）。
-            // 黑场遮罩优先复用原场景（Bridge）中已有的 TrialBlackoutOverlay。
-            EnsureRuntimeObjects();
             return Task.CompletedTask;
         }
 
         public Task OnRunEndAsync(CancellationToken ct)
         {
+            _referenceFrameInitialized = false;
             if (_roomWasActive.HasValue && _didDisableRoom)
             {
                 // 注意：Room 在被 SetActive(false) 后，GameObject.Find 找不到它；因此必须用缓存引用恢复。
@@ -220,6 +232,13 @@ namespace VRPerception.Tasks
                 return;
             }
 
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: false);
+            }
+
+            ResolvePlacementReference(cam, out var referenceOrigin, out var referenceForward, out var referenceEyeY);
+
             // 若上一试次刚把黑场打开，这里先不要立刻关闭。
             // 做法：在黑场下更新场景，然后保持一小段时间，最后再解除黑场。
             bool wasBlackoutVisible = _blackout != null && _blackout.IsVisible;
@@ -234,22 +253,15 @@ namespace VRPerception.Tasks
             if (_environmentRig != null)
             {
                 // 关键：让环境 Rig 跟随相机位置，并用俯仰角旋转它，从而使“地平线线索”相对视野上下移动。
-                _environmentRig.position = cam.transform.position;
+                _environmentRig.position = referenceOrigin;
                 _environmentRig.localRotation = Quaternion.Euler(-trial.horizonAngleDeg, 0f, 0f);
             }
 
             if (_redSphere != null)
             {
                 // 红球放在相机正前方、同高度；只改变距离，不改变高度/方位。
-                var origin = cam.transform.position;
-
-                // 使用水平前向，避免相机俯仰导致“同高度”校正后距离失真。
-                var forward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
-                if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
-                forward.Normalize();
-
-                var pos = origin + forward * Mathf.Max(0.01f, trial.trueDistanceM);
-                pos.y = origin.y;
+                var pos = referenceOrigin + referenceForward * Mathf.Max(0.01f, trial.trueDistanceM);
+                pos.y = referenceEyeY;
                 _redSphere.position = pos;
 
                 // 记录红球在屏幕上的纵向位置（0..1），用于事后分析。
@@ -265,6 +277,63 @@ namespace VRPerception.Tasks
 
             // 给渲染/采集留出稳定时间窗口（解除黑场后也需要一段时间确保画面稳定）。
             await Task.Delay(250, ct);
+        }
+
+        private void CaptureReferenceFrameIfNeeded(bool forceRefresh)
+        {
+            if (_referenceFrameInitialized && !forceRefresh) return;
+
+            var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
+            if (cam == null)
+            {
+                _referenceFrameInitialized = false;
+                return;
+            }
+
+            _referenceOrigin = cam.transform.position;
+            _referenceForward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = cam.transform.position.y;
+            _referenceFrameInitialized = true;
+        }
+
+        private bool TryUseHumanSharedReferenceFrame()
+        {
+            if (!IsHumanMode()) return false;
+
+            var humanRef = _ctx?.humanReferenceFrame;
+            if (humanRef == null || !humanRef.HasReferenceFrame) return false;
+
+            _referenceOrigin = humanRef.Origin;
+            _referenceForward = humanRef.Forward;
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = humanRef.EyeY;
+            _referenceFrameInitialized = true;
+            return true;
+        }
+
+        private void ResolvePlacementReference(Camera cam, out Vector3 origin, out Vector3 forward, out float eyeY)
+        {
+            if (TryUseHumanSharedReferenceFrame())
+            {
+                origin = _referenceOrigin;
+                forward = _referenceForward;
+                eyeY = _referenceEyeY;
+                return;
+            }
+
+            origin = _referenceFrameInitialized ? _referenceOrigin : cam.transform.position;
+            forward = _referenceFrameInitialized ? _referenceForward : Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
+            forward.Normalize();
+            eyeY = _referenceFrameInitialized ? _referenceEyeY : cam.transform.position.y;
+        }
+
+        private bool IsHumanMode()
+        {
+            return _ctx?.runner != null && _ctx.runner.CurrentSubjectMode == SubjectMode.Human;
         }
 
         public async Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)

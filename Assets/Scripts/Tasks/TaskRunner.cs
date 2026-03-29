@@ -430,7 +430,10 @@ namespace VRPerception.Tasks
         {
             if (subjectMode != SubjectMode.Human) return;
             if (task == null) return;
-            if (!string.Equals(task.TaskId, "distance_compression", StringComparison.OrdinalIgnoreCase)) return;
+            bool requiresCalibration =
+                string.Equals(task.TaskId, "distance_compression", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(task.TaskId, "horizon_cue_integration", StringComparison.OrdinalIgnoreCase);
+            if (!requiresCalibration) return;
             if (humanReferenceFrame == null) return;
 
             var headCamera = stimulus != null ? stimulus.HeadCamera : Camera.main;
