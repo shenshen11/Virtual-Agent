@@ -85,7 +85,7 @@ namespace VRPerception.UI
             CancelPending();
             if (_tex != null)
             {
-                Destroy(_tex);
+                DestroyObjectSafe(_tex);
                 _tex = null;
             }
             DestroyOverlay();
@@ -247,7 +247,7 @@ namespace VRPerception.UI
             SetLayerRecursively(_overlayQuad, headCamera.gameObject.layer);
 
             var col = _overlayQuad.GetComponent<Collider>();
-            if (col != null) Destroy(col);
+            if (col != null) DestroyObjectSafe(col);
 
             _overlayQuadRenderer = _overlayQuad.GetComponent<MeshRenderer>();
             if (_overlayQuadRenderer != null)
@@ -313,7 +313,7 @@ namespace VRPerception.UI
         {
             if (_overlayRoot != null)
             {
-                Destroy(_overlayRoot);
+                DestroyObjectSafe(_overlayRoot);
                 _overlayRoot = null;
             }
 
@@ -322,9 +322,22 @@ namespace VRPerception.UI
 
             if (_overlayQuadMaterial != null)
             {
-                Destroy(_overlayQuadMaterial);
+                DestroyObjectSafe(_overlayQuadMaterial);
                 _overlayQuadMaterial = null;
             }
+        }
+
+        private static void DestroyObjectSafe(UnityEngine.Object obj)
+        {
+            if (obj == null) return;
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                UnityEngine.Object.DestroyImmediate(obj);
+                return;
+            }
+#endif
+            UnityEngine.Object.Destroy(obj);
         }
 
         private static void SetLayerRecursively(GameObject root, int layer)
