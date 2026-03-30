@@ -17,14 +17,14 @@ namespace VRPerception.Tasks
     /// - 人类与 MLLM 共享相同的时序呈现；MLLM 额外抓取 before/after 两帧作为输入
     /// - 目标：判断是否发生变化，并给出变化类别（appearance/disappearance/movement/replacement/none）
     /// </summary>
-    public class ChangeDetectionTask : ITask, ITemporalInferenceTask
+    public class ChangeDetectionTask : ITask, ITemporalInferenceTask, ITaskRunLifecycle
     {
         public string TaskId => "change_detection";
 
         private const string SceneObjectPrefix = "cd_";
         private const int SceneRenderSettleFrames = 5;
         private const int SceneRenderSettleDelayMs = 50;
-        private const int SceneAExposureMs = 1000;
+        private const int SceneAExposureMs = 2000;
         private const int MaskDurationMs = 500;
         private const int SceneBExposureMs = 1000;
         private const float ClusterDistance = 9f;
@@ -71,6 +71,10 @@ namespace VRPerception.Tasks
         private Vector3 _sceneRight;
         private float _sceneGroundY;
         private bool _sceneAnchorReady;
+        private bool _referenceFrameInitialized;
+        private Vector3 _referenceOrigin;
+        private Vector3 _referenceForward;
+        private float _referenceEyeY;
 
         public ChangeDetectionTask(TaskRunnerContext ctx)
         {
@@ -87,11 +91,34 @@ namespace VRPerception.Tasks
                     runner = runner,
                     eventBus = eventBus,
                     perception = runner ? runner.GetComponent<PerceptionSystem>() : null,
-                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null
+                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null,
+                    humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null
                 };
+            }
+            else if (_ctx.humanReferenceFrame == null)
+            {
+                _ctx.humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null;
             }
 
             TryBindHelpers();
+        }
+
+        public Task OnRunBeginAsync(CancellationToken ct)
+        {
+            TryBindHelpers();
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: true);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task OnRunEndAsync(CancellationToken ct)
+        {
+            _referenceFrameInitialized = false;
+            _sceneAnchorReady = false;
+            return Task.CompletedTask;
         }
 
         public TrialSpec[] BuildTrials(int seed)
@@ -168,6 +195,10 @@ namespace VRPerception.Tasks
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
         {
             TryBindHelpers();
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: false);
+            }
 
             // 场景与光照
             if (_scene != null)
@@ -415,18 +446,75 @@ namespace VRPerception.Tasks
                 throw new InvalidOperationException("No head camera available for change_detection.");
             }
 
-            var origin = cam.transform.position;
-            _sceneForward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
+            ResolvePlacementReference(cam, out var origin, out var forward, out var eyeY);
+            _sceneForward = forward;
             if (_sceneForward.sqrMagnitude < 0.0001f)
             {
                 _sceneForward = Vector3.forward;
             }
 
             _sceneRight = Vector3.Cross(Vector3.up, _sceneForward).normalized;
-            _sceneGroundY = origin.y;
+            _sceneGroundY = eyeY;
             _sceneCenter = origin + _sceneForward * ClusterDistance;
             _sceneCenter.y = _sceneGroundY;
             _sceneAnchorReady = true;
+        }
+
+        private void CaptureReferenceFrameIfNeeded(bool forceRefresh)
+        {
+            if (_referenceFrameInitialized && !forceRefresh) return;
+
+            var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
+            if (cam == null)
+            {
+                _referenceFrameInitialized = false;
+                return;
+            }
+
+            _referenceOrigin = cam.transform.position;
+            _referenceForward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = cam.transform.position.y;
+            _referenceFrameInitialized = true;
+        }
+
+        private bool TryUseHumanSharedReferenceFrame()
+        {
+            if (!IsHumanMode()) return false;
+
+            var humanRef = _ctx?.humanReferenceFrame;
+            if (humanRef == null || !humanRef.HasReferenceFrame) return false;
+
+            _referenceOrigin = humanRef.Origin;
+            _referenceForward = humanRef.Forward;
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = humanRef.EyeY;
+            _referenceFrameInitialized = true;
+            return true;
+        }
+
+        private void ResolvePlacementReference(Camera cam, out Vector3 origin, out Vector3 forward, out float eyeY)
+        {
+            if (TryUseHumanSharedReferenceFrame())
+            {
+                origin = _referenceOrigin;
+                forward = _referenceForward;
+                eyeY = _referenceEyeY;
+                return;
+            }
+
+            origin = _referenceFrameInitialized ? _referenceOrigin : cam.transform.position;
+            forward = _referenceFrameInitialized ? _referenceForward : Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
+            forward.Normalize();
+            eyeY = _referenceFrameInitialized ? _referenceEyeY : cam.transform.position.y;
+        }
+
+        private bool IsHumanMode()
+        {
+            return _ctx?.runner != null && _ctx.runner.CurrentSubjectMode == SubjectMode.Human;
         }
 
         private void PlaceSceneA(TrialSpec trial)
