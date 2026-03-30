@@ -570,9 +570,7 @@ namespace VRPerception.Tasks
                             case "disappearance":
                                 continue; // 跳过，不放置
                             case "movement":
-                                // 按层深度等比缩放偏移，保持各层约 12° 视觉跳变
-                                var deltaX = li < s_movementDeltaX.Length ? s_movementDeltaX[li] : 1.92f;
-                                local = new Vector3(local.x + deltaX, local.y, local.z);
+                                local = ResolveMovementLocalOffset(li, local, changeTargetObjectIndex, sceneVariantSeed);
                                 break;
                             case "replacement":
                                 kind = GetReplacementKind(shapePool, slotIdx);
@@ -603,10 +601,10 @@ namespace VRPerception.Tasks
                     placedObjectIdx++;
                 }
 
-                // appearance：在目标层两物体之间插入第 3 个物体（x=0，贴近该层深度）
+                // appearance：仅在目标层内，围绕已有物体附近新增一个额外物体，避免固定中心插入过于显眼。
                 if (isTargetLayer && changeCategory == "appearance")
                 {
-                    var extraLocal = new Vector3(0f, 0f, offsets[0].z + 0.15f);
+                    var extraLocal = ResolveAppearanceLocalOffset(li, offsets, changeTargetObjectIndex, sceneVariantSeed);
                     var pos = _sceneCenter + _sceneRight * extraLocal.x + _sceneForward * extraLocal.z;
                     pos.y = _sceneGroundY;
                     var name = $"{prefix}{placedObjectIdx}";
@@ -631,6 +629,49 @@ namespace VRPerception.Tasks
                     placedObjectIdx++;
                 }
             }
+        }
+
+        private static Vector3 ResolveAppearanceLocalOffset(int layerIndex, IReadOnlyList<Vector3> offsets, int changeTargetObjectIndex, int sceneVariantSeed)
+        {
+            if (offsets == null || offsets.Count == 0)
+            {
+                return new Vector3(0f, 0f, 0.15f);
+            }
+
+            int anchorIndex = Mathf.Clamp(changeTargetObjectIndex, 0, offsets.Count - 1);
+            Vector3 anchor = offsets[anchorIndex];
+
+            float outwardSign = Mathf.Sign(anchor.x);
+            if (Mathf.Abs(outwardSign) < 0.01f)
+            {
+                outwardSign = anchorIndex == 0 ? -1f : 1f;
+            }
+
+            // 深层稍微放大偏移，保持各层上的局部邻近感接近一致。
+            float layerScale = 1f + Mathf.Clamp(layerIndex, 0, 2) * 0.12f;
+            float lateralOffset = 0.28f * layerScale * outwardSign;
+
+            // 用 sceneVariantSeed 打散前后方向，保持同一试次可复现。
+            bool pushForward = ((sceneVariantSeed + layerIndex + anchorIndex) & 1) == 0;
+            float depthOffset = (pushForward ? 0.22f : -0.18f) * layerScale;
+
+            return new Vector3(anchor.x + lateralOffset, anchor.y, anchor.z + depthOffset);
+        }
+
+        private static Vector3 ResolveMovementLocalOffset(int layerIndex, Vector3 local, int changeTargetObjectIndex, int sceneVariantSeed)
+        {
+            float deltaX = layerIndex < s_movementDeltaX.Length ? s_movementDeltaX[layerIndex] : 1.92f;
+
+            float outwardSign = Mathf.Sign(local.x);
+            if (Mathf.Abs(outwardSign) < 0.01f)
+            {
+                outwardSign = changeTargetObjectIndex == 0 ? -1f : 1f;
+            }
+
+            // 默认朝层外移动，部分 seed 会翻转为朝层内移动，避免形成固定方向的可学习模式。
+            bool moveOutward = ((sceneVariantSeed + layerIndex + changeTargetObjectIndex) & 1) == 0;
+            float signedDeltaX = deltaX * (moveOutward ? outwardSign : -outwardSign);
+            return new Vector3(local.x + signedDeltaX, local.y, local.z);
         }
 
         private static Material CreateObjectMaterial()
@@ -692,11 +733,11 @@ namespace VRPerception.Tasks
             var current = GetBaseKind(idx);
             return current switch
             {
-                "cube" => "sphere",
+                "cube" => "cylinder",
                 "sphere" => "capsule",
-                "cylinder" => "capsule",
-                "capsule" => "cube",
-                _ => "sphere"
+                "cylinder" => "cube",
+                "capsule" => "sphere",
+                _ => "cylinder"
             };
         }
 
@@ -705,11 +746,11 @@ namespace VRPerception.Tasks
             var current = GetBaseKind(shapePool, idx);
             return current switch
             {
-                "cube" => "sphere",
+                "cube" => "cylinder",
                 "sphere" => "capsule",
-                "cylinder" => "capsule",
-                "capsule" => "cube",
-                _ => "sphere"
+                "cylinder" => "cube",
+                "capsule" => "sphere",
+                _ => "cylinder"
             };
         }
 
