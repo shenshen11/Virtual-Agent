@@ -16,6 +16,8 @@ namespace VRPerception.Tasks
     /// </summary>
     public class TaskRunner : MonoBehaviour
     {
+        private const int NumerosityPostCalibrationBlackoutMs = 1000;
+
         private enum MllmCaptureMode
         {
             Single,
@@ -202,13 +204,13 @@ namespace VRPerception.Tasks
                     if (_runCts.IsCancellationRequested) throw new OperationCanceledException();
                 }
 
+                await RunHumanReferenceCalibrationIfNeededAsync(_task, _runCts.Token);
+
                 if (_task is ITaskRunLifecycle lifecycle)
                 {
                     await lifecycle.OnRunBeginAsync(_runCts.Token);
                     runLifecycleBegun = true;
                 }
-
-                await RunHumanReferenceCalibrationIfNeededAsync(_task, _runCts.Token);
 
                 for (int i = 0; i < trials.Length; i++)
                 {
@@ -434,6 +436,7 @@ namespace VRPerception.Tasks
                 string.Equals(task.TaskId, "distance_compression", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "horizon_cue_integration", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(task.TaskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "visual_crowding", StringComparison.OrdinalIgnoreCase);
             if (!requiresCalibration) return;
             if (humanReferenceFrame == null) return;
@@ -445,8 +448,19 @@ namespace VRPerception.Tasks
                 return;
             }
 
+            TryResetTrialBlackoutOverlay();
+
             Transform xrRigTransform = ResolveHumanCalibrationRigTransform();
             await humanReferenceFrame.CalibrateAsync(headCamera, xrRigTransform, ct);
+
+            if (string.Equals(task.TaskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
+            {
+                bool maskArmed = TryArmTrialBlackoutOverlay(0);
+                if (maskArmed && NumerosityPostCalibrationBlackoutMs > 0)
+                {
+                    await Task.Delay(NumerosityPostCalibrationBlackoutMs, ct);
+                }
+            }
         }
 
         private Transform ResolveHumanCalibrationRigTransform()
@@ -678,25 +692,7 @@ namespace VRPerception.Tasks
         {
             try
             {
-                var overlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
-                if (overlay == null)
-                {
-                    var all = Resources.FindObjectsOfTypeAll<TrialBlackoutOverlay>();
-                    if (all != null)
-                    {
-                        for (int i = 0; i < all.Length; i++)
-                        {
-                            var candidate = all[i];
-                            if (candidate == null) continue;
-                            var go = candidate.gameObject;
-                            if (go == null) continue;
-                            if (!go.scene.IsValid()) continue; // exclude prefab assets
-                            overlay = candidate;
-                            break;
-                        }
-                    }
-                }
-
+                var overlay = FindTrialBlackoutOverlay();
                 if (overlay == null) return false;
 
                 if (!overlay.enabled) overlay.enabled = true;
@@ -709,6 +705,41 @@ namespace VRPerception.Tasks
             {
                 return false;
             }
+        }
+
+        private static void TryResetTrialBlackoutOverlay()
+        {
+            try
+            {
+                var overlay = FindTrialBlackoutOverlay();
+                if (overlay == null) return;
+
+                if (!overlay.enabled) overlay.enabled = true;
+                if (!overlay.gameObject.activeInHierarchy) overlay.gameObject.SetActive(true);
+                overlay.ResetBlackout();
+            }
+            catch { }
+        }
+
+        private static TrialBlackoutOverlay FindTrialBlackoutOverlay()
+        {
+            var overlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
+            if (overlay != null) return overlay;
+
+            var all = Resources.FindObjectsOfTypeAll<TrialBlackoutOverlay>();
+            if (all == null) return null;
+
+            for (int i = 0; i < all.Length; i++)
+            {
+                var candidate = all[i];
+                if (candidate == null) continue;
+                var go = candidate.gameObject;
+                if (go == null) continue;
+                if (!go.scene.IsValid()) continue;
+                return candidate;
+            }
+
+            return null;
         }
     }
 

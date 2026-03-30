@@ -97,6 +97,12 @@ namespace VRPerception.UI
             if (_overlayRoot != null) _overlayRoot.SetActive(false);
         }
 
+        public void ResetBlackout()
+        {
+            CancelPending();
+            Hide();
+        }
+
         public void Show()
         {
             _visible = true;

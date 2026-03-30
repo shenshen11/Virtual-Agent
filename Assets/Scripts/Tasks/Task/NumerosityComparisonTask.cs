@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using VRPerception.Infra.EventBus;
 using VRPerception.Perception;
+using VRPerception.UI;
 
 namespace VRPerception.Tasks
 {
@@ -17,12 +18,16 @@ namespace VRPerception.Tasks
     /// - For MLLM: enforce low-res by requesting a low-res snapshot via action_plan when needed.
     /// - For Human: stimulus is shown briefly then covered by black screen (handled by TrialBlackoutOverlay).
     /// </summary>
-    public sealed class NumerosityComparisonTask : ITask
+    public sealed class NumerosityComparisonTask : ITask, ITaskRunLifecycle
     {
         public string TaskId => "numerosity_comparison";
 
         private TaskRunnerContext _ctx;
         private System.Random _rand = new System.Random(12345);
+        private bool _referenceFrameInitialized;
+        private Vector3 _referenceOrigin;
+        private Vector3 _referenceForward;
+        private float _referenceEyeY;
 
         private GameObject _leftDots;
         private GameObject _rightDots;
@@ -45,9 +50,30 @@ namespace VRPerception.Tasks
                     runner = runner,
                     eventBus = eventBus,
                     perception = runner ? runner.GetComponent<PerceptionSystem>() : null,
-                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null
+                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null,
+                    humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null
                 };
             }
+            else if (_ctx.humanReferenceFrame == null)
+            {
+                _ctx.humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null;
+            }
+        }
+
+        public Task OnRunBeginAsync(CancellationToken ct)
+        {
+            if (!TryUseHumanSharedReferenceFrame() && !IsHumanMode())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: true);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task OnRunEndAsync(CancellationToken ct)
+        {
+            _referenceFrameInitialized = false;
+            return Task.CompletedTask;
         }
 
         public TrialSpec[] BuildTrials(int seed)
@@ -131,12 +157,16 @@ namespace VRPerception.Tasks
             return PromptTemplates.BuildNumerosityComparisonPrompt(fov, trial.trialId);
         }
 
-        public Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
+        public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
         {
+            HideTrialBlackoutOverlay();
+            await Task.Yield();
+            ct.ThrowIfCancellationRequested();
+
             EnsureParticleObjects();
             PlaceStimuli(trial);
 
-            return Task.CompletedTask;
+            await Task.Yield();
         }
 
         public Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
@@ -273,6 +303,12 @@ namespace VRPerception.Tasks
         {
             var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
             if (cam == null) return;
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: false);
+            }
+
+            ResolvePlacementReference(cam, out var origin, out var forward, out _);
 
             int leftCount = Mathf.Max(0, trial.trueCount);
             int rightCount = Mathf.Max(0, trial.targetCount);
@@ -282,13 +318,13 @@ namespace VRPerception.Tasks
             float regionWidth = 5.0f;
             float regionHeight = 3.5f;
 
-            var origin = cam.transform.position + cam.transform.forward * depth;
-            var right = cam.transform.right;
-            var up = cam.transform.up;
-            var forward = cam.transform.forward;
+            var panelOrigin = origin + forward * depth;
+            var right = Vector3.Cross(Vector3.up, forward).normalized;
+            if (right.sqrMagnitude < 1e-6f) right = Vector3.right;
+            var up = Vector3.up;
 
-            var leftCenter = origin - right * (gap * 0.5f + regionWidth * 0.5f);
-            var rightCenter = origin + right * (gap * 0.5f + regionWidth * 0.5f);
+            var leftCenter = panelOrigin - right * (gap * 0.5f + regionWidth * 0.5f);
+            var rightCenter = panelOrigin + right * (gap * 0.5f + regionWidth * 0.5f);
 
             float leftMinDist = ComputeMinDistance(regionWidth, regionHeight, leftCount);
             float rightMinDist = ComputeMinDistance(regionWidth, regionHeight, rightCount);
@@ -305,7 +341,93 @@ namespace VRPerception.Tasks
             SetParticles(_leftPs, leftCount, leftCenter, right, up, regionWidth, regionHeight, leftMinDist, dotSize);
             SetParticles(_rightPs, rightCount, rightCenter, right, up, regionWidth, regionHeight, rightMinDist, dotSize);
 
-            PlaceDivider(origin, forward, up, regionHeight);
+            PlaceDivider(panelOrigin, forward, up, regionHeight);
+        }
+
+        private void CaptureReferenceFrameIfNeeded(bool forceRefresh)
+        {
+            if (_referenceFrameInitialized && !forceRefresh) return;
+
+            var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
+            if (cam == null)
+            {
+                _referenceFrameInitialized = false;
+                return;
+            }
+
+            _referenceOrigin = cam.transform.position;
+            _referenceForward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = cam.transform.position.y;
+            _referenceFrameInitialized = true;
+        }
+
+        private bool TryUseHumanSharedReferenceFrame()
+        {
+            if (!IsHumanMode()) return false;
+
+            var humanRef = _ctx?.humanReferenceFrame;
+            if (humanRef == null || !humanRef.HasReferenceFrame) return false;
+
+            _referenceOrigin = humanRef.Origin;
+            _referenceForward = humanRef.Forward;
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = humanRef.EyeY;
+            _referenceFrameInitialized = true;
+            return true;
+        }
+
+        private void ResolvePlacementReference(Camera cam, out Vector3 origin, out Vector3 forward, out float eyeY)
+        {
+            if (TryUseHumanSharedReferenceFrame())
+            {
+                origin = _referenceOrigin;
+                forward = _referenceForward;
+                eyeY = _referenceEyeY;
+                return;
+            }
+
+            origin = _referenceFrameInitialized ? _referenceOrigin : cam.transform.position;
+            forward = _referenceFrameInitialized ? _referenceForward : Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
+            forward.Normalize();
+            eyeY = _referenceFrameInitialized ? _referenceEyeY : cam.transform.position.y;
+        }
+
+        private bool IsHumanMode()
+        {
+            return _ctx?.runner != null && _ctx.runner.CurrentSubjectMode == SubjectMode.Human;
+        }
+
+        private static void HideTrialBlackoutOverlay()
+        {
+            try
+            {
+                var overlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
+                if (overlay == null)
+                {
+                    var all = Resources.FindObjectsOfTypeAll<TrialBlackoutOverlay>();
+                    if (all != null)
+                    {
+                        for (int i = 0; i < all.Length; i++)
+                        {
+                            var candidate = all[i];
+                            if (candidate == null) continue;
+                            var go = candidate.gameObject;
+                            if (go == null) continue;
+                            if (!go.scene.IsValid()) continue;
+                            overlay = candidate;
+                            break;
+                        }
+                    }
+                }
+
+                if (overlay == null) return;
+                overlay.Hide();
+            }
+            catch { }
         }
 
         private static float ComputeMinDistance(float width, float height, int count)
