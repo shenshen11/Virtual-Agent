@@ -16,8 +16,8 @@ namespace VRPerception.Tasks
         [SerializeField] private float stableWindowMs = 3000f;
         [SerializeField] private float yawThresholdDeg = 2f;
         [SerializeField] private float positionThresholdM = 0.03f;
-        [SerializeField] private float timeoutSeconds = 6f;
-        [SerializeField] private float calibrationStartDelaySeconds = 3f;
+        [SerializeField] private float timeoutSeconds = 10f;
+        [SerializeField] private float calibrationStartDelaySeconds = 5f;
 
         [Header("Fixation UI")]
         [SerializeField] private float fixationScaleM = 0.025f;
