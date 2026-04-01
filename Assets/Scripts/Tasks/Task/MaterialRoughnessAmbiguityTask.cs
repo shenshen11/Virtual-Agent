@@ -30,6 +30,10 @@ namespace VRPerception.Tasks
 
         private ExperimentSceneManager _scene;
         private ObjectPlacer _placer;
+        private bool _referenceFrameInitialized;
+        private Vector3 _referenceOrigin;
+        private Vector3 _referenceForward;
+        private float _referenceEyeY;
 
         private readonly Dictionary<string, Material> _materialCache =
             new Dictionary<string, Material>(StringComparer.OrdinalIgnoreCase);
@@ -51,8 +55,13 @@ namespace VRPerception.Tasks
                     runner = runner,
                     eventBus = eventBus,
                     perception = runner ? runner.GetComponent<PerceptionSystem>() : null,
-                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null
+                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null,
+                    humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null
                 };
+            }
+            else if (_ctx.humanReferenceFrame == null)
+            {
+                _ctx.humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null;
             }
 
             TryBindHelpers();
@@ -117,6 +126,10 @@ namespace VRPerception.Tasks
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
         {
             TryBindHelpers();
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: true);
+            }
 
             if (_scene != null)
             {
@@ -227,8 +240,9 @@ namespace VRPerception.Tasks
             }
             else
             {
-                pos = cam.transform.position + cam.transform.forward * DefaultFallbackDistanceM;
-                pos.y = cam.transform.position.y;
+                ResolvePlacementReference(cam, out var origin, out var forward, out var eyeY);
+                pos = origin + forward * DefaultFallbackDistanceM;
+                pos.y = eyeY;
             }
 
             var mat = GetOrCreateMetalMaterial(trial.roughness);
@@ -258,6 +272,63 @@ namespace VRPerception.Tasks
                     placed.transform.rotation = Quaternion.LookRotation(lookDir.normalized, Vector3.up);
                 }
             }
+        }
+
+        private void CaptureReferenceFrameIfNeeded(bool forceRefresh)
+        {
+            if (_referenceFrameInitialized && !forceRefresh) return;
+
+            var cam = _ctx?.stimulus?.HeadCamera ?? Camera.main;
+            if (cam == null)
+            {
+                _referenceFrameInitialized = false;
+                return;
+            }
+
+            _referenceOrigin = cam.transform.position;
+            _referenceForward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = cam.transform.position.y;
+            _referenceFrameInitialized = true;
+        }
+
+        private bool TryUseHumanSharedReferenceFrame()
+        {
+            if (!IsHumanMode()) return false;
+
+            var humanRef = _ctx?.humanReferenceFrame;
+            if (humanRef == null || !humanRef.HasReferenceFrame) return false;
+
+            _referenceOrigin = humanRef.Origin;
+            _referenceForward = humanRef.Forward;
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = humanRef.EyeY;
+            _referenceFrameInitialized = true;
+            return true;
+        }
+
+        private void ResolvePlacementReference(Camera cam, out Vector3 origin, out Vector3 forward, out float eyeY)
+        {
+            if (TryUseHumanSharedReferenceFrame())
+            {
+                origin = _referenceOrigin;
+                forward = _referenceForward;
+                eyeY = _referenceEyeY;
+                return;
+            }
+
+            origin = _referenceFrameInitialized ? _referenceOrigin : cam.transform.position;
+            forward = _referenceFrameInitialized ? _referenceForward : Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
+            forward.Normalize();
+            eyeY = _referenceFrameInitialized ? _referenceEyeY : cam.transform.position.y;
+        }
+
+        private bool IsHumanMode()
+        {
+            return _ctx?.runner != null && _ctx.runner.CurrentSubjectMode == SubjectMode.Human;
         }
 
         private Material GetOrCreateMetalMaterial(float roughness)

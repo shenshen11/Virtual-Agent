@@ -17,6 +17,7 @@ namespace VRPerception.Tasks
     public class TaskRunner : MonoBehaviour
     {
         private const int NumerosityPostCalibrationBlackoutMs = 1000;
+        private const int ChangeDetectionPostCalibrationBlackoutMs = 1000;
 
         private enum MllmCaptureMode
         {
@@ -437,6 +438,8 @@ namespace VRPerception.Tasks
                 string.Equals(task.TaskId, "change_detection", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "horizon_cue_integration", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(task.TaskId, "material_roughness", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(task.TaskId, "material_roughness_motion", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "visual_crowding", StringComparison.OrdinalIgnoreCase);
             if (!requiresCalibration) return;
@@ -460,6 +463,14 @@ namespace VRPerception.Tasks
                 if (maskArmed && NumerosityPostCalibrationBlackoutMs > 0)
                 {
                     await Task.Delay(NumerosityPostCalibrationBlackoutMs, ct);
+                }
+            }
+            else if (string.Equals(task.TaskId, "change_detection", StringComparison.OrdinalIgnoreCase))
+            {
+                bool maskArmed = TryArmTrialBlackoutOverlay(0);
+                if (maskArmed && ChangeDetectionPostCalibrationBlackoutMs > 0)
+                {
+                    await Task.Delay(ChangeDetectionPostCalibrationBlackoutMs, ct);
                 }
             }
         }
