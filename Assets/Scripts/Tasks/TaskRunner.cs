@@ -436,6 +436,7 @@ namespace VRPerception.Tasks
             bool requiresCalibration =
                 string.Equals(task.TaskId, "distance_compression", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "change_detection", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(task.TaskId, "color_constancy_adjustment", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "horizon_cue_integration", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "material_roughness", StringComparison.OrdinalIgnoreCase) ||

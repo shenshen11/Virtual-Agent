@@ -15,7 +15,7 @@ namespace VRPerception.Tasks
     /// - 红光/蓝光：先适应，再在有家具/无家具条件下交替调节
     /// - 输出：记录被试/模型给出的 RGB，与基线差值
     /// </summary>
-    public class ColorConstancyAdjustmentTask : ITask
+    public class ColorConstancyAdjustmentTask : ITask, ITaskRunLifecycle
     {
         public string TaskId => "color_constancy_adjustment";
 
@@ -48,6 +48,10 @@ namespace VRPerception.Tasks
         private bool _redAdapted;
         private bool _blueAdapted;
         private bool _restedForBlue;
+        private bool _referenceFrameInitialized;
+        private Vector3 _referenceOrigin;
+        private Vector3 _referenceForward;
+        private float _referenceEyeY;
 
         public ColorConstancyAdjustmentTask(TaskRunnerContext ctx)
         {
@@ -64,11 +68,33 @@ namespace VRPerception.Tasks
                     runner = runner,
                     eventBus = eventBus,
                     perception = runner ? runner.GetComponent<PerceptionSystem>() : null,
-                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null
+                    stimulus = runner ? runner.GetComponent<StimulusCapture>() : null,
+                    humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null
                 };
+            }
+            else if (_ctx.humanReferenceFrame == null)
+            {
+                _ctx.humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null;
             }
 
             TryBindHelpers();
+        }
+
+        public Task OnRunBeginAsync(CancellationToken ct)
+        {
+            TryBindHelpers();
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: true);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task OnRunEndAsync(CancellationToken ct)
+        {
+            _referenceFrameInitialized = false;
+            return Task.CompletedTask;
         }
 
         public TrialSpec[] BuildTrials(int seed)
@@ -173,6 +199,11 @@ namespace VRPerception.Tasks
             // Camera FOV
             var fov = trial.fovDeg > 0 ? trial.fovDeg : DefaultFovDeg;
             _ctx?.stimulus?.SetCameraFOV(fov);
+
+            if (!TryUseHumanSharedReferenceFrame())
+            {
+                CaptureReferenceFrameIfNeeded(forceRefresh: false);
+            }
 
             // Place stimuli
             ClearSpawned();
@@ -397,6 +428,25 @@ namespace VRPerception.Tasks
             return false;
         }
 
+        private void CaptureReferenceFrameIfNeeded(bool forceRefresh)
+        {
+            if (_referenceFrameInitialized && !forceRefresh) return;
+
+            var cam = ResolveCamera();
+            if (cam == null)
+            {
+                _referenceFrameInitialized = false;
+                return;
+            }
+
+            _referenceOrigin = cam.transform.position;
+            _referenceForward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = cam.transform.position.y;
+            _referenceFrameInitialized = true;
+        }
+
         private void EnsureFurnitureForAdaptation(string phase)
         {
             if (_furniture == null) return;
@@ -449,11 +499,9 @@ namespace VRPerception.Tasks
             var cam = ResolveCamera();
             if (cam == null) return;
 
-            var origin = cam.transform.position;
-            var forward = cam.transform.forward;
-
+            ResolvePlacementReference(cam, out var origin, out var forward, out var eyeY);
             var pos = origin + forward * AdjustableSphereDistance;
-            pos.y = origin.y + AdjustableSphereYOffset;
+            pos.y = eyeY + AdjustableSphereYOffset;
 
             var sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             sphere.name = "cc_adjustable_sphere";
@@ -483,11 +531,20 @@ namespace VRPerception.Tasks
             int cols = Mathf.CeilToInt(Mathf.Sqrt(meta.candidateRgbs.Length));
             int rows = Mathf.CeilToInt(meta.candidateRgbs.Length / (float)cols);
 
-            var center = cam.transform.position + cam.transform.forward * CandidateGridDistance;
-            center.y = cam.transform.position.y;
+            ResolvePlacementReference(cam, out var origin, out var forward, out var eyeY);
 
-            var right = cam.transform.right;
-            var up = cam.transform.up;
+            var center = origin + forward * CandidateGridDistance;
+            center.y = eyeY;
+
+            var right = Vector3.Cross(Vector3.up, forward);
+            if (right.sqrMagnitude < 1e-6f)
+            {
+                right = Vector3.ProjectOnPlane(cam.transform.right, Vector3.up);
+            }
+            if (right.sqrMagnitude < 1e-6f) right = Vector3.right;
+            right.Normalize();
+
+            var up = Vector3.up;
 
             for (int i = 0; i < meta.candidateRgbs.Length; i++)
             {
@@ -572,6 +629,44 @@ namespace VRPerception.Tasks
         {
             if (_ctx?.stimulus != null && _ctx.stimulus.HeadCamera != null) return _ctx.stimulus.HeadCamera;
             return Camera.main;
+        }
+
+        private bool TryUseHumanSharedReferenceFrame()
+        {
+            if (!IsHumanMode()) return false;
+
+            var humanRef = _ctx?.humanReferenceFrame;
+            if (humanRef == null || !humanRef.HasReferenceFrame) return false;
+
+            _referenceOrigin = humanRef.Origin;
+            _referenceForward = humanRef.Forward;
+            if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
+            _referenceForward.Normalize();
+            _referenceEyeY = humanRef.EyeY;
+            _referenceFrameInitialized = true;
+            return true;
+        }
+
+        private void ResolvePlacementReference(Camera cam, out Vector3 origin, out Vector3 forward, out float eyeY)
+        {
+            if (TryUseHumanSharedReferenceFrame())
+            {
+                origin = _referenceOrigin;
+                forward = _referenceForward;
+                eyeY = _referenceEyeY;
+                return;
+            }
+
+            origin = _referenceFrameInitialized ? _referenceOrigin : cam.transform.position;
+            forward = _referenceFrameInitialized ? _referenceForward : Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
+            forward.Normalize();
+            eyeY = _referenceFrameInitialized ? _referenceEyeY : cam.transform.position.y;
+        }
+
+        private bool IsHumanMode()
+        {
+            return _ctx?.runner != null && _ctx.runner.CurrentSubjectMode == SubjectMode.Human;
         }
 
         private static async Task DelaySeconds(float seconds, CancellationToken ct)
