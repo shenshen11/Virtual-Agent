@@ -3650,7 +3650,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   screenFade: 0
-  eyeTracking: 0
+  eyeTracking: 1
   trackingMode: -1
   sharpeningMode: 0
   sharpeningEnhance: 0

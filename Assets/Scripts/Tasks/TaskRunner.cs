@@ -123,6 +123,10 @@ namespace VRPerception.Tasks
             if (eventBus == null) eventBus = EventBusManager.Instance;
             if (perception == null) perception = GetComponent<PerceptionSystem>();
             if (stimulus == null) stimulus = GetComponent<StimulusCapture>();
+            if (GetComponent<PicoHumanTelemetryRecorder>() == null)
+            {
+                gameObject.AddComponent<PicoHumanTelemetryRecorder>();
+            }
             if (humanReferenceFrame == null)
             {
                 humanReferenceFrame = GetComponent<HumanReferenceFrameService>();
