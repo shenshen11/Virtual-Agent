@@ -31,7 +31,7 @@ namespace VRPerception.Tasks
         public Vector3 Right => Vector3.Cross(Vector3.up, Forward).normalized;
         public float EyeY { get; private set; }
 
-        public async Task<bool> CalibrateAsync(Camera headCamera, Transform xrRigTransform, CancellationToken ct)
+        public async Task<bool> CalibrateAsync(Camera headCamera, Transform xrRigTransform, CancellationToken ct, Action<string> onSubphaseChanged = null)
         {
             Clear();
 
@@ -42,6 +42,7 @@ namespace VRPerception.Tasks
             }
 
             EnsurePresenter();
+            onSubphaseChanged?.Invoke("pre_delay");
             if (calibrationStartDelaySeconds > 0f)
             {
                 Debug.Log($"[HumanReferenceFrameService] Waiting {calibrationStartDelaySeconds:F2}s before calibration to let XR pose stabilize.");
@@ -56,6 +57,7 @@ namespace VRPerception.Tasks
             Vector3 referenceForward = ResolveReferenceForward(xrRigTransform, headCamera.transform);
             Vector3 fixationWorldPosition = ResolveFixationWorldPosition(xrRigTransform, headCamera.transform.position, referenceForward);
             int renderLayer = headCamera.gameObject.layer;
+            onSubphaseChanged?.Invoke("fixation");
             LogCalibrationState("pre-show", headCamera, xrRigTransform, fixationWorldPosition, referenceForward);
             _presenter?.Show(fixationWorldPosition, headCamera.transform.position, fixationScaleM, fixationColor, renderLayer);
 

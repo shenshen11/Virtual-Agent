@@ -45,6 +45,7 @@ namespace VRPerception.Tasks
         [SerializeField] private PerceptionSystem perception;
         [SerializeField] private StimulusCapture stimulus;
         [SerializeField] private HumanReferenceFrameService humanReferenceFrame;
+        [SerializeField] private PicoHumanTelemetryRecorder humanTelemetryRecorder;
         [SerializeField] private XROrigin xrOrigin;
 
         [Header("Execution")]
@@ -126,6 +127,10 @@ namespace VRPerception.Tasks
             if (GetComponent<PicoHumanTelemetryRecorder>() == null)
             {
                 gameObject.AddComponent<PicoHumanTelemetryRecorder>();
+            }
+            if (humanTelemetryRecorder == null)
+            {
+                humanTelemetryRecorder = GetComponent<PicoHumanTelemetryRecorder>();
             }
             if (humanReferenceFrame == null)
             {
@@ -460,7 +465,19 @@ namespace VRPerception.Tasks
             TryResetTrialBlackoutOverlay();
 
             Transform xrRigTransform = ResolveHumanCalibrationRigTransform();
-            await humanReferenceFrame.CalibrateAsync(headCamera, xrRigTransform, ct);
+            humanTelemetryRecorder?.StartCalibrationRecording(task.TaskId);
+            try
+            {
+                await humanReferenceFrame.CalibrateAsync(
+                    headCamera,
+                    xrRigTransform,
+                    ct,
+                    subphase => humanTelemetryRecorder?.SetCalibrationSubphase(subphase));
+            }
+            finally
+            {
+                humanTelemetryRecorder?.StopCalibrationRecording();
+            }
 
             if (string.Equals(task.TaskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
             {
