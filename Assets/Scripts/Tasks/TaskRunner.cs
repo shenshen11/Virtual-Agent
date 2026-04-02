@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using Unity.XR.CoreUtils;
+using VRPerception.Infra;
 using VRPerception.Infra.EventBus;
 using VRPerception.Perception;
 using VRPerception.Tasks;
@@ -46,6 +47,8 @@ namespace VRPerception.Tasks
         [SerializeField] private StimulusCapture stimulus;
         [SerializeField] private HumanReferenceFrameService humanReferenceFrame;
         [SerializeField] private PicoHumanTelemetryRecorder humanTelemetryRecorder;
+        [SerializeField] private TrialObjectCsvRecorder trialObjectCsvRecorder;
+        [SerializeField] private ObjectPlacer objectPlacer;
         [SerializeField] private XROrigin xrOrigin;
 
         [Header("Execution")]
@@ -85,6 +88,7 @@ namespace VRPerception.Tasks
         private CancellationTokenSource _runCts;
         private string _overrideTaskId;
         private string _humanInputPrompt;
+        private string _runId;
  
         public TaskRunnerContext Context { get; private set; } = new TaskRunnerContext();
 
@@ -131,6 +135,22 @@ namespace VRPerception.Tasks
             if (humanTelemetryRecorder == null)
             {
                 humanTelemetryRecorder = GetComponent<PicoHumanTelemetryRecorder>();
+            }
+            if (trialObjectCsvRecorder == null)
+            {
+                if (GetComponent<TrialObjectCsvRecorder>() == null)
+                {
+                    gameObject.AddComponent<TrialObjectCsvRecorder>();
+                }
+                trialObjectCsvRecorder = GetComponent<TrialObjectCsvRecorder>();
+            }
+            if (objectPlacer == null)
+            {
+                objectPlacer = GetComponent<ObjectPlacer>();
+            }
+            if (objectPlacer == null)
+            {
+                objectPlacer = FindObjectOfType<ObjectPlacer>();
             }
             if (humanReferenceFrame == null)
             {
@@ -194,6 +214,7 @@ namespace VRPerception.Tasks
             }
 
             _task.Initialize(this, eventBus);
+            _runId = LogSessionPaths.GetOrCreateSessionId("VRP_Logs");
 
             var trials = _task.BuildTrials(randomSeed) ?? Array.Empty<TrialSpec>();
             if (maxTrials > 0 && trials.Length > maxTrials)
@@ -238,7 +259,9 @@ namespace VRPerception.Tasks
 
                         // 前置布置
                         PublishTrialState(trial, TrialLifecycleState.SceneSetup, trialConfig: trial);
+                        objectPlacer?.SetActiveTrialContext(trial.taskId, trial.trialId);
                         await _task.OnBeforeTrialAsync(trial, _runCts.Token);
+                        RecordTrialObjects(trial, i);
 
                         PublishTrialState(trial, TrialLifecycleState.Started, trialConfig: trial);
 
@@ -335,6 +358,7 @@ namespace VRPerception.Tasks
 
                             // 执行清理逻辑（即使没有响应）
                             await _task.OnAfterTrialAsync(trial, null, _runCts.Token);
+                            objectPlacer?.ClearActiveTrialContext();
 
                             // 采样指标：trial 耗时（超时/无响应）
                             trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
@@ -345,6 +369,7 @@ namespace VRPerception.Tasks
 
                         // 后置清理 / 记录
                         await _task.OnAfterTrialAsync(trial, finalResponse, _runCts.Token);
+                        objectPlacer?.ClearActiveTrialContext();
 
                         // 评测
                         var eval = _task.Evaluate(trial, finalResponse);
@@ -373,6 +398,10 @@ namespace VRPerception.Tasks
                         {
                             Debug.LogWarning($"[TaskRunner] Cleanup after cancellation failed: {cleanupEx.Message}");
                         }
+                        finally
+                        {
+                            objectPlacer?.ClearActiveTrialContext();
+                        }
                         break;
                     }
                     catch (Exception ex)
@@ -383,6 +412,7 @@ namespace VRPerception.Tasks
                         trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
                         eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
                             new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "failed" });
+                        objectPlacer?.ClearActiveTrialContext();
                     }
                 }
             }
@@ -698,6 +728,18 @@ namespace VRPerception.Tasks
             {
                 return null;
             }
+        }
+
+        private void RecordTrialObjects(TrialSpec trial, int trialExecutionIndex)
+        {
+            if (trialObjectCsvRecorder == null || trial == null) return;
+
+            trialObjectCsvRecorder.RecordTrialObjects(
+                _runId,
+                subjectMode,
+                randomSeed,
+                trialExecutionIndex,
+                trial);
         }
 
         private void PublishTrialState(TrialSpec trial, TrialLifecycleState state, object trialConfig = null, object results = null, string error = null)

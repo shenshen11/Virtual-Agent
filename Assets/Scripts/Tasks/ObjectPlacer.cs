@@ -36,6 +36,9 @@ namespace VRPerception.Tasks
 
         private readonly List<GameObject> _spawned = new List<GameObject>();
         private Dictionary<string, GameObject> _prefabMap;
+        private string _activeTaskId;
+        private int _activeTrialId = -1;
+        private readonly Dictionary<string, int> _objectNameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         private void Awake()
         {
@@ -126,8 +129,23 @@ namespace VRPerception.Tasks
                 ApplyMaterial(go, mat);
             }
 
+            TryAttachTrialMarker(go, kind);
             _spawned.Add(go);
             return go;
+        }
+
+        public void SetActiveTrialContext(string taskId, int trialId)
+        {
+            _activeTaskId = string.IsNullOrWhiteSpace(taskId) ? null : taskId.Trim();
+            _activeTrialId = trialId;
+            _objectNameCounts.Clear();
+        }
+
+        public void ClearActiveTrialContext()
+        {
+            _activeTaskId = null;
+            _activeTrialId = -1;
+            _objectNameCounts.Clear();
         }
 
         /// <summary>
@@ -198,6 +216,33 @@ namespace VRPerception.Tasks
                 r.sharedMaterial = mat;
             else
                 r.material = mat;
+        }
+
+        private void TryAttachTrialMarker(GameObject go, string kind)
+        {
+            if (go == null) return;
+            if (string.IsNullOrWhiteSpace(_activeTaskId) || _activeTrialId < 0) return;
+
+            string objectName = string.IsNullOrWhiteSpace(go.name) ? "unnamed" : go.name.Trim();
+            if (!_objectNameCounts.TryGetValue(objectName, out var count))
+            {
+                count = 0;
+            }
+
+            count++;
+            _objectNameCounts[objectName] = count;
+
+            string objectId = count <= 1
+                ? $"{_activeTaskId}_{_activeTrialId}_{objectName}"
+                : $"{_activeTaskId}_{_activeTrialId}_{objectName}_{count}";
+
+            TrialObjectMarker.AttachOrUpdate(
+                go,
+                _activeTaskId,
+                _activeTrialId,
+                objectId,
+                kind,
+                TrialObjectMarker.InferRole(go.name));
         }
     }
 }
