@@ -872,12 +872,37 @@ namespace VRPerception.UI
             var graphics = _canvas.GetComponentsInChildren<UnityEngine.UI.Graphic>(true);
             foreach (var graphic in graphics)
             {
-                if (graphic.material != null)
+                if (graphic == null) continue;
+
+                // TMP_SubMeshUI 的 material getter 会在 shared material 缺失时尝试 new Material(null)，这里先走安全分支。
+                if (graphic is TMP_SubMeshUI tmpSubMesh)
                 {
-                    // 设置渲染队列为 Overlay (3000+)，确保在所有不透明和透明物体之后渲染
-                    graphic.material.renderQueue = 3000;
+                    SetRenderQueueSafe(tmpSubMesh.sharedMaterial);
+                    continue;
+                }
+
+                if (graphic is TMP_Text tmpText)
+                {
+                    SetRenderQueueSafe(tmpText.fontSharedMaterial);
+                }
+
+                try
+                {
+                    SetRenderQueueSafe(graphic.material);
+                }
+                catch (ArgumentNullException)
+                {
+                    // 某些 UI 组件在运行期尚未准备好材质实例，跳过即可，不应中断 trial 生命周期事件。
                 }
             }
+        }
+
+        private static void SetRenderQueueSafe(Material material)
+        {
+            if (material == null) return;
+
+            // 设置渲染队列为 Overlay (3000+)，确保在所有不透明和透明物体之后渲染
+            material.renderQueue = 3000;
         }
 
         [Serializable]
