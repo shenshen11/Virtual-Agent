@@ -56,6 +56,8 @@ namespace VRPerception.Tasks
         private Vector3 _referenceOrigin;
         private Vector3 _referenceForward;
         private float _referenceEyeY;
+        private readonly Dictionary<string, int> _snapshotObjectCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private int _activeTrialId = -1;
 
         public HorizonCueIntegrationTask(TaskRunnerContext ctx)
         {
@@ -222,6 +224,8 @@ namespace VRPerception.Tasks
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
         {
+            _snapshotObjectCounts.Clear();
+            _activeTrialId = trial != null ? trial.trialId : -1;
             EnsureRuntimeObjects();
 
             // 使用 StimulusCapture 的头部相机；若不可用则回退到 Camera.main。
@@ -340,6 +344,8 @@ namespace VRPerception.Tasks
         {
             // 试次结束立即黑场，减少上一次刺激对下一次的影响。
             if (_blackout != null) _blackout.BeginBlackoutAfterMs(0);
+            _snapshotObjectCounts.Clear();
+            _activeTrialId = -1;
             await Task.Delay(250, ct);
         }
 
@@ -380,6 +386,7 @@ namespace VRPerception.Tasks
         {
             // 运行时对象在任务运行期间常驻；每个试次只更新位置/旋转。
             if (_runtimeRoot == null) _runtimeRoot = new GameObject("HorizonCueIntegration_RuntimeRoot");
+            AttachSnapshotMarker(_runtimeRoot, "runtime_root", "helper");
 
             if (_environmentRig == null)
             {
@@ -388,16 +395,19 @@ namespace VRPerception.Tasks
                 go.transform.SetParent(_runtimeRoot.transform, worldPositionStays: true);
                 _environmentRig = go.transform;
             }
+            AttachSnapshotMarker(_environmentRig != null ? _environmentRig.gameObject : null, "environment_rig", "helper");
 
             if (_skySphere == null)
             {
                 _skySphere = CreateSkySphere(_environmentRig);
             }
+            AttachSnapshotMarker(_skySphere != null ? _skySphere.gameObject : null, "sky_sphere", "helper");
 
             if (_redSphere == null)
             {
                 _redSphere = CreateRedSphere(_runtimeRoot.transform);
             }
+            AttachSnapshotMarker(_redSphere != null ? _redSphere.gameObject : null, "sphere", "target");
 
             EnsureBlackoutOverlay();
         }
@@ -430,6 +440,7 @@ namespace VRPerception.Tasks
             var blackoutGo = new GameObject("TrialBlackoutOverlay");
             blackoutGo.transform.SetParent(_runtimeRoot != null ? _runtimeRoot.transform : null, worldPositionStays: false);
             _blackout = blackoutGo.AddComponent<TrialBlackoutOverlay>();
+            AttachSnapshotMarker(blackoutGo, "blackout_overlay", "helper");
             _blackoutIsRuntimeCreated = true;
             _blackout.HideOnTrialEnd = false;
         }
@@ -583,6 +594,23 @@ namespace VRPerception.Tasks
             }
 
             return sphereGo.transform;
+        }
+
+        private void AttachSnapshotMarker(GameObject go, string kind, string role)
+        {
+            if (go == null) return;
+
+            string taskId = _ctx?.runner?.CurrentConfiguredTaskId ?? TaskId;
+            string baseName = string.IsNullOrWhiteSpace(go.name) ? "unnamed" : go.name.Trim();
+            if (!_snapshotObjectCounts.TryGetValue(baseName, out var count)) count = 0;
+            count++;
+            _snapshotObjectCounts[baseName] = count;
+
+            string objectId = count <= 1
+                ? $"{taskId}_{_activeTrialId}_{baseName}"
+                : $"{taskId}_{_activeTrialId}_{baseName}_{count}";
+
+            TrialObjectMarker.AttachOrUpdate(go, taskId, _activeTrialId, objectId, kind, role);
         }
 
         private void EnsureRuntimeRedMaterial()

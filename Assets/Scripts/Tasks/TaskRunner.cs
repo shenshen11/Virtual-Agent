@@ -259,7 +259,6 @@ namespace VRPerception.Tasks
 
                         // 前置布置
                         PublishTrialState(trial, TrialLifecycleState.SceneSetup, trialConfig: trial);
-                        objectPlacer?.SetActiveTrialContext(trial.taskId, trial.trialId);
                         await _task.OnBeforeTrialAsync(trial, _runCts.Token);
                         RecordTrialObjects(trial, i);
 
@@ -358,8 +357,6 @@ namespace VRPerception.Tasks
 
                             // 执行清理逻辑（即使没有响应）
                             await _task.OnAfterTrialAsync(trial, null, _runCts.Token);
-                            objectPlacer?.ClearActiveTrialContext();
-
                             // 采样指标：trial 耗时（超时/无响应）
                             trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
                             eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
@@ -369,8 +366,6 @@ namespace VRPerception.Tasks
 
                         // 后置清理 / 记录
                         await _task.OnAfterTrialAsync(trial, finalResponse, _runCts.Token);
-                        objectPlacer?.ClearActiveTrialContext();
-
                         // 评测
                         var eval = _task.Evaluate(trial, finalResponse);
                         PublishTrialState(trial, TrialLifecycleState.Completed, trialConfig: trial, results: eval);
@@ -398,10 +393,6 @@ namespace VRPerception.Tasks
                         {
                             Debug.LogWarning($"[TaskRunner] Cleanup after cancellation failed: {cleanupEx.Message}");
                         }
-                        finally
-                        {
-                            objectPlacer?.ClearActiveTrialContext();
-                        }
                         break;
                     }
                     catch (Exception ex)
@@ -412,7 +403,6 @@ namespace VRPerception.Tasks
                         trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
                         eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
                             new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "failed" });
-                        objectPlacer?.ClearActiveTrialContext();
                     }
                 }
             }

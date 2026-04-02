@@ -39,6 +39,7 @@ namespace VRPerception.Tasks
 
         private readonly Dictionary<TrialSpec, TrialMeta> _metaByTrial = new Dictionary<TrialSpec, TrialMeta>();
         private readonly List<GameObject> _spawned = new List<GameObject>();
+        private readonly Dictionary<string, int> _snapshotObjectCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         private int _plannedTrialCount;
         private string _currentFurniturePhase;
@@ -52,6 +53,7 @@ namespace VRPerception.Tasks
         private Vector3 _referenceOrigin;
         private Vector3 _referenceForward;
         private float _referenceEyeY;
+        private int _activeTrialId = -1;
 
         public ColorConstancyAdjustmentTask(TaskRunnerContext ctx)
         {
@@ -149,6 +151,8 @@ namespace VRPerception.Tasks
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
         {
             TryBindHelpers();
+            _snapshotObjectCounts.Clear();
+            _activeTrialId = trial != null ? trial.trialId : -1;
 
             if (!_metaByTrial.TryGetValue(trial, out var meta))
             {
@@ -222,6 +226,8 @@ namespace VRPerception.Tasks
         public async Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
         {
             ClearSpawned();
+            _snapshotObjectCounts.Clear();
+            _activeTrialId = -1;
             if (IsLastTrial(trial))
             {
                 _furniture?.Clear();
@@ -507,6 +513,7 @@ namespace VRPerception.Tasks
             sphere.name = "cc_adjustable_sphere";
             sphere.transform.position = pos;
             sphere.transform.localScale = Vector3.one * AdjustableSphereScale;
+            AttachSnapshotMarker(sphere, "sphere", "target");
 
             var adjustable = sphere.AddComponent<ColorAdjustableTarget>();
             if (meta?.initialRgb != null && meta.initialRgb.Length >= 3)
@@ -560,6 +567,7 @@ namespace VRPerception.Tasks
                 sphere.name = $"cc_choice_{meta.candidateLabels[i]}";
                 sphere.transform.position = pos;
                 sphere.transform.localScale = Vector3.one * CandidateSphereScale;
+                AttachSnapshotMarker(sphere, "sphere", "target");
 
                 var renderer = sphere.GetComponent<Renderer>();
                 if (renderer != null)
@@ -579,6 +587,7 @@ namespace VRPerception.Tasks
             var go = new GameObject($"label_{label}");
             go.transform.SetParent(parent, false);
             go.transform.localPosition = new Vector3(0f, 0.2f, 0f);
+            AttachSnapshotMarker(go, "label", "helper");
 
             var text = go.AddComponent<TextMesh>();
             text.text = label;
@@ -689,6 +698,23 @@ namespace VRPerception.Tasks
 #endif
                 _spawned.RemoveAt(i);
             }
+        }
+
+        private void AttachSnapshotMarker(GameObject go, string kind, string role)
+        {
+            if (go == null) return;
+
+            string taskId = _ctx?.runner?.CurrentConfiguredTaskId ?? TaskId;
+            string baseName = string.IsNullOrWhiteSpace(go.name) ? "unnamed" : go.name.Trim();
+            if (!_snapshotObjectCounts.TryGetValue(baseName, out var count)) count = 0;
+            count++;
+            _snapshotObjectCounts[baseName] = count;
+
+            string objectId = count <= 1
+                ? $"{taskId}_{_activeTrialId}_{baseName}"
+                : $"{taskId}_{_activeTrialId}_{baseName}_{count}";
+
+            TrialObjectMarker.AttachOrUpdate(go, taskId, _activeTrialId, objectId, kind, role);
         }
 
         private static bool TryExtractAnswer(object answer, out string choice)

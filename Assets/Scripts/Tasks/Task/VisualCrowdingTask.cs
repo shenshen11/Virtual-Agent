@@ -28,6 +28,8 @@ namespace VRPerception.Tasks
         private System.Random _rand = new System.Random(1234);
         private ExperimentSceneManager _scene;
         private readonly List<GameObject> _spawned = new List<GameObject>();
+        private readonly Dictionary<string, int> _snapshotObjectCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private int _activeTrialId = -1;
         private bool _referenceFrameInitialized;
         private Vector3 _referenceOrigin;
         private Vector3 _referenceForward;
@@ -145,6 +147,8 @@ namespace VRPerception.Tasks
         {
             TryBindHelpers();
             ClearSpawned();
+            _snapshotObjectCounts.Clear();
+            _activeTrialId = trial != null ? trial.trialId : -1;
 
             if (_scene != null)
             {
@@ -338,6 +342,7 @@ namespace VRPerception.Tasks
             pos.y = eyeY; // 保持与字母同一高度
             var root = new GameObject("vc_fixation");
             root.transform.position = pos;
+            AttachSnapshotMarker(root, "fixation", "fixation");
 
             // 十字注视点：水平+垂直细条
             var horiz = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -380,6 +385,7 @@ namespace VRPerception.Tasks
                 if (go != null)
                 {
                     go.name = $"vc_letter_{i}";
+                    AttachSnapshotMarker(go, "letter", i == trial.targetIndex ? "target" : "flanker");
                     _spawned.Add(go);
                 }
             }
@@ -417,6 +423,25 @@ namespace VRPerception.Tasks
                 }
             }
             _spawned.Clear();
+            _snapshotObjectCounts.Clear();
+            _activeTrialId = -1;
+        }
+
+        private void AttachSnapshotMarker(GameObject go, string kind, string role)
+        {
+            if (go == null) return;
+
+            string taskId = _ctx?.runner?.CurrentConfiguredTaskId ?? TaskId;
+            string baseName = string.IsNullOrWhiteSpace(go.name) ? "unnamed" : go.name.Trim();
+            if (!_snapshotObjectCounts.TryGetValue(baseName, out var count)) count = 0;
+            count++;
+            _snapshotObjectCounts[baseName] = count;
+
+            string objectId = count <= 1
+                ? $"{taskId}_{_activeTrialId}_{baseName}"
+                : $"{taskId}_{_activeTrialId}_{baseName}_{count}";
+
+            TrialObjectMarker.AttachOrUpdate(go, taskId, _activeTrialId, objectId, kind, role);
         }
 
         private void Shuffle<T>(IList<T> list)

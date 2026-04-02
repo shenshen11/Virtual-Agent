@@ -193,6 +193,7 @@ namespace VRPerception.Tasks
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
         {
             TryBindHelpers();
+            _placer?.SetActiveTrialContext(trial.taskId, trial.trialId);
             if (!TryUseHumanSharedReferenceFrame())
             {
                 CaptureReferenceFrameIfNeeded(forceRefresh: false);
@@ -219,6 +220,7 @@ namespace VRPerception.Tasks
             if (_placer != null)
             {
                 _placer.ClearAll();
+                _placer.ClearActiveTrialContext();
             }
             else
             {

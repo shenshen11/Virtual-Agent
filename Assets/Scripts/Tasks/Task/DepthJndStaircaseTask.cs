@@ -158,6 +158,7 @@ namespace VRPerception.Tasks
         {
             ct.ThrowIfCancellationRequested();
             TryBindHelpers();
+            _placer?.SetActiveTrialContext(trial.taskId, trial.trialId);
 
             if (_scene != null)
             {
@@ -183,6 +184,7 @@ namespace VRPerception.Tasks
             if (_placer != null)
             {
                 _placer.ClearAll();
+                _placer.ClearActiveTrialContext();
             }
             else
             {

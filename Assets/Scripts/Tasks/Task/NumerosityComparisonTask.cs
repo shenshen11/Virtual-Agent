@@ -35,6 +35,8 @@ namespace VRPerception.Tasks
 
         private ParticleSystem _leftPs;
         private ParticleSystem _rightPs;
+        private readonly Dictionary<string, int> _snapshotObjectCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private int _activeTrialId = -1;
 
         public NumerosityComparisonTask(TaskRunnerContext ctx)
         {
@@ -163,7 +165,11 @@ namespace VRPerception.Tasks
             await Task.Yield();
             ct.ThrowIfCancellationRequested();
 
+            _snapshotObjectCounts.Clear();
+            _activeTrialId = trial != null ? trial.trialId : -1;
             EnsureParticleObjects();
+            AttachSnapshotMarker(_leftDots, "particle_group", "target");
+            AttachSnapshotMarker(_rightDots, "particle_group", "target");
             PlaceStimuli(trial);
 
             await Task.Yield();
@@ -171,6 +177,8 @@ namespace VRPerception.Tasks
 
         public Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
         {
+            _snapshotObjectCounts.Clear();
+            _activeTrialId = -1;
             ClearParticles(_leftPs);
             ClearParticles(_rightPs);
             if (_divider != null) _divider.SetActive(false);
@@ -574,6 +582,24 @@ namespace VRPerception.Tasks
             _divider.transform.rotation = Quaternion.LookRotation(-forward.normalized, up);
             // x: 条带宽度（左右方向），y: 高度（上下方向），z: 厚度（前后方向）
             _divider.transform.localScale = new Vector3(0.06f, Mathf.Max(0.1f, height), 0.03f);
+            AttachSnapshotMarker(_divider, "divider", "helper");
+        }
+
+        private void AttachSnapshotMarker(GameObject go, string kind, string role)
+        {
+            if (go == null) return;
+
+            string taskId = _ctx?.runner?.CurrentConfiguredTaskId ?? TaskId;
+            string baseName = string.IsNullOrWhiteSpace(go.name) ? "unnamed" : go.name.Trim();
+            if (!_snapshotObjectCounts.TryGetValue(baseName, out var count)) count = 0;
+            count++;
+            _snapshotObjectCounts[baseName] = count;
+
+            string objectId = count <= 1
+                ? $"{taskId}_{_activeTrialId}_{baseName}"
+                : $"{taskId}_{_activeTrialId}_{baseName}_{count}";
+
+            TrialObjectMarker.AttachOrUpdate(go, taskId, _activeTrialId, objectId, kind, role);
         }
 
         private static void ClearParticles(ParticleSystem ps)
