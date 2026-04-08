@@ -39,6 +39,7 @@ namespace VRPerception.Infra
 
         // 汇总缓存（用于 CSV）
         private readonly List<TrialCompletedRecord> _completed = new List<TrialCompletedRecord>();
+        private bool _csvWritten = false;
 
         private void Awake()
         {
@@ -63,13 +64,13 @@ namespace VRPerception.Infra
         {
             Unsubscribe();
             FlushJsonl();
-            if (enableCsvSummary) WriteCsvSummary();
+            if (enableCsvSummary) WriteCsvSummaryOnce();
         }
 
         private void OnApplicationQuit()
         {
             FlushJsonl();
-            if (enableCsvSummary) WriteCsvSummary();
+            if (enableCsvSummary) WriteCsvSummaryOnce();
         }
 
         private void Subscribe()
@@ -81,6 +82,7 @@ namespace VRPerception.Infra
             eventBus.PerformanceMetric?.Subscribe(OnPerformanceMetric);
             eventBus.Error?.Subscribe(OnError);
             eventBus.TrialLifecycle?.Subscribe(OnTrialLifecycle);
+            eventBus.LogFlush?.Subscribe(OnLogFlush);
             if (saveScreenshots)
                 eventBus.FrameCaptured?.Subscribe(OnFrameCaptured);
         }
@@ -94,6 +96,7 @@ namespace VRPerception.Infra
             eventBus.PerformanceMetric?.Unsubscribe(OnPerformanceMetric);
             eventBus.Error?.Unsubscribe(OnError);
             eventBus.TrialLifecycle?.Unsubscribe(OnTrialLifecycle);
+            eventBus.LogFlush?.Unsubscribe(OnLogFlush);
             if (saveScreenshots)
                 eventBus.FrameCaptured?.Unsubscribe(OnFrameCaptured);
         }
@@ -206,7 +209,21 @@ namespace VRPerception.Infra
                         trial = spec,
                         evaluation = eval
                     });
+
+                    if (string.Equals(data.taskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WriteCsvSummary();
+                    }
                 }
+            }
+        }
+
+        private void OnLogFlush(LogFlushEventData data)
+        {
+            FlushJsonl();
+            if (enableCsvSummary)
+            {
+                WriteCsvSummary();
             }
         }
 
@@ -301,6 +318,13 @@ namespace VRPerception.Infra
         }
 
         // ============ CSV Summary ============
+
+        private void WriteCsvSummaryOnce()
+        {
+            if (_csvWritten) return;
+            _csvWritten = true;
+            WriteCsvSummary();
+        }
 
         private void WriteCsvSummary()
         {
@@ -615,14 +639,14 @@ namespace VRPerception.Infra
                     savedCsvPaths.Add(path);
                 }
 
-                // material_roughness
-                if (_completed.Exists(r => r.taskId == "material_roughness"))
+                // material_roughness / material_roughness_motion / material_roughness_static
+                if (_completed.Exists(r => r.taskId != null && r.taskId.StartsWith("material_roughness", StringComparison.OrdinalIgnoreCase)))
                 {
                     var path = Path.Combine(_sessionDir, "material_roughness_summary.csv");
                     using (var sw = new StreamWriter(path, false, Encoding.UTF8))
                     {
                         // material_roughness_summary.csv 字段说明：
-                        // - taskId/trialId: 任务ID/试次ID
+                        // - taskId/trialId: 任务ID/试次ID（含 _motion / _static 后缀）
                         // - environment: 场景类型
                         // - fovDeg: 相机视场角（度）
                         // - trueRoughness: 真值粗糙度（0..1）
@@ -635,7 +659,7 @@ namespace VRPerception.Infra
 
                         foreach (var r in _completed)
                         {
-                            if (r.taskId != "material_roughness") continue;
+                            if (r.taskId == null || !r.taskId.StartsWith("material_roughness", StringComparison.OrdinalIgnoreCase)) continue;
                             var t = r.trial;
                             var e = r.evaluation;
 
@@ -752,6 +776,8 @@ namespace VRPerception.Infra
         private static string Escape(string s)
         {
             if (string.IsNullOrEmpty(s)) return "";
+            // 换行符替换为空格，防止破坏 CSV 行结构
+            s = s.Replace("\r\n", " ").Replace("\r", " ").Replace("\n", " ");
             if (s.Contains(",") || s.Contains("\""))
             {
                 return "\"" + s.Replace("\"", "\"\"") + "\"";
