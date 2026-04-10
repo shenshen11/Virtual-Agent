@@ -12,9 +12,9 @@ namespace VRPerception.Tasks
     /// <summary>
     /// 距离压缩感知任务（Distance Compression）
     /// - 场景：开阔地 / 走廊（简易搭建）
-    /// - 目标：cube / sphere / human
-    /// - 距离范围：2–30 m
-    /// - FOV：50 / 60 / 90 度
+    /// - 目标：cube
+    /// - 距离范围：2–20 m
+    /// - FOV：60度
     /// </summary>
     public class DistanceCompressionTask : ITask, ITaskRunLifecycle
     {
@@ -76,12 +76,12 @@ namespace VRPerception.Tasks
             var fovs = new[] { 60f };
             var kinds = new[] { "sphere"};
             // 改成用对数分布的6个距离点
-            var dists = new[] { 2f, 3.2f, 5f, 8f, 12.6f, 20f };
+            var dists = new[] { 2f, 3.5f, 5.5f, 8.5f, 13f, 20f };
             var textures = new[] { 0.5f, 1.0f, 1.5f };
             var lightings = new[] { "bright", "dim" };
 
-            // 锚定试次：固定前四个（2/5/10/20m），不打乱
-            var anchorDistances = new[] { 2f, 5f, 10f, 20f };
+            // 锚定试次：固定前三个，不打乱
+            var anchorDistances = new[] { 2f, 8.5f, 20f };
             string anchorEnv = envs.Length > 0 ? envs[0] : "open_field";
             float anchorFov = fovs.Length > 0 ? fovs[0] : 60f;
             string anchorKind = kinds.Length > 0 ? kinds[0] : "sphere";
@@ -123,8 +123,8 @@ namespace VRPerception.Tasks
             int textureIndex = 0;
             int lightingIndex = 0;
 
-            // 生成 36 次试验：6 个距离 × 6 次重复（正式试次）
-            int repeatsPerDistance = 6;
+            // 生成 18 次试验：6 个距离 × 3次重复（正式试次）
+            int repeatsPerDistance = 3;
 
             foreach (var dist in dists)
             {

@@ -345,6 +345,7 @@ namespace VRPerception.Infra
                         // - environment: 场景类型（open_field/corridor）
                         // - fovDeg: 相机视场角（度）
                         // - targetKind: 目标类型（sphere/cube/human...）
+                        // - isAnchor: 是否为锚定试次（true/false）
                         // - trueDistanceM: 真值距离（米）
                         // - predictedDistanceM: 模型预测距离（米）
                         // - absError: 绝对误差 |pred-true|（米）
@@ -352,7 +353,7 @@ namespace VRPerception.Infra
                         // - confidence: 模型置信度（0..1，来自模型输出）
                         // - providerId: 使用的模型/服务提供方ID
                         // - latencyMs: 推理耗时（毫秒）
-                        sw.WriteLine("taskId,trialId,environment,fovDeg,targetKind,trueDistanceM,predictedDistanceM,absError,relError,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,environment,fovDeg,targetKind,isAnchor,trueDistanceM,predictedDistanceM,absError,relError,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -366,6 +367,7 @@ namespace VRPerception.Infra
                                 Escape(t.environment),
                                 t.fovDeg.ToString("F0"),
                                 Escape(t.targetKind),
+                                t.isAnchor ? "true" : "false",
                                 t.trueDistanceM.ToString("F3"),
                                 e.predictedDistanceM.ToString("F3"),
                                 e.absError.ToString("F3"),
