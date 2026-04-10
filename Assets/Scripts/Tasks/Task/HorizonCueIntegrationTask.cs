@@ -17,7 +17,8 @@ namespace VRPerception.Tasks
     /// 地平线线索整合任务（运行时自包含创建）
     /// - 相机不动；红球放在相机高度、正前方
     /// - 通过旋转环境根节点（俯仰）移动“地平线线索”
-    /// - 距离：5/10/20 米；角度：-6/-3/0/+3/+6 度；重复 3 次，总计 45 个试次
+    /// - 锚定：5/10/20 米，0 度，共 3 个校准试次
+    /// - 正式：距离 5/10/20 米；角度 -6/-3/0/+3/+6 度；重复 2 次，总计 30 个正式试次
     ///
     /// 设计要点：
     /// - “地平线线索”来自一个包裹相机的天空球（Sphere）+ 运行时生成的地平线纹理；
@@ -177,10 +178,26 @@ namespace VRPerception.Tasks
 
         public TrialSpec[] BuildTrials(int seed)
         {
-            // 45 个试次：3 个距离 × 5 个地平线角度 × 3 次重复。
+            // 3 个锚定试次：固定 0 度地平线，帮助建立距离标尺。
+            var anchorDistances = new[] { 5f, 10f, 20f };
+            var anchorTrials = new List<TrialSpec>(anchorDistances.Length);
+            foreach (var distance in anchorDistances)
+            {
+                anchorTrials.Add(new TrialSpec
+                {
+                    taskId = TaskId,
+                    fovDeg = 60f,
+                    trueDistanceM = distance,
+                    horizonAngleDeg = 0f,
+                    repetitionIndex = 0,
+                    isAnchor = true
+                });
+            }
+
+            // 30 个正式试次：3 个距离 × 5 个地平线角度 × 2 次重复。
             var distances = new[] { 5f, 10f, 20f };
             var angles = new[] { -6f, -3f, 0f, 3f, 6f };
-            const int repetitions = 3;
+            const int repetitions = 2;
 
             var trials = new List<TrialSpec>(distances.Length * angles.Length * repetitions);
             for (int di = 0; di < distances.Length; di++)
@@ -196,15 +213,20 @@ namespace VRPerception.Tasks
                             fovDeg = 60f,
                             trueDistanceM = distance,
                             horizonAngleDeg = angle,
-                            repetitionIndex = rep + 1
+                            repetitionIndex = rep + 1,
+                            isAnchor = false
                         });
                     }
                 }
             }
 
-            // 使用 seed 打乱试次顺序，避免固定序列带来顺序效应。
+            // 仅打乱正式试次；锚定试次固定在最前面。
             Shuffle(trials, new System.Random(seed));
-            return trials.ToArray();
+
+            var all = new List<TrialSpec>(anchorTrials.Count + trials.Count);
+            all.AddRange(anchorTrials);
+            all.AddRange(trials);
+            return all.ToArray();
         }
 
         public string GetSystemPrompt()
@@ -219,6 +241,13 @@ namespace VRPerception.Tasks
 
         public string BuildTaskPrompt(TrialSpec trial)
         {
+            if (trial != null && trial.isAnchor)
+            {
+                return PromptTemplates.BuildHorizonCueIntegrationCalibrationPrompt(
+                    trial.trueDistanceM,
+                    trial.trialId);
+            }
+
             return PromptTemplates.BuildHorizonCueIntegrationPrompt(trial.trialId);
         }
 
@@ -367,7 +396,7 @@ namespace VRPerception.Tasks
                 return eval;
             }
 
-            // 从 response.answer 中容错提取 distance_m（也兼容 distance）。
+            // 从 response.answer 中容错提取 distance_m（锚定试次也兼容 acknowledged_distance_m）。
             if (!TryExtractDistanceM(response.answer, out var predicted))
             {
                 eval.success = false;
@@ -743,6 +772,12 @@ namespace VRPerception.Tasks
 
                 var field = t.GetField("distance_m", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
                 if (field != null && TryToFloat(field.GetValue(answerObj), out distanceM)) return true;
+
+                var ackProp = t.GetProperty("acknowledged_distance_m", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+                if (ackProp != null && TryToFloat(ackProp.GetValue(answerObj, null), out distanceM)) return true;
+
+                var ackField = t.GetField("acknowledged_distance_m", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+                if (ackField != null && TryToFloat(ackField.GetValue(answerObj), out distanceM)) return true;
 
                 var prop2 = t.GetProperty("distance", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
                 if (prop2 != null && TryToFloat(prop2.GetValue(answerObj, null), out distanceM)) return true;

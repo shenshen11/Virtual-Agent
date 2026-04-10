@@ -424,6 +424,17 @@ namespace VRPerception.Perception
                 $"Output STRICT JSON exactly in this schema: {{\"task\":\"horizon_cue_integration\",\"trial_id\":\"{id}\",\"response\":{{\"distance_m\":<number>}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
         }
 
+        public static string BuildHorizonCueIntegrationCalibrationPrompt(float trueDistanceM, int trialId)
+        {
+            var distText = trueDistanceM.ToString("0.###", CultureInfo.InvariantCulture);
+            var id = trialId.ToString(CultureInfo.InvariantCulture);
+            return
+                $"Trial metadata: {{\"task\":\"horizon_cue_integration_calibration\",\"trial_id\":\"{id}\",\"phase\":\"calibration\"}}\n" +
+                $"This image shows a red sphere directly in front of the camera at the same height, at a distance of {distText} meters.\n" +
+                "Study it to calibrate your sense of distance for the horizon cue integration experiment.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"horizon_cue_integration_calibration\",\"trial_id\":\"{id}\",\"response\":{{\"acknowledged_distance_m\":{distText}}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
+        }
+
         // ============ Tool Specifications (for action_plan) ============
 
         // 注：ParameterSpec.PropertySpec 是占位结构，JsonUtility 对匿名结构支持有限；
