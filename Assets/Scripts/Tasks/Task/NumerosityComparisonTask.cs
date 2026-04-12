@@ -82,8 +82,8 @@ namespace VRPerception.Tasks
         {
             _rand = new System.Random(seed);
 
-            int[] baseCounts = { 10, 50, 100, 200, 500 };
-            float[] ratios = { 1.1f, 1.2f, 1.5f, 2.0f };
+            int[] baseCounts = { 30, 60, 120 };
+            float[] ratios = { 1.08f, 1.12f, 1.16f, 1.22f, 1.30f, 1.45f };
 
             var trials = new List<TrialSpec>();
             bool largerOnLeft = true;
