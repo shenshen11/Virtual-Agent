@@ -411,8 +411,19 @@ namespace VRPerception.Perception
             var id = trialId.ToString(CultureInfo.InvariantCulture);
             return
                 $"Trial metadata: {{\"task\":\"material_roughness\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
-                "Estimate the surface roughness of the metallic sphere. Roughness: 0 = perfectly smooth mirror-like; 1 = completely rough matte.\n" +
+                "Estimate the surface roughness of the metallic sphere. \n" +
                 $"Output STRICT JSON exactly in this schema: {{\"task\":\"material_roughness\",\"trial_id\":\"{id}\",\"response\":{{\"roughness\":<0.0-1.0>}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
+        }
+
+        public static string BuildMaterialRoughnessCalibrationPrompt(string environment, float trueRoughness, int trialId)
+        {
+            var id = trialId.ToString(CultureInfo.InvariantCulture);
+            var roughnessText = trueRoughness.ToString("0.###", CultureInfo.InvariantCulture);
+            return
+                $"Trial metadata: {{\"task\":\"material_roughness_calibration\",\"trial_id\":\"{id}\",\"phase\":\"calibration\"}}\n" +
+                $"This image shows a metallic sphere. Its true surface roughness is {roughnessText} on a 0..1 scale.\n" +
+                "Study it to calibrate your sense of the roughness scale for the upcoming experiment.\n" +
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"material_roughness_calibration\",\"trial_id\":\"{id}\",\"response\":{{\"acknowledged_roughness\":{roughnessText}}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
         }
 
         public static string BuildHorizonCueIntegrationPrompt(int trialId)

@@ -19,6 +19,7 @@ namespace VRPerception.Tasks
         private const float DefaultFovDeg = 60f;
         private const float DefaultSphereScale = 0.30f; // 单位=米（Sphere primitive 直径=1）
         private const float DefaultFallbackDistanceM = 1.0f;
+        private const float MinRenderableRoughness = 0.04f;
 
         private readonly string _taskId;
         private readonly bool _requireHeadMotion;
@@ -71,12 +72,38 @@ namespace VRPerception.Tasks
         {
             _rand = new System.Random(seed);
 
-            // 计划：roughness 6 级 × 环境 2 种 × 重复 3 次 = 36 trial
+            // 锚定试次：两个环境都展示 roughness 两端点，帮助分别建立 simple/complex 条件下的量尺。
+            // 仅扩展 anchor 列表，不改正式试次链路。
+            var anchorRoughnessLevels = new[] { 0.0f, 1.0f };
+            var anchorEnvs = new[] { "module:black_simple", "module:hdri_complex" };
+            var anchorTrials = new List<TrialSpec>(anchorRoughnessLevels.Length * anchorEnvs.Length);
+            foreach (var env in anchorEnvs)
+            {
+                foreach (var roughness in anchorRoughnessLevels)
+                {
+                    anchorTrials.Add(new TrialSpec
+                    {
+                        taskId = TaskId,
+                        environment = env,
+                        textureDensity = 1.0f,
+                        lighting = "module",
+                        occlusion = false,
+                        fovDeg = DefaultFovDeg,
+                        targetKind = "sphere",
+                        material = "metal",
+                        roughness = roughness,
+                        requireHeadMotion = _requireHeadMotion,
+                        isAnchor = true
+                    });
+                }
+            }
+
+            // 正式试次：roughness 6 级 × 环境 2 种 × 重复 2 次 = 24 trial
             var roughnessLevels = new[] { 0.0f, 0.2f, 0.4f, 0.6f, 0.8f, 1.0f };
             var moduleEnvs = new[] { "module:hdri_complex", "module:black_simple" };
 
-            const int repeats = 3;
-            var trials = new List<TrialSpec>(roughnessLevels.Length * moduleEnvs.Length * repeats);
+            const int repeats = 2;
+            var mainTrials = new List<TrialSpec>(roughnessLevels.Length * moduleEnvs.Length * repeats);
 
             for (int r = 0; r < repeats; r++)
             {
@@ -84,7 +111,7 @@ namespace VRPerception.Tasks
                 {
                     foreach (var roughness in roughnessLevels)
                     {
-                        trials.Add(new TrialSpec
+                        mainTrials.Add(new TrialSpec
                         {
                             taskId = TaskId,
                             environment = env,
@@ -97,14 +124,19 @@ namespace VRPerception.Tasks
                             targetKind = "sphere",
                             material = "metal",
                             roughness = Mathf.Clamp01(roughness),
-                            requireHeadMotion = _requireHeadMotion
+                            requireHeadMotion = _requireHeadMotion,
+                            isAnchor = false
                         });
                     }
                 }
             }
 
-            Shuffle(trials);
-            return trials.ToArray();
+            Shuffle(mainTrials);
+
+            var all = new List<TrialSpec>(anchorTrials.Count + mainTrials.Count);
+            all.AddRange(anchorTrials);
+            all.AddRange(mainTrials);
+            return all.ToArray();
         }
 
         public string GetSystemPrompt()
@@ -120,6 +152,13 @@ namespace VRPerception.Tasks
         public string BuildTaskPrompt(TrialSpec trial)
         {
             var env = string.IsNullOrWhiteSpace(trial.environment) ? "unknown" : trial.environment;
+            if (trial != null && trial.isAnchor)
+            {
+                return PromptTemplates.BuildMaterialRoughnessCalibrationPrompt(
+                    env,
+                    trial.roughness,
+                    trial.trialId);
+            }
             return PromptTemplates.BuildMaterialRoughnessPrompt(env, trial.requireHeadMotion, trial.fovDeg, trial.trialId);
         }
 
@@ -336,6 +375,7 @@ namespace VRPerception.Tasks
         private Material GetOrCreateMetalMaterial(float roughness)
         {
             float r = Mathf.Clamp01(roughness);
+            float renderRoughness = Mathf.Max(MinRenderableRoughness, r);
             // key 做离散化，避免 float 精度导致缓存 miss
             var key = $"metal_r{Mathf.RoundToInt(r * 1000f):0000}";
             if (_materialCache.TryGetValue(key, out var cached) && cached != null)
@@ -351,7 +391,9 @@ namespace VRPerception.Tasks
 
             mat.color = new Color(0.70f, 0.70f, 0.70f, 1f);
             mat.SetFloat("_Metallic", 1f);
-            mat.SetFloat("_Glossiness", Mathf.Clamp01(1f - r));
+            // 在 simple 黑环境里，exact roughness=0 会退化成几乎纯黑镜面。
+            // 仅对渲染引入极小 roughness floor，保留 trial 真值不变。
+            mat.SetFloat("_Glossiness", Mathf.Clamp01(1f - renderRoughness));
 
             _materialCache[key] = mat;
             return mat;
