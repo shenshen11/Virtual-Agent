@@ -77,6 +77,8 @@ namespace VRPerception.UI
         [SerializeField] private bool autoFocusInput = true;
         [Tooltip("提交失败时的提示文本（可选）")]
         [SerializeField] private TMP_Text errorHint;
+        [Tooltip("勾选后，仅在 color_constancy_adjustment 任务中显示该面板。")]
+        [SerializeField] private bool onlyShowForColorConstancyAdjustment = false;
 
         [Header("Rendering Settings")]
         [Tooltip("Canvas 排序顺序，数值越大越靠前（建议 100+ 确保在所有 3D 物体前面）")]
@@ -202,6 +204,13 @@ namespace VRPerception.UI
 
             if (data.state == TrialLifecycleState.WaitingForInput)
             {
+                if (!ShouldShowForTask(data.taskId))
+                {
+                    _awaitingInput = false;
+                    HideDialog();
+                    return;
+                }
+
                 _awaitingInput = true;
                 _taskId = data.taskId;
                 _trialId = data.trialId;
@@ -223,6 +232,13 @@ namespace VRPerception.UI
                 _awaitingInput = false;
                 HideDialog();
             }
+        }
+
+        private bool ShouldShowForTask(string taskId)
+        {
+            if (!onlyShowForColorConstancyAdjustment) return true;
+
+            return string.Equals(taskId, "color_constancy_adjustment", StringComparison.OrdinalIgnoreCase);
         }
 
         private void PrepareDialogForTask(string taskId, string customPrompt = null)
