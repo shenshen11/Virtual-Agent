@@ -48,9 +48,14 @@ namespace VRPerception.Tasks
         // 大小池：front=0.65、middle=0.62、back=0.78（back层加大补偿透视缩小）
         private static readonly float[] s_scalePool = { 0.65f, 0.65f, 0.62f, 0.62f, 0.78f, 0.78f };
 
-        // movement 视角等比偏移量（每层按深度缩放，保持轻微但仍可察觉的视觉跳变）
-        // 实际深度：front≈6.5m, middle≈9m, back≈12m；当前约对应 4.9° 的横向变化
-        private static readonly float[] s_movementDeltaX = { 0.56f, 0.78f, 1.03f };
+        // movement 视角等比偏移量（每层按深度缩放）
+        // 当前布局已更紧凑，因此同步缩小位移，避免 movement 变化过于显眼。
+        private static readonly float[] s_movementDeltaX = { 0.12f, 0.18f, 0.24f };
+
+        // 位置轻微扰动幅度：保留层级结构，仅打破固定对称模板。
+        private const float PositionJitterX = 0.12f;
+        private const float PositionJitterZ = 0.18f;
+        private const float AppearanceMinSpacing = 0.52f;
 
         private static readonly string[] s_changeCategories = { "appearance", "disappearance", "movement", "replacement" };
 
@@ -61,9 +66,9 @@ namespace VRPerception.Tasks
         //   back:   实际深度 ≈ 12.0m，横向间距 2.6m
         private static readonly Vector3[][] s_layerOffsets =
         {
-            new[] { new Vector3(-1.10f, 0f, -2.5f), new Vector3(+1.10f, 0f, -2.5f) }, // front
-            new[] { new Vector3(-1.20f, 0f,  0.0f), new Vector3(+1.20f, 0f,  0.0f) }, // middle
-            new[] { new Vector3(-1.30f, 0f, +3.0f), new Vector3(+1.30f, 0f, +3.0f) }, // back
+            new[] { new Vector3(-0.68f, 0f, -2.5f), new Vector3(+0.68f, 0f, -2.5f) }, // front
+            new[] { new Vector3(-0.74f, 0f,  0.0f), new Vector3(+0.74f, 0f,  0.0f) }, // middle
+            new[] { new Vector3(-0.80f, 0f, +3.0f), new Vector3(+0.80f, 0f, +3.0f) }, // back
         };
 
         private Vector3 _sceneCenter;
@@ -125,7 +130,7 @@ namespace VRPerception.Tasks
         {
             _rand = new System.Random(seed);
 
-            var backgrounds = new[] { "none", "indoor", "street" };
+            var backgrounds = new[] { "none", "indoor" };
             var fovs = new[] { 60f };
 
             var trials = new List<TrialSpec>();
@@ -556,12 +561,13 @@ namespace VRPerception.Tasks
             {
                 var offsets = s_layerOffsets[li];
                 bool isTargetLayer = (li == targetLayerIdx && !string.IsNullOrEmpty(changeCategory));
+                var jitteredOffsets = BuildLayerOffsetsWithJitter(li, sceneVariantSeed);
 
                 for (int oi = 0; oi < offsets.Length; oi++)
                 {
                     int slotIdx = li * offsets.Length + oi;
                     bool isChangeTarget = isTargetLayer && oi == changeTargetObjectIndex;
-                    var local = offsets[oi];
+                    var local = oi < jitteredOffsets.Length ? jitteredOffsets[oi] : offsets[oi];
                     var kind = GetBaseKind(shapePool, slotIdx);
                     float objScale = GetBaseScale(slotIdx);
 
@@ -606,7 +612,7 @@ namespace VRPerception.Tasks
                 // appearance：仅在目标层内，围绕已有物体附近新增一个额外物体，避免固定中心插入过于显眼。
                 if (isTargetLayer && changeCategory == "appearance")
                 {
-                    var extraLocal = ResolveAppearanceLocalOffset(li, offsets, changeTargetObjectIndex, sceneVariantSeed);
+                    var extraLocal = ResolveAppearanceLocalOffset(li, jitteredOffsets, changeTargetObjectIndex, sceneVariantSeed);
                     var pos = _sceneCenter + _sceneRight * extraLocal.x + _sceneForward * extraLocal.z;
                     pos.y = _sceneGroundY;
                     var name = $"{prefix}{placedObjectIdx}";
@@ -633,6 +639,45 @@ namespace VRPerception.Tasks
             }
         }
 
+        private static Vector3[] BuildLayerOffsetsWithJitter(int layerIndex, int sceneVariantSeed)
+        {
+            if (layerIndex < 0 || layerIndex >= s_layerOffsets.Length)
+            {
+                return Array.Empty<Vector3>();
+            }
+
+            var baseOffsets = s_layerOffsets[layerIndex];
+            var result = new Vector3[baseOffsets.Length];
+            for (int i = 0; i < baseOffsets.Length; i++)
+            {
+                result[i] = ResolveJitteredLocalOffset(baseOffsets[i], layerIndex, i, sceneVariantSeed);
+            }
+
+            return result;
+        }
+
+        private static Vector3 ResolveJitteredLocalOffset(Vector3 baseLocal, int layerIndex, int objectIndex, int sceneVariantSeed)
+        {
+            uint state = (uint)(sceneVariantSeed * 73856093 ^ layerIndex * 19349663 ^ objectIndex * 83492791);
+            float jitterX = (NextDeterministic01(ref state) * 2f - 1f) * PositionJitterX;
+            float jitterZ = (NextDeterministic01(ref state) * 2f - 1f) * PositionJitterZ;
+
+            // 约束在当前层附近，避免跨层并保留左右分离关系。
+            float jitteredX = baseLocal.x + jitterX;
+            float xMin = baseLocal.x < 0f ? baseLocal.x - PositionJitterX : baseLocal.x - PositionJitterX * 0.6f;
+            float xMax = baseLocal.x < 0f ? baseLocal.x + PositionJitterX * 0.6f : baseLocal.x + PositionJitterX;
+            jitteredX = Mathf.Clamp(jitteredX, xMin, xMax);
+
+            float jitteredZ = Mathf.Clamp(baseLocal.z + jitterZ, baseLocal.z - PositionJitterZ, baseLocal.z + PositionJitterZ);
+            return new Vector3(jitteredX, baseLocal.y, jitteredZ);
+        }
+
+        private static float NextDeterministic01(ref uint state)
+        {
+            state = state * 1664525u + 1013904223u;
+            return (state & 0x00FFFFFFu) / 16777215f;
+        }
+
         private static Vector3 ResolveAppearanceLocalOffset(int layerIndex, IReadOnlyList<Vector3> offsets, int changeTargetObjectIndex, int sceneVariantSeed)
         {
             if (offsets == null || offsets.Count == 0)
@@ -651,13 +696,39 @@ namespace VRPerception.Tasks
 
             // 深层稍微放大偏移，保持各层上的局部邻近感接近一致。
             float layerScale = 1f + Mathf.Clamp(layerIndex, 0, 2) * 0.12f;
-            float lateralOffset = 0.28f * layerScale * outwardSign;
+            float lateralOffset = 0.42f * layerScale * outwardSign;
 
             // 用 sceneVariantSeed 打散前后方向，保持同一试次可复现。
             bool pushForward = ((sceneVariantSeed + layerIndex + anchorIndex) & 1) == 0;
-            float depthOffset = (pushForward ? 0.22f : -0.18f) * layerScale;
+            float depthOffset = (pushForward ? 0.32f : -0.28f) * layerScale;
 
-            return new Vector3(anchor.x + lateralOffset, anchor.y, anchor.z + depthOffset);
+            var candidate = new Vector3(anchor.x + lateralOffset, anchor.y, anchor.z + depthOffset);
+            float minSpacing = AppearanceMinSpacing * layerScale;
+
+            // appearance 物体需要靠近锚点，但不能与同层已有物体过度重叠。
+            for (int i = 0; i < offsets.Count; i++)
+            {
+                var existing = offsets[i];
+                var delta = new Vector2(candidate.x - existing.x, candidate.z - existing.z);
+                float dist = delta.magnitude;
+                if (dist >= minSpacing) continue;
+
+                Vector2 dir;
+                if (dist > 1e-4f)
+                {
+                    dir = delta / dist;
+                }
+                else
+                {
+                    dir = new Vector2(outwardSign, pushForward ? 1f : -1f).normalized;
+                }
+
+                float push = minSpacing - dist;
+                candidate.x += dir.x * push;
+                candidate.z += dir.y * push;
+            }
+
+            return candidate;
         }
 
         private static Vector3 ResolveMovementLocalOffset(int layerIndex, Vector3 local, int changeTargetObjectIndex, int sceneVariantSeed)
@@ -703,9 +774,9 @@ namespace VRPerception.Tasks
             var k = (kind ?? "cube").ToLowerInvariant();
             return k switch
             {
-                "sphere" => Vector3.one * (baseScale * 0.95f),
-                "cylinder" => new Vector3(baseScale * 0.84f, baseScale * 0.76f, baseScale * 0.84f),
-                "capsule" => new Vector3(baseScale * 0.82f, baseScale * 0.80f, baseScale * 0.82f),
+                "sphere" => Vector3.one * (baseScale * 1.1f),
+                "cylinder" => new Vector3(baseScale * 0.90f, baseScale * 0.62f, baseScale * 0.90f),
+                "capsule" => new Vector3(baseScale * 0.90f, baseScale * 0.70f, baseScale * 0.90f),
                 _ => Vector3.one * baseScale
             };
         }
