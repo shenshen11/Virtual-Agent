@@ -14,7 +14,7 @@ namespace VRPerception.Tasks
     /// - 因变量：模型/人类报告的 roughness（0..1）
     /// - 输出（模型侧）：{"roughness":<0..1>,"confidence":<0..1>}（Provider 会包装成 LLMResponse.type="inference"）
     /// </summary>
-    public class MaterialRoughnessAmbiguityTask : ITask
+    public class MaterialRoughnessAmbiguityTask : ITask, ITaskRunLifecycle
     {
         private const float DefaultFovDeg = 60f;
         private const float DefaultSphereScale = 0.30f; // 单位=米（Sphere primitive 直径=1）
@@ -160,6 +160,25 @@ namespace VRPerception.Tasks
                     trial.trialId);
             }
             return PromptTemplates.BuildMaterialRoughnessPrompt(env, trial.requireHeadMotion, trial.fovDeg, trial.trialId);
+        }
+
+        public Task OnRunBeginAsync(CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task OnRunEndAsync(CancellationToken ct)
+        {
+            TryBindHelpers();
+
+            if (_placer != null)
+            {
+                _placer.ClearAll();
+                _placer.ClearActiveTrialContext();
+            }
+
+            _scene?.ClearCurrent();
+            return Task.CompletedTask;
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)

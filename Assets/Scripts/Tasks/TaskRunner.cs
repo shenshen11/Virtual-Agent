@@ -403,6 +403,17 @@ namespace VRPerception.Tasks
                         trialElapsedMs = (DateTime.UtcNow - trialStartUtc).TotalMilliseconds;
                         eventBus?.PublishMetric("trial_duration_ms", "trial", trialElapsedMs, "ms",
                             new { taskId = trial.taskId, trialId = trial.trialId, subject = subjectMode.ToString(), status = "failed" });
+                        try
+                        {
+                            if (_task != null)
+                            {
+                                await _task.OnAfterTrialAsync(trial, null, CancellationToken.None);
+                            }
+                        }
+                        catch (Exception cleanupEx)
+                        {
+                            Debug.LogWarning($"[TaskRunner] Cleanup after failure failed: {cleanupEx.Message}");
+                        }
                     }
                 }
             }
