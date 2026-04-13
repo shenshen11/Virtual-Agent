@@ -5,6 +5,9 @@ using UnityEngine;
 using UnityEngine.Events;
 using VRPerception.Infra.EventBus;
 using VRPerception.Tasks;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace VRPerception.Orchestration
 {
@@ -39,6 +42,9 @@ namespace VRPerception.Orchestration
 
         [Tooltip("当无法加载 checkpoint 时是否自动重新开始。")]
         [SerializeField] private bool autoRestartIfCheckpointMissing = true;
+
+        [Tooltip("Playlist 完成后是否自动结束运行。Editor 下会停止 Play Mode，真机上会调用 Application.Quit().")]
+        [SerializeField] private bool quitApplicationOnPlaylistCompleted = true;
 
         private TaskPlaylist _currentPlaylist;
         private int _currentEntryIndex = -1;
@@ -273,6 +279,7 @@ namespace VRPerception.Orchestration
 
             PublishState(OrchestratorLifecycleState.Completed, "Playlist completed");
             onPlaylistCompleted?.Invoke();
+            TryQuitApplication();
 
             if (deleteCheckpointOnPlaylistCompleted)
             {
@@ -439,6 +446,20 @@ namespace VRPerception.Orchestration
             if (_currentPlaylist != null && !string.IsNullOrWhiteSpace(_currentPlaylist.DefaultParticipantId))
                 return _currentPlaylist.DefaultParticipantId;
             return SystemInfo.deviceUniqueIdentifier;
+        }
+
+        private void TryQuitApplication()
+        {
+            if (!quitApplicationOnPlaylistCompleted)
+            {
+                return;
+            }
+
+#if UNITY_EDITOR
+            EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
         }
     }
 }
