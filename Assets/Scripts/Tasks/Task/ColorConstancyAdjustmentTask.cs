@@ -95,6 +95,14 @@ namespace VRPerception.Tasks
 
         public Task OnRunEndAsync(CancellationToken ct)
         {
+            ClearSpawned();
+            _furniture?.Clear();
+            _currentFurniturePhase = null;
+            if (_scene != null)
+            {
+                _scene.SetLighting("white_neutral");
+                _scene.SetShadowMode(false);
+            }
             _referenceFrameInitialized = false;
             return Task.CompletedTask;
         }
@@ -258,19 +266,19 @@ namespace VRPerception.Tasks
 
             _metaByTrial.TryGetValue(trial, out var meta);
 
-            if (!TryExtractAnswer(response.answer, out choice))
+            if (!TryExtractAnswer(response.answer, out choice, out predictedRgb))
             {
                 TryExtractFromText(response.explanation, out choice);
             }
 
-            if (string.IsNullOrEmpty(choice))
+            if (predictedRgb == null && string.IsNullOrEmpty(choice))
             {
                 eval.success = false;
-                eval.failureReason = "No choice information found in model output";
+                eval.failureReason = "No choice/rgb information found in output";
                 return eval;
             }
 
-            if (meta != null && meta.candidateLabels != null && meta.candidateRgbs != null)
+            if (predictedRgb == null && meta != null && meta.candidateLabels != null && meta.candidateRgbs != null)
             {
                 for (int i = 0; i < meta.candidateLabels.Length && i < meta.candidateRgbs.Length; i++)
                 {
@@ -717,9 +725,10 @@ namespace VRPerception.Tasks
             TrialObjectMarker.AttachOrUpdate(go, taskId, _activeTrialId, objectId, kind, role);
         }
 
-        private static bool TryExtractAnswer(object answer, out string choice)
+        private static bool TryExtractAnswer(object answer, out string choice, out int[] rgb)
         {
             choice = null;
+            rgb = null;
             if (answer == null) return false;
 
             try
@@ -732,7 +741,13 @@ namespace VRPerception.Tasks
                     if (!string.IsNullOrEmpty(v)) choice = v.Trim();
                 }
 
-                if (!string.IsNullOrEmpty(choice)) return true;
+                var rgbProp = t.GetProperty("rgb", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+                if (rgbProp != null)
+                {
+                    rgb = NormalizeRgb(rgbProp.GetValue(answer));
+                }
+
+                if (!string.IsNullOrEmpty(choice) || rgb != null) return true;
 
                 var json = JsonUtility.ToJson(answer);
                 if (!string.IsNullOrEmpty(json))
@@ -741,7 +756,8 @@ namespace VRPerception.Tasks
                         if (parsed != null)
                         {
                             if (!string.IsNullOrEmpty(parsed.choice)) choice = parsed.choice;
-                            return !string.IsNullOrEmpty(choice);
+                            rgb = NormalizeRgb(parsed.rgb);
+                            return !string.IsNullOrEmpty(choice) || rgb != null;
                         }
                 }
             }
@@ -751,6 +767,38 @@ namespace VRPerception.Tasks
             }
 
             return false;
+        }
+
+        private static int[] NormalizeRgb(object rgbValue)
+        {
+            if (rgbValue is int[] ints && ints.Length >= 3)
+            {
+                return new[]
+                {
+                    Mathf.Clamp(ints[0], 0, 255),
+                    Mathf.Clamp(ints[1], 0, 255),
+                    Mathf.Clamp(ints[2], 0, 255)
+                };
+            }
+
+            if (rgbValue is Array array && array.Length >= 3)
+            {
+                try
+                {
+                    return new[]
+                    {
+                        Mathf.Clamp(Convert.ToInt32(array.GetValue(0)), 0, 255),
+                        Mathf.Clamp(Convert.ToInt32(array.GetValue(1)), 0, 255),
+                        Mathf.Clamp(Convert.ToInt32(array.GetValue(2)), 0, 255)
+                    };
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            return null;
         }
 
         private static bool TryExtractFromText(string text, out string choice)
@@ -776,6 +824,7 @@ namespace VRPerception.Tasks
         private class ColorChoiceAnswer
         {
             public string choice;
+            public int[] rgb;
             public float confidence;
         }
 

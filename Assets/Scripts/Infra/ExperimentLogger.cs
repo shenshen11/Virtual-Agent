@@ -696,8 +696,9 @@ namespace VRPerception.Infra
                         // - background/fovDeg/lighting: 实验条件
                         // - trueR/trueG/trueB: 真值RGB（0-255）
                         // - predictedChoice: 模型选择的标签
+                        // - submittedR/submittedG/submittedB: 解析出的提交颜色 RGB（Human 模式重点）
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,phase,background,fovDeg,lighting,trueR,trueG,trueB,predictedChoice,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,phase,background,fovDeg,lighting,trueR,trueG,trueB,predictedChoice,submittedR,submittedG,submittedB,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -708,6 +709,9 @@ namespace VRPerception.Infra
                             // 从 extraJson 解析数据
                             string phase = "unknown";
                             string predictedChoice = "";
+                            int submittedR = -1;
+                            int submittedG = -1;
+                            int submittedB = -1;
 
                             try
                             {
@@ -716,6 +720,12 @@ namespace VRPerception.Infra
                                 {
                                     phase = extra.phase ?? "unknown";
                                     predictedChoice = extra.choice ?? "";
+                                    if (extra.predictedRgb != null && extra.predictedRgb.Length >= 3)
+                                    {
+                                        submittedR = extra.predictedRgb[0];
+                                        submittedG = extra.predictedRgb[1];
+                                        submittedB = extra.predictedRgb[2];
+                                    }
                                 }
                             }
                             catch { }
@@ -731,6 +741,9 @@ namespace VRPerception.Infra
                                 t.trueG,
                                 t.trueB,
                                 Escape(predictedChoice),
+                                submittedR,
+                                submittedG,
+                                submittedB,
                                 e.confidence.ToString("F3"),
                                 Escape(e.providerId),
                                 e.latencyMs
