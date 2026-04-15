@@ -128,7 +128,7 @@ namespace VRPerception.Tasks
                         trueMoreSide = left > right ? "left" : "right",
 
                         // Human exposure control (handled by TrialBlackoutOverlay / TaskRunner timing)
-                        exposureDurationMs = 500f,
+                        exposureDurationMs = 1000f,
                         // 固定点半径（米）。注意：ParticleSystem 里会用直径 = 2 * dotRadius。
                         // 取值与旧实现的 startSize(约 0.03~0.12m) 对齐：radius=0.04 -> size≈0.08m。
                         dotRadius = 0.04f
@@ -316,7 +316,7 @@ namespace VRPerception.Tasks
                 CaptureReferenceFrameIfNeeded(forceRefresh: false);
             }
 
-            ResolvePlacementReference(cam, out var origin, out var forward, out _);
+            ResolvePlacementReference(cam, out var origin, out var forward, out var eyeY);
 
             int leftCount = Mathf.Max(0, trial.trueCount);
             int rightCount = Mathf.Max(0, trial.targetCount);
@@ -327,6 +327,15 @@ namespace VRPerception.Tasks
             float regionHeight = 3.5f;
 
             var panelOrigin = origin + forward * depth;
+            float leftMinDist = ComputeMinDistance(regionWidth, regionHeight, leftCount);
+            float rightMinDist = ComputeMinDistance(regionWidth, regionHeight, rightCount);
+            // 关键：固定点大小，不随数量/密度变化（避免 size 成为比较线索）。
+            // TrialSpec.dotRadius 表示“半径”（米），ParticleSystem.startSize 使用“直径/尺寸”（米）。
+            float dotRadius = trial.dotRadius > 0 ? trial.dotRadius : 0.06f;
+            float groundY = -1f;
+            float verticalMargin = 0.1f;
+            float minCenterY = groundY + regionHeight * 0.5f + dotRadius + verticalMargin;
+            panelOrigin.y = Mathf.Max(eyeY, minCenterY);
             var right = Vector3.Cross(Vector3.up, forward).normalized;
             if (right.sqrMagnitude < 1e-6f) right = Vector3.right;
             var up = Vector3.up;
@@ -334,11 +343,6 @@ namespace VRPerception.Tasks
             var leftCenter = panelOrigin - right * (gap * 0.5f + regionWidth * 0.5f);
             var rightCenter = panelOrigin + right * (gap * 0.5f + regionWidth * 0.5f);
 
-            float leftMinDist = ComputeMinDistance(regionWidth, regionHeight, leftCount);
-            float rightMinDist = ComputeMinDistance(regionWidth, regionHeight, rightCount);
-            // 关键：固定点大小，不随数量/密度变化（避免 size 成为比较线索）。
-            // TrialSpec.dotRadius 表示“半径”（米），ParticleSystem.startSize 使用“直径/尺寸”（米）。
-            float dotRadius = trial.dotRadius > 0 ? trial.dotRadius : 0.06f;
             float dotSize = Mathf.Clamp(dotRadius * 2f, 0.01f, 0.5f);
 
             // 为避免大量重叠，最小间距下限与点大小相关；过大可能导致高数量条件放置失败。
