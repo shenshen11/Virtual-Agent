@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using VRPerception.Perception;
+using VRPerception.UI;
 
 namespace VRPerception.Tasks
 {
@@ -158,6 +159,10 @@ namespace VRPerception.Tasks
         {
             ct.ThrowIfCancellationRequested();
             TryBindHelpers();
+            if (IsHumanMode())
+            {
+                TrySetTrialBlackoutVisible(true);
+            }
             _placer?.SetActiveTrialContext(trial.taskId, trial.trialId);
 
             if (_scene != null)
@@ -175,12 +180,25 @@ namespace VRPerception.Tasks
             ConfigureTrialDepths(trial);
             PlacePair(trial);
 
+            if (IsHumanMode())
+            {
+                // Keep the scene masked until the newly placed pair has had at least one frame to render.
+                await Task.Yield();
+                ct.ThrowIfCancellationRequested();
+                TrySetTrialBlackoutVisible(false);
+            }
+
             _trialIndexInGroup++;
             await Task.Yield();
         }
 
         public async Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
         {
+            if (IsHumanMode())
+            {
+                TrySetTrialBlackoutVisible(true);
+            }
+
             if (_placer != null)
             {
                 _placer.ClearAll();
@@ -288,6 +306,22 @@ namespace VRPerception.Tasks
 
             if (_scene == null) _scene = UnityEngine.Object.FindObjectOfType<ExperimentSceneManager>();
             if (_placer == null) _placer = UnityEngine.Object.FindObjectOfType<ObjectPlacer>();
+        }
+
+        private static void TrySetTrialBlackoutVisible(bool visible)
+        {
+            try
+            {
+                var overlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
+                if (overlay == null) return;
+
+                if (!overlay.enabled) overlay.enabled = true;
+                if (!overlay.gameObject.activeInHierarchy) overlay.gameObject.SetActive(true);
+
+                if (visible) overlay.Show();
+                else overlay.Hide();
+            }
+            catch { }
         }
 
         private void ResetStaircaseForNewGroup(int groupIndex)
