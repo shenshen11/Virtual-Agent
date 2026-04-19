@@ -513,7 +513,8 @@ namespace VRPerception.Tasks
             overlay = null;
             try
             {
-                overlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
+                overlay = TrialBlackoutOverlay.Instance;
+                if (overlay == null) overlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
                 if (overlay != null) return true;
 
                 var all = Resources.FindObjectsOfTypeAll<TrialBlackoutOverlay>();

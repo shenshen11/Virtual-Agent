@@ -148,7 +148,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1113649}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 01614664b831546d2ae94a42149d80ac, type: 3}
   m_Name: 
@@ -156,7 +156,7 @@ MonoBehaviour:
   m_SendPointerHoverToParent: 1
   m_MoveRepeatDelay: 0.5
   m_MoveRepeatRate: 0.1
-  m_XRTrackingOrigin: {fileID: 780086399}
+  m_XRTrackingOrigin: {fileID: 0}
   m_ActionsAsset: {fileID: -944628639613478452, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
   m_PointAction: {fileID: -1654692200621890270, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
   m_MoveAction: {fileID: -8784545083839296357, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
@@ -3583,6 +3583,7 @@ GameObject:
   - component: {fileID: 780086398}
   - component: {fileID: 780086397}
   - component: {fileID: 780086400}
+  - component: {fileID: 780086402}
   m_Layer: 0
   m_Name: XR Origin (XR Rig)
   m_TagString: Untagged
@@ -3621,14 +3622,13 @@ MonoBehaviour:
   m_CameraFloorOffsetObject: {fileID: 1932801612}
   m_RequestedTrackingOriginMode: 2
   m_CameraYOffset: 1.1176
---- !u!4 &780086399
-Transform:
+--- !u!224 &780086399
+RectTransform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 780086396}
-  serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: -11.49}
   m_LocalScale: {x: 1, y: 1, z: 1}
@@ -3637,6 +3637,11 @@ Transform:
   - {fileID: 1932801613}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &780086400
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3685,6 +3690,29 @@ MonoBehaviour:
   dstColor: 1
   srcAlpha: 1
   dstAlpha: 1
+--- !u!223 &780086402
+Canvas:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 780086396}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_RenderMode: 2
+  m_Camera: {fileID: 0}
+  m_PlaneDistance: 100
+  m_PixelPerfect: 0
+  m_ReceivesEvents: 1
+  m_OverrideSorting: 0
+  m_OverridePixelPerfect: 0
+  m_SortingBucketNormalizedSize: 0
+  m_VertexColorAlwaysGammaSpace: 0
+  m_AdditionalShaderChannelsFlag: 0
+  m_UpdateRectTransformForStandalone: 0
+  m_SortingLayerID: 0
+  m_SortingOrder: 0
+  m_TargetDisplay: 0
 --- !u!1 &785897842
 GameObject:
   m_ObjectHideFlags: 0
@@ -4529,7 +4557,7 @@ MonoBehaviour:
   titleText: {fileID: 0}
   messageText: {fileID: 1052254182}
   confirmButton: {fileID: 0}
-  preTaskDisplayDuration: 5
+  preTaskDisplayDuration: 3
   postTaskDisplayDuration: 3
   showPostMessageOnCompletion: 1
   canvasSortingOrder: 50
@@ -4672,7 +4700,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: new text
+  m_text: 
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: b17077d477ed47a4dbcb474f0798ae90, type: 2}
   m_sharedMaterial: {fileID: 7772457649113381259, guid: b17077d477ed47a4dbcb474f0798ae90, type: 2}
@@ -4900,7 +4928,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1077309827
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4963,8 +4991,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   explicitPlaylists:
   - {fileID: 11400000, guid: 5747fed546c2f754780bc0e773e054b5, type: 2}
-  - {fileID: 11400000, guid: f5b3b04837c20314f95fcb294eccb9ca, type: 2}
-  - {fileID: 11400000, guid: 0b2c8e7a59c04f8da9b3e2f0841e6f2a, type: 2}
   autoLoadFromResources: 1
   playlistDropdown: {fileID: 121212280}
 --- !u!1 &1087635477
@@ -5288,7 +5314,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1094188290}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b8da955f0fff15540b36c65a96b3d217, type: 3}
   m_Name: 
@@ -5312,7 +5338,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1094188290}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: aae9b447af6bdd947a5a057d24223460, type: 3}
   m_Name: 
@@ -5480,7 +5506,6 @@ GameObject:
   - component: {fileID: 1119791763}
   - component: {fileID: 1119791762}
   - component: {fileID: 1119791765}
-  - component: {fileID: 1119791764}
   - component: {fileID: 1119791766}
   - component: {fileID: 1119791767}
   - component: {fileID: 1119791769}
@@ -5532,27 +5557,6 @@ RectTransform:
   m_AnchoredPosition: {x: 19.909239, y: 17.117073}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &1119791764
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1119791761}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 52bd87562410e3042bfe0be79fbd42a3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  configSource: 2
-  taskRunnerOverride: {fileID: 1824977593}
-  playlist: {fileID: 11400000, guid: 5747fed546c2f754780bc0e773e054b5, type: 2}
-  playlistEntryIndex: 0
-  taskId: distance_compression
-  seed: 12345
-  maxTrials: 0
-  outputDirectory: Docs\TrialPlan
-  fileNamePrefix: TrialPlan_
 --- !u!114 &1119791765
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5565,16 +5569,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7ac190d9b2050e84daa5357c4052f189, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  eventBus: {fileID: 0}
+  eventBus: {fileID: 719105663}
   autoFindEventBus: 1
   enabledForTask: 1
-  verboseLog: 0
+  verboseLog: 1
   minTriggerIntervalSeconds: 1
   useLeftControllerButtons: 1
   allowKeyboardInEditor: 1
   editorChooseAKey: 49
   editorChooseBKey: 50
-  defaultConfidence: 0.9
+  defaultConfidence: 0
 --- !u!114 &1119791766
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5797,7 +5801,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1152873691
 RectTransform:
   m_ObjectHideFlags: 0
@@ -8279,7 +8283,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   taskRunner: {fileID: 1824977593}
   eventBus: {fileID: 719105663}
-  defaultPlaylist: {fileID: 11400000, guid: 5747fed546c2f754780bc0e773e054b5, type: 2}
+  defaultPlaylist: {fileID: 11400000, guid: f5b3b04837c20314f95fcb294eccb9ca, type: 2}
   onPlaylistCompleted:
     m_PersistentCalls:
       m_Calls: []
@@ -8291,6 +8295,7 @@ MonoBehaviour:
   saveCheckpointOnEntryCompleted: 1
   participantIdOverride: 
   autoRestartIfCheckpointMissing: 1
+  quitApplicationOnPlaylistCompleted: 1
 --- !u!114 &1824977593
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8307,9 +8312,12 @@ MonoBehaviour:
   perception: {fileID: 1588881901}
   stimulus: {fileID: 1588881902}
   humanReferenceFrame: {fileID: 0}
+  humanTelemetryRecorder: {fileID: 0}
+  trialObjectCsvRecorder: {fileID: 0}
+  objectPlacer: {fileID: 0}
   xrOrigin: {fileID: 780086398}
   autoRun: 0
-  taskMode: 0
+  taskMode: 13
   randomSeed: 12345
   maxTrials: 0
   enableActionPlanLoop: 0
@@ -8323,7 +8331,7 @@ MonoBehaviour:
   mllmScanSeed: 12345
   mllmVideoFps: 50
   mllmVideoDurationMs: 1500
-  subjectMode: 1
+  subjectMode: 0
 --- !u!4 &1824977594
 Transform:
   m_ObjectHideFlags: 0
@@ -9094,7 +9102,7 @@ Camera:
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2
-    m_Bits: 2147483735
+    m_Bits: 4294967295
   m_RenderingPath: -1
   m_TargetTexture: {fileID: 0}
   m_TargetDisplay: 0
@@ -10080,7 +10088,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   humanInputPrefab: {fileID: 5154786369996114306, guid: 0a98043949bcca34bb91265198ab6b72, type: 3}
   parentOverride: {fileID: 0}
-  localPosition: {x: -1.5, y: -0.1, z: 5}
+  localPosition: {x: 0, y: -0.4, z: 2}
   localEulerAngles: {x: 0, y: 0, z: 0}
   localScale: {x: 0.01, y: 0.01, z: 0.01}
   activateOnSpawn: 1
@@ -10100,8 +10108,8 @@ SceneRoots:
   - {fileID: 719105665}
   - {fileID: 1824977594}
   - {fileID: 648029826}
-  - {fileID: 780086399}
   - {fileID: 83612500}
   - {fileID: 1854491876}
   - {fileID: 1876818260}
   - {fileID: 1119791763}
+  - {fileID: 780086399}

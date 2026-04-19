@@ -14,6 +14,8 @@ namespace VRPerception.UI
     /// </summary>
     public class TrialBlackoutOverlay : MonoBehaviour
     {
+        public static TrialBlackoutOverlay Instance { get; private set; }
+
         [Header("Event Bus")]
         [SerializeField] private EventBusManager eventBus;
         [SerializeField] private bool autoFindEventBus = true;
@@ -57,14 +59,19 @@ namespace VRPerception.UI
 
         private void Awake()
         {
-            if (autoFindEventBus && eventBus == null)
-                eventBus = EventBusManager.Instance;
+            if (Instance == null) Instance = this;
+            else if (Instance != this)
+            {
+                Debug.LogWarning("[TrialBlackoutOverlay] Multiple instances detected. Using the first registered instance as the default.");
+            }
 
+            TryBindEventBus();
             EnsureTexture();
         }
 
         private void OnEnable()
         {
+            TryBindEventBus();
             EnsureTexture();
             if (eventBus != null)
             {
@@ -82,6 +89,7 @@ namespace VRPerception.UI
 
         private void OnDestroy()
         {
+            if (Instance == this) Instance = null;
             CancelPending();
             if (_tex != null)
             {
@@ -89,6 +97,12 @@ namespace VRPerception.UI
                 _tex = null;
             }
             DestroyOverlay();
+        }
+
+        private void TryBindEventBus()
+        {
+            if (eventBus == null && autoFindEventBus)
+                eventBus = EventBusManager.Instance;
         }
 
         public void Hide()

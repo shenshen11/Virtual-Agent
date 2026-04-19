@@ -800,7 +800,10 @@ namespace VRPerception.Tasks
 
         private static TrialBlackoutOverlay FindTrialBlackoutOverlay()
         {
-            var overlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
+            var overlay = TrialBlackoutOverlay.Instance;
+            if (overlay != null) return overlay;
+
+            overlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
             if (overlay != null) return overlay;
 
             var all = Resources.FindObjectsOfTypeAll<TrialBlackoutOverlay>();

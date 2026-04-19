@@ -350,6 +350,7 @@ namespace VRPerception.Tasks
 
             if (_scene == null) _scene = UnityEngine.Object.FindObjectOfType<ExperimentSceneManager>();
             if (_placer == null) _placer = UnityEngine.Object.FindObjectOfType<ObjectPlacer>();
+            if (_blackoutOverlay == null) _blackoutOverlay = TrialBlackoutOverlay.Instance;
             if (_blackoutOverlay == null) _blackoutOverlay = UnityEngine.Object.FindObjectOfType<TrialBlackoutOverlay>();
         }
 
