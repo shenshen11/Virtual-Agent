@@ -391,13 +391,13 @@ namespace VRPerception.Infra
                         // - taskId: 任务ID
                         // - trialId: 试次ID
                         // - eccentricityDeg: 目标离心率（度）
-                        // - spacingDeg: 目标与最近干扰项间距（度）
+                        // - spacingDeg: 相邻字母中心到中心间距（度）
                         // - targetLetter: 真值目标字母
                         // - flankerLetters: 干扰字母序列（空格分隔）
                         // - predictedLetter: 模型预测字母
                         // - isCorrect: 是否正确（1/0）
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,eccentricityDeg,spacingDeg,targetLetter,flankerLetters,predictedLetter,isCorrect,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,eccentricityDeg,spacingDeg,targetLetter,flankerLetters,predictedLetter,isCorrect,confidence,providerId,latencyMs,displayDistanceM,letterHeightDeg,letterWidthDeg,edgeGapDeg,spacingEccentricityRatio,leftmostLetterEccDeg,rightmostLetterEccDeg,visualCrowdingCondition");
 
                         foreach (var r in _completed)
                         {
@@ -420,7 +420,15 @@ namespace VRPerception.Infra
                                 e.isLetterCorrect ? "1" : "0",
                                 e.confidence.ToString("F3"),
                                 Escape(e.providerId),
-                                e.latencyMs
+                                e.latencyMs,
+                                t.displayDistanceM.ToString("F3"),
+                                t.letterHeightDeg.ToString("F3"),
+                                t.letterWidthDeg.ToString("F3"),
+                                t.edgeGapDeg.ToString("F3"),
+                                t.spacingEccentricityRatio.ToString("F3"),
+                                t.leftmostLetterEccDeg.ToString("F3"),
+                                t.rightmostLetterEccDeg.ToString("F3"),
+                                Escape(t.visualCrowdingCondition)
                             ));
                         }
                     }

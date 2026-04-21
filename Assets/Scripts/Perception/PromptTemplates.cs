@@ -277,9 +277,14 @@ namespace VRPerception.Perception
         public static string BuildVisualCrowdingPrompt(float eccentricityDeg, float spacingDeg, string targetLetter, string[] flankers, int trialId)
         {
             var id = trialId.ToString(CultureInfo.InvariantCulture);
+            var isIsolated = flankers != null && flankers.Length == 1;
+            var instruction = isIsolated
+                ? "A central fixation mark is present. Keep attention on the fixation point. A single letter appears in the right periphery. Identify the letter."
+                : "A central fixation mark is present. Keep attention on the fixation point. A horizontal 5-letter string appears in the right periphery; the middle letter is the target. Identify the target letter.";
+
             return
                 $"Trial metadata: {{\"task\":\"visual_crowding\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
-                "A central fixation mark is present. Keep attention on the fixation point. A horizontal 5-letter string appears in the right periphery; the middle letter is the target. Identify the target letter.\n" +
+                instruction + "\n" +
                 $"Output STRICT JSON exactly in this schema: {{\"task\":\"visual_crowding\",\"trial_id\":\"{id}\",\"response\":{{\"letter\":\"<letter>\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
         }
 

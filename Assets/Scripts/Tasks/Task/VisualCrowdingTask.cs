@@ -19,6 +19,17 @@ namespace VRPerception.Tasks
     {
         public string TaskId => "visual_crowding";
 
+        private const float DisplayDistanceM = 1.5f;
+        private const float LetterHeightDeg = 5.0f;
+        private const float DesignLetterWidthDeg = 3.5f;
+        private const float FixationSizeDeg = 2.0f;
+        private const int LetterCount = 5;
+        private const int TargetIndex = 2;
+        private const int CrowdedRepetitions = 4;
+        private const int IsolatedRepetitions = 3;
+        private static readonly float[] EccentricitiesDeg = { 14f, 16f };
+        private static readonly float[] CenterSpacingsDeg = { 3.8f, 4.3f, 4.8f };
+
         private readonly string[] _letterPool = new[]
         {
             "A","B","C","D","E","F","G","H","J","K","L","M","N","P","R","S","T","U","V","W","X","Y","Z"
@@ -28,8 +39,13 @@ namespace VRPerception.Tasks
         private System.Random _rand = new System.Random(1234);
         private ExperimentSceneManager _scene;
         private readonly List<GameObject> _spawned = new List<GameObject>();
+        private readonly List<GameObject> _letterSpawned = new List<GameObject>();
+        private GameObject _fixationRoot;
         private readonly Dictionary<string, int> _snapshotObjectCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private int _activeTrialId = -1;
+
+        // 字母消除延迟（秒），注视点保留
+        private const float LetterHideDelaySec = 3f;
         private bool _referenceFrameInitialized;
         private Vector3 _referenceOrigin;
         private Vector3 _referenceForward;
@@ -82,23 +98,35 @@ namespace VRPerception.Tasks
         public TrialSpec[] BuildTrials(int seed)
         {
             _rand = new System.Random(seed);
+            return BuildCrowdingTrials();
+        }
 
-            var eccentricities = new[] { 8f, 12f, 16f };
-            var spacings = new[] { 1.0f, 1.5f, 2.0f, 2.5f };
-            const int repetitions = 2; // 最小可行：每组合重复 2 次，合计 24 条
+        private TrialSpec[] BuildCrowdingTrials()
+        {
+            var isolatedTrials = new List<TrialSpec>();
+            var crowdedTrials = new List<TrialSpec>();
 
-            var trials = new List<TrialSpec>();
-
-            foreach (var ecc in eccentricities)
+            foreach (var ecc in EccentricitiesDeg)
             {
-                foreach (var sp in spacings)
+                foreach (var sp in CenterSpacingsDeg)
                 {
-                    for (int rep = 0; rep < repetitions; rep++)
+                    if (!TryComputeGeometry(ecc, sp, DesignLetterWidthDeg, TargetIndex, LetterCount,
+                            out var edgeGapDeg,
+                            out var spacingRatio,
+                            out var leftmostDeg,
+                            out var rightmostDeg))
+                    {
+                        Debug.LogWarning(
+                            $"[VisualCrowdingTask] Skipping invalid geometry: E={ecc:F2}deg S={sp:F2}deg width={DesignLetterWidthDeg:F2}deg.");
+                        continue;
+                    }
+
+                    for (int rep = 0; rep < CrowdedRepetitions; rep++)
                     {
                         var target = SampleLetter();
                         var flankers = BuildFlankers(target);
 
-                        trials.Add(new TrialSpec
+                        crowdedTrials.Add(new TrialSpec
                         {
                             taskId = TaskId,
                             environment = "open_field",
@@ -110,15 +138,59 @@ namespace VRPerception.Tasks
 
                             eccentricityDeg = ecc,
                             spacingDeg = sp,
+                            displayDistanceM = DisplayDistanceM,
+                            letterHeightDeg = LetterHeightDeg,
+                            letterWidthDeg = DesignLetterWidthDeg,
+                            edgeGapDeg = edgeGapDeg,
+                            spacingEccentricityRatio = spacingRatio,
+                            leftmostLetterEccDeg = leftmostDeg,
+                            rightmostLetterEccDeg = rightmostDeg,
+                            visualCrowdingCondition = "crowded",
                             targetLetter = target,
                             flankerLetters = flankers,
-                            targetIndex = 2
+                            targetIndex = TargetIndex
                         });
                     }
                 }
+
+                for (int rep = 0; rep < IsolatedRepetitions; rep++)
+                {
+                    var target = SampleLetter();
+
+                    isolatedTrials.Add(new TrialSpec
+                    {
+                        taskId = TaskId,
+                        environment = "open_field",
+                        background = "none",
+                        fovDeg = 60f,
+                        textureDensity = 1f,
+                        lighting = "bright",
+                        occlusion = false,
+
+                        eccentricityDeg = ecc,
+                        spacingDeg = 0f,
+                        displayDistanceM = DisplayDistanceM,
+                        letterHeightDeg = LetterHeightDeg,
+                        letterWidthDeg = DesignLetterWidthDeg,
+                        edgeGapDeg = 0f,
+                        spacingEccentricityRatio = 0f,
+                        leftmostLetterEccDeg = ecc,
+                        rightmostLetterEccDeg = ecc,
+                        visualCrowdingCondition = "isolated",
+                        targetLetter = target,
+                        flankerLetters = new[] { target },
+                        targetIndex = 0
+                    });
+                }
             }
 
-            Shuffle(trials);
+            Shuffle(isolatedTrials);
+            Shuffle(crowdedTrials);
+
+            var trials = new List<TrialSpec>(isolatedTrials.Count + crowdedTrials.Count);
+            trials.AddRange(isolatedTrials);
+            trials.AddRange(crowdedTrials);
+            EnsureNoAdjacentSameTarget(trials);
             return trials.ToArray();
         }
 
@@ -167,15 +239,36 @@ namespace VRPerception.Tasks
             _ctx?.stimulus?.SetCameraFOV(fov);
 
             ResolvePlacementReference(cam, out var origin, out var forward, out var right, out var eyeY);
+            EnsureGeometryFields(trial);
 
-            // 固定深度布置：注视点靠近，字母串稍远，保证视角换算稳定
-            const float fixationDepth = 7.0f;
-            const float lettersDepth = 7.0f;
+            // 注视点和字母位于同一显示平面，所有关键尺寸由视觉角换算。
+            var displayDistance = trial.displayDistanceM > 0f ? trial.displayDistanceM : DisplayDistanceM;
 
-            PlaceFixation(origin, forward, eyeY, fixationDepth);
-            PlaceLetters(origin, forward, right, eyeY, lettersDepth, trial);
+            PlaceFixation(origin, forward, eyeY, displayDistance);
+            PlaceLetters(origin, forward, right, eyeY, displayDistance, trial);
 
-            await Task.Yield();
+            // Human 模式：等待 3s 后隐藏字母，注视点保留；
+            // OnBeforeTrialAsync 返回后 TaskRunner 才发布 WaitingForInput，保证字母消失在前
+            if (IsHumanMode())
+            {
+                await Task.Delay(TimeSpan.FromSeconds(LetterHideDelaySec), ct);
+                HideLetters();
+            }
+        }
+
+        /// <summary>
+        /// 隐藏当前 trial 的字母对象（SetActive false），注视点保留。
+        /// 不销毁，保留在场景中供 RecordTrialObjects 扫描记录；
+        /// 真正销毁由 ClearSpawned 在 OnAfterTrialAsync 中统一完成。
+        /// </summary>
+        private void HideLetters()
+        {
+            for (int i = 0; i < _letterSpawned.Count; i++)
+            {
+                var go = _letterSpawned[i];
+                if (go != null) go.SetActive(false);
+            }
+            // 不清空 _letterSpawned，留给 ClearSpawned 销毁
         }
 
         public async Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
@@ -307,6 +400,22 @@ namespace VRPerception.Tasks
             return _letterPool[idx];
         }
 
+        private string SampleLetterExcept(string excluded)
+        {
+            var candidates = new List<string>(_letterPool.Length);
+            for (int i = 0; i < _letterPool.Length; i++)
+            {
+                var letter = _letterPool[i];
+                if (!string.Equals(letter, excluded, StringComparison.OrdinalIgnoreCase))
+                {
+                    candidates.Add(letter);
+                }
+            }
+
+            if (candidates.Count == 0) return SampleLetter();
+            return candidates[_rand.Next(candidates.Count)];
+        }
+
         private string[] BuildFlankers(string target)
         {
             var arr = new string[5];
@@ -342,56 +451,58 @@ namespace VRPerception.Tasks
             pos.y = eyeY; // 保持与字母同一高度
             var root = new GameObject("vc_fixation");
             root.transform.position = pos;
+            root.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
             AttachSnapshotMarker(root, "fixation", "fixation");
 
             // 十字注视点：水平+垂直细条
+            var size = AngleToWorldSize(FixationSizeDeg, depth);
+            var thickness = Mathf.Max(0.001f, size * 0.18f);
+            var depthThickness = Mathf.Max(0.001f, size * 0.08f);
             var horiz = GameObject.CreatePrimitive(PrimitiveType.Cube);
             horiz.transform.SetParent(root.transform, worldPositionStays: false);
-            horiz.transform.localScale = new Vector3(0.36f, 0.05f, 0.01f);
+            horiz.transform.localScale = new Vector3(size, thickness, depthThickness);
 
             var vert = GameObject.CreatePrimitive(PrimitiveType.Cube);
             vert.transform.SetParent(root.transform, worldPositionStays: false);
-            vert.transform.localScale = new Vector3(0.05f, 0.36f, 0.01f);
+            vert.transform.localScale = new Vector3(thickness, size, depthThickness);
 
             var rendererH = horiz.GetComponent<Renderer>();
             var rendererV = vert.GetComponent<Renderer>();
             if (rendererH != null) rendererH.material.color = Color.red;
             if (rendererV != null) rendererV.material.color = Color.red;
 
+            // 注视点独立存储，不加入 _spawned，Human 模式下字母消除后仍保留
+            _fixationRoot = root;
             _spawned.Add(root);
         }
 
         private void PlaceLetters(Vector3 origin, Vector3 forward, Vector3 right, float eyeY, float depth, TrialSpec trial)
         {
-            if (trial == null || trial.flankerLetters == null || trial.flankerLetters.Length < 5) return;
+            if (trial == null || trial.flankerLetters == null || trial.flankerLetters.Length == 0) return;
 
             var basePos = origin + forward * depth;
-
-            // 放大间距比例避免拥挤过度，并确保整串在注视点右侧
-            var baseSpacing = 0.5f; // 保底间距，防止重叠
-            var spacingOffset = Mathf.Max(Mathf.Tan(trial.spacingDeg * Mathf.Deg2Rad) * depth * 2.5f, baseSpacing);
-            var eccOffset = Mathf.Tan(trial.eccentricityDeg * Mathf.Deg2Rad) * depth;
-            var minEccOffset = (trial.targetIndex + 1.0f) * spacingOffset; // 左端留半个间距的安全距离
-            if (eccOffset < minEccOffset) eccOffset = minEccOffset;
+            var letterHeightM = AngleToWorldSize(trial.letterHeightDeg > 0f ? trial.letterHeightDeg : LetterHeightDeg, depth);
 
             for (int i = 0; i < trial.flankerLetters.Length; i++)
             {
                 var idxOffset = i - trial.targetIndex;
-                var offset = eccOffset + spacingOffset * idxOffset;
+                var centerAngleDeg = trial.eccentricityDeg + trial.spacingDeg * idxOffset;
+                var offset = Mathf.Tan(centerAngleDeg * Mathf.Deg2Rad) * depth;
                 var pos = basePos + right * offset;
                 pos.y = eyeY; // 与参考眼高等高，模拟水平字母串
 
-                var go = CreateLetterObject(trial.flankerLetters[i], pos, forward);
+                var go = CreateLetterObject(trial.flankerLetters[i], pos, forward, letterHeightM);
                 if (go != null)
                 {
                     go.name = $"vc_letter_{i}";
                     AttachSnapshotMarker(go, "letter", i == trial.targetIndex ? "target" : "flanker");
+                    _letterSpawned.Add(go); // 字母单独追踪，Human 模式下 3s 后消除
                     _spawned.Add(go);
                 }
             }
         }
 
-        private GameObject CreateLetterObject(string letter, Vector3 position, Vector3 forward)
+        private GameObject CreateLetterObject(string letter, Vector3 position, Vector3 forward, float letterHeightM)
         {
             var go = new GameObject("vc_letter", typeof(TextMesh));
             go.transform.position = position;
@@ -401,15 +512,98 @@ namespace VRPerception.Tasks
             tm.text = string.IsNullOrEmpty(letter) ? "?" : letter.ToUpperInvariant();
             tm.anchor = TextAnchor.MiddleCenter;
             tm.alignment = TextAlignment.Center;
-            tm.characterSize = 0.06f;
+            tm.characterSize = 1f;
             tm.fontSize = 100;
             tm.color = Color.white;
 
+            FitTextMeshToHeight(go, letterHeightM);
             return go;
+        }
+
+        private static void FitTextMeshToHeight(GameObject go, float targetHeightM)
+        {
+            if (go == null) return;
+
+            var renderer = go.GetComponent<Renderer>();
+            if (renderer == null) return;
+
+            var currentHeight = renderer.bounds.size.y;
+            if (currentHeight <= 1e-6f) return;
+
+            var scale = Mathf.Max(0.001f, targetHeightM) / currentHeight;
+            go.transform.localScale = Vector3.one * scale;
+        }
+
+        private static float AngleToWorldSize(float angleDeg, float depth)
+        {
+            return 2f * depth * Mathf.Tan(Mathf.Max(0.001f, angleDeg) * 0.5f * Mathf.Deg2Rad);
+        }
+
+        private static bool TryComputeGeometry(
+            float eccentricityDeg,
+            float spacingDeg,
+            float letterWidthDeg,
+            int targetIndex,
+            int letterCount,
+            out float edgeGapDeg,
+            out float spacingEccentricityRatio,
+            out float leftmostLetterEccDeg,
+            out float rightmostLetterEccDeg)
+        {
+            edgeGapDeg = spacingDeg - letterWidthDeg;
+            spacingEccentricityRatio = eccentricityDeg > 0f ? spacingDeg / eccentricityDeg : 0f;
+            leftmostLetterEccDeg = eccentricityDeg - targetIndex * spacingDeg;
+            rightmostLetterEccDeg = eccentricityDeg + (letterCount - 1 - targetIndex) * spacingDeg;
+
+            return edgeGapDeg > 0f && leftmostLetterEccDeg > 0f && rightmostLetterEccDeg > leftmostLetterEccDeg;
+        }
+
+        private static void EnsureGeometryFields(TrialSpec trial)
+        {
+            if (trial == null) return;
+
+            if (trial.displayDistanceM <= 0f) trial.displayDistanceM = DisplayDistanceM;
+            if (trial.letterHeightDeg <= 0f) trial.letterHeightDeg = LetterHeightDeg;
+            if (trial.letterWidthDeg <= 0f) trial.letterWidthDeg = DesignLetterWidthDeg;
+
+            var letterCount = trial.flankerLetters != null && trial.flankerLetters.Length > 0
+                ? trial.flankerLetters.Length
+                : LetterCount;
+
+            if (letterCount == 1)
+            {
+                trial.spacingDeg = 0f;
+                trial.edgeGapDeg = 0f;
+                trial.spacingEccentricityRatio = 0f;
+                trial.leftmostLetterEccDeg = trial.eccentricityDeg;
+                trial.rightmostLetterEccDeg = trial.eccentricityDeg;
+                if (string.IsNullOrEmpty(trial.visualCrowdingCondition))
+                {
+                    trial.visualCrowdingCondition = "isolated";
+                }
+                return;
+            }
+
+            TryComputeGeometry(
+                trial.eccentricityDeg,
+                trial.spacingDeg,
+                trial.letterWidthDeg,
+                trial.targetIndex,
+                letterCount,
+                out trial.edgeGapDeg,
+                out trial.spacingEccentricityRatio,
+                out trial.leftmostLetterEccDeg,
+                out trial.rightmostLetterEccDeg);
+
+            if (string.IsNullOrEmpty(trial.visualCrowdingCondition))
+            {
+                trial.visualCrowdingCondition = "crowded";
+            }
         }
 
         private void ClearSpawned()
         {
+            // 清除所有 spawned 对象（包含 fixation + letters）
             for (int i = _spawned.Count - 1; i >= 0; i--)
             {
                 var go = _spawned[i];
@@ -423,6 +617,8 @@ namespace VRPerception.Tasks
                 }
             }
             _spawned.Clear();
+            _letterSpawned.Clear(); // 字母可能已被 HideLettersAfterDelayAsync 提前清除，确保同步
+            _fixationRoot = null;
             _snapshotObjectCounts.Clear();
             _activeTrialId = -1;
         }
@@ -452,6 +648,45 @@ namespace VRPerception.Tasks
                 int j = _rand.Next(i + 1);
                 (list[i], list[j]) = (list[j], list[i]);
             }
+        }
+
+        private void EnsureNoAdjacentSameTarget(IList<TrialSpec> trials)
+        {
+            if (trials == null || trials.Count <= 1) return;
+
+            for (int i = 1; i < trials.Count; i++)
+            {
+                if (!SameTarget(trials[i - 1], trials[i])) continue;
+
+                RetargetTrialAvoidingPrevious(trials[i], trials[i - 1]?.targetLetter);
+            }
+        }
+
+        private void RetargetTrialAvoidingPrevious(TrialSpec trial, string previousTarget)
+        {
+            if (trial == null) return;
+
+            var target = SampleLetterExcept(previousTarget);
+            trial.targetLetter = target;
+
+            if (trial.flankerLetters != null && trial.flankerLetters.Length > 1)
+            {
+                trial.flankerLetters = BuildFlankers(target);
+                trial.targetIndex = TargetIndex;
+            }
+            else
+            {
+                trial.flankerLetters = new[] { target };
+                trial.targetIndex = 0;
+            }
+        }
+
+        private static bool SameTarget(TrialSpec a, TrialSpec b)
+        {
+            return a != null &&
+                   b != null &&
+                   !string.IsNullOrEmpty(a.targetLetter) &&
+                   string.Equals(a.targetLetter, b.targetLetter, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool TryExtractLetterFromAnswer(object answer, out string letter)

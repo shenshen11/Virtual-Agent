@@ -151,7 +151,15 @@ namespace VRPerception.Tasks
 
         // Visual Crowding 专用字段
         public float eccentricityDeg;             // 目标字母离心率（度）
-        public float spacingDeg;                  // 目标与最近干扰项的间距（度）
+        public float spacingDeg;                  // 相邻字母中心到中心间距（度）
+        public float displayDistanceM;            // 注视点/字母显示平面距离（米）
+        public float letterHeightDeg;             // 字母高度（视觉角，度）
+        public float letterWidthDeg;              // 字母设计宽度（视觉角，度）
+        public float edgeGapDeg;                  // 相邻字母边缘间隙：spacingDeg - letterWidthDeg
+        public float spacingEccentricityRatio;    // spacingDeg / eccentricityDeg
+        public float leftmostLetterEccDeg;        // 最左侧字母中心相对注视点离心率（度）
+        public float rightmostLetterEccDeg;       // 最右侧字母中心相对注视点离心率（度）
+        public string visualCrowdingCondition;    // "crowded" | "isolated"
         public string targetLetter;               // 真值：目标字母
         public string[] flankerLetters;           // 干扰字母序列（长度 5 时目标索引在 2）
         public int targetIndex = 2;               // 目标在串中的索引位置，默认 0..4 中的 2
