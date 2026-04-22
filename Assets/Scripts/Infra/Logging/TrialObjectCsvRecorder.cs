@@ -24,6 +24,12 @@ namespace VRPerception.Tasks
         [SerializeField] private string rootFolderName = "VRP_Logs";
         [SerializeField] private string outputFileName = "trial_objects.csv";
 
+        private const string CsvHeader =
+            "runId,subjectMode,taskId,trialId,trialExecutionIndex,phase,taskSeed,objectId,objectName,kind,objectRole,active,layer," +
+            "posX,posY,posZ,rotX,rotY,rotZ,scaleX,scaleY,scaleZ," +
+            "rendererBoundsCenterX,rendererBoundsCenterY,rendererBoundsCenterZ,rendererBoundsSizeX,rendererBoundsSizeY,rendererBoundsSizeZ,hasRendererBounds," +
+            "colliderBoundsCenterX,colliderBoundsCenterY,colliderBoundsCenterZ,colliderBoundsSizeX,colliderBoundsSizeY,colliderBoundsSizeZ,hasColliderBounds";
+
         private string _outputPath;
         private StreamWriter _writer;
 
@@ -47,7 +53,7 @@ namespace VRPerception.Tasks
             CloseWriter();
         }
 
-        public void RecordTrialObjects(string runId, SubjectMode subjectMode, int taskSeed, int trialExecutionIndex, TrialSpec trial)
+        public void RecordTrialObjects(string runId, SubjectMode subjectMode, int taskSeed, int trialExecutionIndex, TrialSpec trial, string phase = "setup")
         {
             if (trial == null) return;
 
@@ -61,7 +67,7 @@ namespace VRPerception.Tasks
             }
             for (int i = 0; i < objects.Count; i++)
             {
-                WriteRecord(runId, subjectMode, taskSeed, trialExecutionIndex, trial, objects[i]);
+                WriteRecord(runId, subjectMode, taskSeed, trialExecutionIndex, phase, trial, objects[i]);
             }
 
             _writer.Flush();
@@ -73,18 +79,45 @@ namespace VRPerception.Tasks
 
             var sessionDir = LogSessionPaths.GetOrCreateSessionDirectory(rootFolderName);
             _outputPath = Path.Combine(sessionDir, string.IsNullOrWhiteSpace(outputFileName) ? "trial_objects.csv" : outputFileName.Trim());
+            if (File.Exists(_outputPath) && new FileInfo(_outputPath).Length > 0 && !ExistingHeaderHasPhase(_outputPath))
+            {
+                _outputPath = BuildSchemaVersionedPath(_outputPath);
+            }
+
             bool writeHeader = !File.Exists(_outputPath) || new FileInfo(_outputPath).Length == 0;
 
             _writer = new StreamWriter(_outputPath, append: true, new UTF8Encoding(false));
             if (writeHeader)
             {
-                _writer.WriteLine(
-                    "runId,subjectMode,taskId,trialId,trialExecutionIndex,taskSeed,objectId,objectName,kind,objectRole,active,layer," +
-                    "posX,posY,posZ,rotX,rotY,rotZ,scaleX,scaleY,scaleZ," +
-                    "rendererBoundsCenterX,rendererBoundsCenterY,rendererBoundsCenterZ,rendererBoundsSizeX,rendererBoundsSizeY,rendererBoundsSizeZ,hasRendererBounds," +
-                    "colliderBoundsCenterX,colliderBoundsCenterY,colliderBoundsCenterZ,colliderBoundsSizeX,colliderBoundsSizeY,colliderBoundsSizeZ,hasColliderBounds");
+                _writer.WriteLine(CsvHeader);
                 _writer.Flush();
             }
+        }
+
+        private static bool ExistingHeaderHasPhase(string path)
+        {
+            try
+            {
+                using (var reader = new StreamReader(path, Encoding.UTF8, true))
+                {
+                    var header = reader.ReadLine();
+                    return !string.IsNullOrEmpty(header) &&
+                           header.IndexOf(",phase,", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        private static string BuildSchemaVersionedPath(string path)
+        {
+            var dir = Path.GetDirectoryName(path);
+            var name = Path.GetFileNameWithoutExtension(path);
+            var ext = Path.GetExtension(path);
+            if (string.IsNullOrEmpty(ext)) ext = ".csv";
+            return Path.Combine(string.IsNullOrEmpty(dir) ? string.Empty : dir, $"{name}_v2{ext}");
         }
 
         private void CloseWriter()
@@ -177,7 +210,7 @@ namespace VRPerception.Tasks
             };
         }
 
-        private void WriteRecord(string runId, SubjectMode subjectMode, int taskSeed, int trialExecutionIndex, TrialSpec trial, ObjectRecord record)
+        private void WriteRecord(string runId, SubjectMode subjectMode, int taskSeed, int trialExecutionIndex, string phase, TrialSpec trial, ObjectRecord record)
         {
             _writer.WriteLine(string.Join(",",
                 Escape(runId),
@@ -185,6 +218,7 @@ namespace VRPerception.Tasks
                 Escape(trial.taskId),
                 trial.trialId.ToString(Invariant),
                 trialExecutionIndex.ToString(Invariant),
+                Escape(string.IsNullOrWhiteSpace(phase) ? "setup" : phase.Trim()),
                 taskSeed.ToString(Invariant),
                 Escape(record.objectId),
                 Escape(record.objectName),

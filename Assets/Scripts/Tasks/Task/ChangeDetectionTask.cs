@@ -26,8 +26,19 @@ namespace VRPerception.Tasks
         private const int SceneRenderSettleDelayMs = 50;
         private const int SceneAExposureMs = 2000;
         private const int MaskDurationMs = 500;
-        private const int SceneBExposureMs = 1000;
         private const float ClusterDistance = 9f;
+        private const int ChangeCategoryRepetitions = 5;
+        private const int GridRows = 4;
+        private const int GridCols = 4;
+        private const int GridCandidateCount = GridRows * GridCols;
+        private const int MinBaseObjectCount = 10;
+        private const int MaxBaseObjectCount = 12;
+        private const float GridSpacingX = 1.00f;
+        private const float GridSpacingY = 0.70f;
+        private const float GridJitterX = 0.30f;
+        private const float GridJitterY = 0.08f;
+        private const float DisplayObjectScale = 0.48f;
+        private const float DisplayPlaneMinCenterY = 1.60f;
 
         private TaskRunnerContext _ctx;
         private System.Random _rand = new System.Random(1234);
@@ -35,51 +46,36 @@ namespace VRPerception.Tasks
         private ExperimentSceneManager _scene;
         private ObjectPlacer _placer;
         private TrialBlackoutOverlay _blackoutOverlay;
+        private Material _grayMaterial;
 
         // 统一灰色材质（去掉颜色线索，迫使依赖空间/形状检测变化）
         private static readonly Color s_grayColor = new Color(0.5f, 0.5f, 0.5f);
 
-        // 空间层级名称（front/middle/back 实际深度 = ClusterDistance + z偏移）
-        private static readonly string[] s_layerNames = { "front", "middle", "back" };
-
-        // 形状池（每层 2 个物体，共 6 个，预分配不同形状）
-        private static readonly string[] s_shapePool = { "cube", "sphere", "cylinder", "capsule", "cube", "sphere" };
-
-        // 大小池：front=0.65、middle=0.62、back=0.78（back层加大补偿透视缩小）
-        private static readonly float[] s_scalePool = { 0.65f, 0.65f, 0.62f, 0.62f, 0.78f, 0.78f };
-
-        // movement 视角等比偏移量（每层按深度缩放）
-        // 当前布局已更紧凑，因此同步缩小位移，避免 movement 变化过于显眼。
-        private static readonly float[] s_movementDeltaX = { 0.12f, 0.18f, 0.24f };
-
-        // 位置轻微扰动幅度：保留层级结构，仅打破固定对称模板。
-        private const float PositionJitterX = 0.12f;
-        private const float PositionJitterZ = 0.18f;
-        private const float AppearanceMinSpacing = 0.52f;
-
-        private static readonly string[] s_changeCategories = { "appearance", "disappearance", "movement", "replacement" };
-
-        // 三层物体偏移（相对 sceneCenter）：
-        //   每层两个物体关于 x=0 对称；z 偏移决定层深度（ClusterDistance=9m）
-        //   front:  实际深度 ≈ 6.5m，横向间距 2.2m
-        //   middle: 实际深度 ≈ 9.0m，横向间距 2.4m
-        //   back:   实际深度 ≈ 12.0m，横向间距 2.6m
-        private static readonly Vector3[][] s_layerOffsets =
+        // 形状池：4x4 隐式候选格中固定抽取 12 个物体，形状均衡重复。
+        private static readonly string[] s_shapePool =
         {
-            new[] { new Vector3(-0.68f, 0f, -2.5f), new Vector3(+0.68f, 0f, -2.5f) }, // front
-            new[] { new Vector3(-0.74f, 0f,  0.0f), new Vector3(+0.74f, 0f,  0.0f) }, // middle
-            new[] { new Vector3(-0.80f, 0f, +3.0f), new Vector3(+0.80f, 0f, +3.0f) }, // back
+            "cube", "sphere", "cylinder", "capsule",
+            "cube", "sphere", "cylinder", "capsule",
+            "cube", "sphere", "cylinder", "capsule"
         };
 
+        private static readonly string[] s_changeCategories = { "none", "appearance", "disappearance", "movement", "replacement" };
+
         private Vector3 _sceneCenter;
-        private Vector3 _sceneForward;
         private Vector3 _sceneRight;
-        private float _sceneGroundY;
         private bool _sceneAnchorReady;
         private bool _referenceFrameInitialized;
         private Vector3 _referenceOrigin;
         private Vector3 _referenceForward;
         private float _referenceEyeY;
+
+        private struct GridObjectSpec
+        {
+            public int CandidateIndex;
+            public Vector3 LocalPosition;
+            public string Kind;
+            public float Scale;
+        }
 
         public ChangeDetectionTask(TaskRunnerContext ctx)
         {
@@ -97,12 +93,21 @@ namespace VRPerception.Tasks
                     eventBus = eventBus,
                     perception = runner ? runner.GetComponent<PerceptionSystem>() : null,
                     stimulus = runner ? runner.GetComponent<StimulusCapture>() : null,
-                    humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null
+                    humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null,
+                    trialObjectCsvRecorder = runner ? runner.GetComponent<TrialObjectCsvRecorder>() : null
                 };
             }
-            else if (_ctx.humanReferenceFrame == null)
+            else
             {
-                _ctx.humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null;
+                if (_ctx.humanReferenceFrame == null)
+                {
+                    _ctx.humanReferenceFrame = runner ? runner.GetComponent<HumanReferenceFrameService>() : null;
+                }
+
+                if (_ctx.trialObjectCsvRecorder == null)
+                {
+                    _ctx.trialObjectCsvRecorder = runner ? runner.GetComponent<TrialObjectCsvRecorder>() : null;
+                }
             }
 
             TryBindHelpers();
@@ -121,6 +126,9 @@ namespace VRPerception.Tasks
 
         public Task OnRunEndAsync(CancellationToken ct)
         {
+            HideBlackout();
+            DestroyMaterial(_grayMaterial);
+            _grayMaterial = null;
             _referenceFrameInitialized = false;
             _sceneAnchorReady = false;
             return Task.CompletedTask;
@@ -130,50 +138,30 @@ namespace VRPerception.Tasks
         {
             _rand = new System.Random(seed);
 
-            var backgrounds = new[] { "none", "indoor" };
-            var fovs = new[] { 60f };
-
             var trials = new List<TrialSpec>();
+            const string background = "indoor";
+            const float fov = 60f;
 
-            foreach (var bg in backgrounds)
+            foreach (var cat in s_changeCategories)
             {
-                foreach (var fov in fovs)
+                for (int rep = 0; rep < ChangeCategoryRepetitions; rep++)
                 {
-                    // none 类别：无层级
+                    int sceneVariantSeed = _rand.Next();
+                    int baseObjectCount = ResolveBaseObjectCount(sceneVariantSeed);
+                    bool changed = !string.Equals(cat, "none", StringComparison.OrdinalIgnoreCase);
                     trials.Add(new TrialSpec
                     {
                         taskId = TaskId,
                         environment = "open_field",
-                        background = bg,
+                        background = background,
                         fovDeg = fov,
-                        lighting = BackgroundToLighting(bg),
+                        lighting = BackgroundToLighting(background),
                         occlusion = false,
-                        changed = false,
-                        changeCategory = "none",
-                        sceneVariantSeed = _rand.Next(),
-                        changeTargetObjectIndex = _rand.Next(0, 2)
+                        changed = changed,
+                        changeCategory = cat,
+                        sceneVariantSeed = sceneVariantSeed,
+                        changeTargetObjectIndex = _rand.Next(0, baseObjectCount)
                     });
-
-                    // 其他类别 × 空间层级
-                    foreach (var cat in s_changeCategories)
-                    {
-                        foreach (var layer in s_layerNames)
-                        {
-                            trials.Add(new TrialSpec
-                            {
-                                taskId = TaskId,
-                                environment = "open_field",
-                                background = bg,
-                                fovDeg = fov,
-                                lighting = BackgroundToLighting(bg),
-                                occlusion = false,
-                                changed = true,
-                                changeCategory = $"{cat}_{layer}",
-                                sceneVariantSeed = _rand.Next(),
-                                changeTargetObjectIndex = _rand.Next(0, 2)
-                            });
-                        }
-                    }
                 }
             }
 
@@ -194,7 +182,7 @@ namespace VRPerception.Tasks
 
         public string BuildTaskPrompt(TrialSpec trial)
         {
-            return PromptTemplates.BuildChangeDetectionPrompt(trial.background, trial.fovDeg, trial.trialId);
+            return PromptTemplates.BuildChangeDetectionPrompt(trial.trialId);
         }
 
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
@@ -223,6 +211,7 @@ namespace VRPerception.Tasks
 
             PrepareSceneAnchor();
             PlaceSceneA(trial);
+            RecordTrialObjects(trial, "before");
 
             // 等待渲染完成（确保物体完全渲染后再进入 A->mask->B 时序）
             await WaitForRenderingComplete(ct);
@@ -286,8 +275,7 @@ namespace VRPerception.Tasks
                 trueChanged = trial.changed
             };
 
-            // 从复合编码中提取纯 category（模型只需回答 category，不需要回答 layer）
-            ParseCategoryAndLayer(trial.changeCategory, out var trueCategory, out _);
+            var trueCategory = NormalizeTrialCategory(trial.changeCategory);
             eval.trueChangeCategory = string.IsNullOrEmpty(trueCategory) ? "none" : trueCategory;
 
             bool hasPrediction = false;
@@ -318,7 +306,9 @@ namespace VRPerception.Tasks
                 // 正确性：优先比较 changed；若 changed=true 再比较类别
                 if (!eval.trueChanged)
                 {
-                    eval.isCorrect = !eval.predictedChanged;
+                    eval.isCorrect = !eval.predictedChanged &&
+                                     string.Equals(eval.predictedChangeCategory, "none",
+                                         StringComparison.OrdinalIgnoreCase);
                 }
                 else
                 {
@@ -376,6 +366,7 @@ namespace VRPerception.Tasks
 
             ShowBlackout();
             ApplySceneB(trial);
+            RecordTrialObjects(trial, "after");
             await WaitForRenderingComplete(ct);
 
             if (MaskDurationMs > 0)
@@ -389,11 +380,6 @@ namespace VRPerception.Tasks
             if (captureFrames)
             {
                 frames.Add(await CaptureCurrentFrameAsync(trial, "after", ct));
-            }
-
-            if (SceneBExposureMs > 0)
-            {
-                await Task.Delay(SceneBExposureMs, ct);
             }
 
             return frames;
@@ -454,17 +440,15 @@ namespace VRPerception.Tasks
                 throw new InvalidOperationException("No head camera available for change_detection.");
             }
 
-            ResolvePlacementReference(cam, out var origin, out var forward, out var eyeY);
-            _sceneForward = forward;
-            if (_sceneForward.sqrMagnitude < 0.0001f)
+            ResolvePlacementReference(cam, out var origin, out var sceneForward, out var eyeY);
+            if (sceneForward.sqrMagnitude < 0.0001f)
             {
-                _sceneForward = Vector3.forward;
+                sceneForward = Vector3.forward;
             }
 
-            _sceneRight = Vector3.Cross(Vector3.up, _sceneForward).normalized;
-            _sceneGroundY = eyeY;
-            _sceneCenter = origin + _sceneForward * ClusterDistance;
-            _sceneCenter.y = _sceneGroundY;
+            _sceneRight = Vector3.Cross(Vector3.up, sceneForward).normalized;
+            _sceneCenter = origin + sceneForward * ClusterDistance;
+            _sceneCenter.y = Mathf.Max(eyeY, DisplayPlaneMinCenterY);
             _sceneAnchorReady = true;
         }
 
@@ -528,149 +512,162 @@ namespace VRPerception.Tasks
         private void PlaceSceneA(TrialSpec trial)
         {
             ClearChangeScene();
-            PlaceLayeredCluster(
+            PlaceGridScene(
                 SceneObjectPrefix,
                 null,
-                -1,
                 trial != null ? trial.sceneVariantSeed : 0,
-                trial != null ? Mathf.Clamp(trial.changeTargetObjectIndex, 0, 1) : 0);
+                trial != null ? Mathf.Clamp(trial.changeTargetObjectIndex, 0, ResolveBaseObjectCount(trial.sceneVariantSeed) - 1) : 0);
         }
 
         private void ApplySceneB(TrialSpec trial)
         {
             ClearChangeScene();
-            ParseCategoryAndLayer(trial.changeCategory, out var category, out var layer);
-            var targetLayerIdx = Array.IndexOf(s_layerNames, layer);
-            PlaceLayeredCluster(
+            var category = NormalizeTrialCategory(trial.changeCategory);
+            PlaceGridScene(
                 SceneObjectPrefix,
                 category,
-                targetLayerIdx,
                 trial.sceneVariantSeed,
-                Mathf.Clamp(trial.changeTargetObjectIndex, 0, 1));
+                Mathf.Clamp(trial.changeTargetObjectIndex, 0, ResolveBaseObjectCount(trial.sceneVariantSeed) - 1));
         }
 
         /// <summary>
-        /// 放置三层物体群。changeCategory 和 targetLayerIdx 控制 B 场景的变化。
+        /// 放置固定垂直展示平面上的 4x4 隐式网格。A/B 共享 seed，B 按 category 施加变化。
         /// </summary>
-        private void PlaceLayeredCluster(string prefix, string changeCategory, int targetLayerIdx, int sceneVariantSeed, int changeTargetObjectIndex)
+        private void PlaceGridScene(string prefix, string changeCategory, int sceneVariantSeed, int changeTargetObjectIndex)
         {
-            var grayMat = CreateObjectMaterial();
-            var shapePool = BuildShapePoolVariant(sceneVariantSeed);
+            var grayMat = GetObjectMaterial();
+            var layout = BuildGridLayout(sceneVariantSeed);
+            if (layout.Count == 0) return;
+
+            string category = string.Equals(changeCategory, "none", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : changeCategory;
+
+            int targetObjectIndex = Mathf.Clamp(changeTargetObjectIndex, 0, layout.Count - 1);
+            int movementCandidateIndex = ResolveEmptyCandidateIndex(layout, targetObjectIndex, sceneVariantSeed, 31);
             int placedObjectIdx = 0;
 
-            for (int li = 0; li < s_layerOffsets.Length; li++)
+            for (int i = 0; i < layout.Count; i++)
             {
-                var offsets = s_layerOffsets[li];
-                bool isTargetLayer = (li == targetLayerIdx && !string.IsNullOrEmpty(changeCategory));
-                var jitteredOffsets = BuildLayerOffsetsWithJitter(li, sceneVariantSeed);
+                var spec = layout[i];
+                bool isChangeTarget = !string.IsNullOrEmpty(category) && i == targetObjectIndex;
 
-                for (int oi = 0; oi < offsets.Length; oi++)
+                if (isChangeTarget)
                 {
-                    int slotIdx = li * offsets.Length + oi;
-                    bool isChangeTarget = isTargetLayer && oi == changeTargetObjectIndex;
-                    var local = oi < jitteredOffsets.Length ? jitteredOffsets[oi] : offsets[oi];
-                    var kind = GetBaseKind(shapePool, slotIdx);
-                    float objScale = GetBaseScale(slotIdx);
-
-                    if (isChangeTarget)
+                    switch (category)
                     {
-                        switch (changeCategory)
-                        {
-                            case "disappearance":
-                                continue; // 跳过，不放置
-                            case "movement":
-                                local = ResolveMovementLocalOffset(li, local, changeTargetObjectIndex, sceneVariantSeed);
-                                break;
-                            case "replacement":
-                                kind = GetReplacementKind(shapePool, slotIdx);
-                                break;
-                        }
+                        case "disappearance":
+                            continue;
+                        case "movement":
+                            spec.CandidateIndex = movementCandidateIndex;
+                            spec.LocalPosition = ResolveGridLocalOffset(movementCandidateIndex, sceneVariantSeed);
+                            break;
+                        case "replacement":
+                            spec.Kind = GetReplacementKind(spec.Kind);
+                            break;
                     }
-
-                    var pos = _sceneCenter + _sceneRight * local.x + _sceneForward * local.z;
-                    pos.y = _sceneGroundY;
-                    var name = $"{prefix}{placedObjectIdx}";
-
-                    if (_placer != null)
-                    {
-                        var placed = _placer.Place(kind, pos, objScale, grayMat, name);
-                        AdjustShapeTransform(placed, kind, objScale, pos, _sceneGroundY);
-                    }
-                    else
-                    {
-                        var go = CreatePrimitiveForKind(kind);
-                        if (go != null)
-                        {
-                            go.name = name;
-                            AdjustShapeTransform(go, kind, objScale, pos, _sceneGroundY);
-                            var renderer = go.GetComponent<Renderer>();
-                            if (renderer != null) renderer.material = grayMat;
-                        }
-                    }
-                    placedObjectIdx++;
                 }
 
-                // appearance：仅在目标层内，围绕已有物体附近新增一个额外物体，避免固定中心插入过于显眼。
-                if (isTargetLayer && changeCategory == "appearance")
-                {
-                    var extraLocal = ResolveAppearanceLocalOffset(li, jitteredOffsets, changeTargetObjectIndex, sceneVariantSeed);
-                    var pos = _sceneCenter + _sceneRight * extraLocal.x + _sceneForward * extraLocal.z;
-                    pos.y = _sceneGroundY;
-                    var name = $"{prefix}{placedObjectIdx}";
-                    const float extraScale = 0.58f;
+                PlaceGridObject($"{prefix}{placedObjectIdx}", spec, grayMat);
+                placedObjectIdx++;
+            }
 
-                    if (_placer != null)
-                    {
-                        var placed = _placer.Place("cylinder", pos, extraScale, grayMat, name);
-                        AdjustShapeTransform(placed, "cylinder", extraScale, pos, _sceneGroundY);
-                    }
-                    else
-                    {
-                        var go = CreatePrimitiveForKind("cylinder");
-                        if (go != null)
-                        {
-                            go.name = name;
-                            AdjustShapeTransform(go, "cylinder", extraScale, pos, _sceneGroundY);
-                            var renderer = go.GetComponent<Renderer>();
-                            if (renderer != null) renderer.material = grayMat;
-                        }
-                    }
-                    placedObjectIdx++;
+            // appearance：新增物体占用一个空卡槽。
+            if (string.Equals(category, "appearance", StringComparison.OrdinalIgnoreCase))
+            {
+                int appearanceCandidateIndex = ResolveEmptyCandidateIndex(layout, targetObjectIndex, sceneVariantSeed, 47);
+                var extraSpec = new GridObjectSpec
+                {
+                    CandidateIndex = appearanceCandidateIndex,
+                    LocalPosition = ResolveGridLocalOffset(appearanceCandidateIndex, sceneVariantSeed),
+                    Kind = ResolveAppearanceKind(sceneVariantSeed, targetObjectIndex),
+                    Scale = DisplayObjectScale
+                };
+                PlaceGridObject($"{prefix}{placedObjectIdx}", extraSpec, grayMat);
+            }
+        }
+
+        private void PlaceGridObject(string name, GridObjectSpec spec, Material grayMat)
+        {
+            var pos = _sceneCenter + _sceneRight * spec.LocalPosition.x + Vector3.up * spec.LocalPosition.y;
+
+            if (_placer != null)
+            {
+                var placed = _placer.Place(spec.Kind, pos, spec.Scale, grayMat, name);
+                AdjustPlaneObjectTransform(placed, spec.Kind, spec.Scale, pos);
+            }
+            else
+            {
+                var go = CreatePrimitiveForKind(spec.Kind);
+                if (go != null)
+                {
+                    go.name = name;
+                    AdjustPlaneObjectTransform(go, spec.Kind, spec.Scale, pos);
+                    var renderer = go.GetComponent<Renderer>();
+                    if (renderer != null) renderer.material = grayMat;
                 }
             }
         }
 
-        private static Vector3[] BuildLayerOffsetsWithJitter(int layerIndex, int sceneVariantSeed)
+        private static List<GridObjectSpec> BuildGridLayout(int sceneVariantSeed)
         {
-            if (layerIndex < 0 || layerIndex >= s_layerOffsets.Length)
+            var candidates = BuildCandidateIndexVariant(sceneVariantSeed);
+            var shapePool = BuildShapePoolVariant(sceneVariantSeed);
+            int baseObjectCount = ResolveBaseObjectCount(sceneVariantSeed);
+            var layout = new List<GridObjectSpec>(baseObjectCount);
+
+            for (int i = 0; i < baseObjectCount && i < candidates.Length; i++)
             {
-                return Array.Empty<Vector3>();
+                int candidateIndex = candidates[i];
+                layout.Add(new GridObjectSpec
+                {
+                    CandidateIndex = candidateIndex,
+                    LocalPosition = ResolveGridLocalOffset(candidateIndex, sceneVariantSeed),
+                    Kind = GetBaseKind(shapePool, i),
+                    Scale = DisplayObjectScale
+                });
             }
 
-            var baseOffsets = s_layerOffsets[layerIndex];
-            var result = new Vector3[baseOffsets.Length];
-            for (int i = 0; i < baseOffsets.Length; i++)
-            {
-                result[i] = ResolveJitteredLocalOffset(baseOffsets[i], layerIndex, i, sceneVariantSeed);
-            }
-
-            return result;
+            return layout;
         }
 
-        private static Vector3 ResolveJitteredLocalOffset(Vector3 baseLocal, int layerIndex, int objectIndex, int sceneVariantSeed)
+        private static int ResolveBaseObjectCount(int sceneVariantSeed)
         {
-            uint state = (uint)(sceneVariantSeed * 73856093 ^ layerIndex * 19349663 ^ objectIndex * 83492791);
-            float jitterX = (NextDeterministic01(ref state) * 2f - 1f) * PositionJitterX;
-            float jitterZ = (NextDeterministic01(ref state) * 2f - 1f) * PositionJitterZ;
+            return MinBaseObjectCount + PositiveMod(sceneVariantSeed, MaxBaseObjectCount - MinBaseObjectCount + 1);
+        }
 
-            // 约束在当前层附近，避免跨层并保留左右分离关系。
-            float jitteredX = baseLocal.x + jitterX;
-            float xMin = baseLocal.x < 0f ? baseLocal.x - PositionJitterX : baseLocal.x - PositionJitterX * 0.6f;
-            float xMax = baseLocal.x < 0f ? baseLocal.x + PositionJitterX * 0.6f : baseLocal.x + PositionJitterX;
-            jitteredX = Mathf.Clamp(jitteredX, xMin, xMax);
+        private static int[] BuildCandidateIndexVariant(int sceneVariantSeed)
+        {
+            var candidates = new int[GridCandidateCount];
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                candidates[i] = i;
+            }
 
-            float jitteredZ = Mathf.Clamp(baseLocal.z + jitterZ, baseLocal.z - PositionJitterZ, baseLocal.z + PositionJitterZ);
-            return new Vector3(jitteredX, baseLocal.y, jitteredZ);
+            var rand = CreateDeterministicRandom(sceneVariantSeed, 0x5A17);
+            for (int i = candidates.Length - 1; i > 0; i--)
+            {
+                int j = rand.Next(i + 1);
+                (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
+            }
+
+            return candidates;
+        }
+
+        private static Vector3 ResolveGridLocalOffset(int candidateIndex, int sceneVariantSeed)
+        {
+            candidateIndex = Mathf.Clamp(candidateIndex, 0, GridCandidateCount - 1);
+            int row = candidateIndex / GridCols;
+            int col = candidateIndex % GridCols;
+
+            float x = (col - (GridCols - 1) * 0.5f) * GridSpacingX;
+            float y = ((GridRows - 1) * 0.5f - row) * GridSpacingY;
+
+            uint state = (uint)(sceneVariantSeed * 73856093 ^ candidateIndex * 19349663);
+            x += (NextDeterministic01(ref state) * 2f - 1f) * GridJitterX;
+            y += (NextDeterministic01(ref state) * 2f - 1f) * GridJitterY;
+
+            return new Vector3(x, y, 0f);
         }
 
         private static float NextDeterministic01(ref uint state)
@@ -679,73 +676,34 @@ namespace VRPerception.Tasks
             return (state & 0x00FFFFFFu) / 16777215f;
         }
 
-        private static Vector3 ResolveAppearanceLocalOffset(int layerIndex, IReadOnlyList<Vector3> offsets, int changeTargetObjectIndex, int sceneVariantSeed)
+        private static int ResolveEmptyCandidateIndex(IReadOnlyList<GridObjectSpec> layout, int targetObjectIndex, int sceneVariantSeed, int salt)
         {
-            if (offsets == null || offsets.Count == 0)
+            if (layout == null || layout.Count == 0)
             {
-                return new Vector3(0f, 0f, 0.15f);
+                return 0;
             }
 
-            int anchorIndex = Mathf.Clamp(changeTargetObjectIndex, 0, offsets.Count - 1);
-            Vector3 anchor = offsets[anchorIndex];
-
-            float outwardSign = Mathf.Sign(anchor.x);
-            if (Mathf.Abs(outwardSign) < 0.01f)
+            var occupied = new bool[GridCandidateCount];
+            for (int i = 0; i < layout.Count; i++)
             {
-                outwardSign = anchorIndex == 0 ? -1f : 1f;
+                int idx = layout[i].CandidateIndex;
+                if (idx >= 0 && idx < occupied.Length) occupied[idx] = true;
             }
 
-            // 深层稍微放大偏移，保持各层上的局部邻近感接近一致。
-            float layerScale = 1f + Mathf.Clamp(layerIndex, 0, 2) * 0.12f;
-            float lateralOffset = 0.42f * layerScale * outwardSign;
-
-            // 用 sceneVariantSeed 打散前后方向，保持同一试次可复现。
-            bool pushForward = ((sceneVariantSeed + layerIndex + anchorIndex) & 1) == 0;
-            float depthOffset = (pushForward ? 0.32f : -0.28f) * layerScale;
-
-            var candidate = new Vector3(anchor.x + lateralOffset, anchor.y, anchor.z + depthOffset);
-            float minSpacing = AppearanceMinSpacing * layerScale;
-
-            // appearance 物体需要靠近锚点，但不能与同层已有物体过度重叠。
-            for (int i = 0; i < offsets.Count; i++)
+            var empty = new List<int>(GridCandidateCount - layout.Count);
+            for (int i = 0; i < occupied.Length; i++)
             {
-                var existing = offsets[i];
-                var delta = new Vector2(candidate.x - existing.x, candidate.z - existing.z);
-                float dist = delta.magnitude;
-                if (dist >= minSpacing) continue;
-
-                Vector2 dir;
-                if (dist > 1e-4f)
-                {
-                    dir = delta / dist;
-                }
-                else
-                {
-                    dir = new Vector2(outwardSign, pushForward ? 1f : -1f).normalized;
-                }
-
-                float push = minSpacing - dist;
-                candidate.x += dir.x * push;
-                candidate.z += dir.y * push;
+                if (!occupied[i]) empty.Add(i);
             }
 
-            return candidate;
-        }
-
-        private static Vector3 ResolveMovementLocalOffset(int layerIndex, Vector3 local, int changeTargetObjectIndex, int sceneVariantSeed)
-        {
-            float deltaX = layerIndex < s_movementDeltaX.Length ? s_movementDeltaX[layerIndex] : 1.92f;
-
-            float outwardSign = Mathf.Sign(local.x);
-            if (Mathf.Abs(outwardSign) < 0.01f)
+            if (empty.Count == 0)
             {
-                outwardSign = changeTargetObjectIndex == 0 ? -1f : 1f;
+                targetObjectIndex = Mathf.Clamp(targetObjectIndex, 0, layout.Count - 1);
+                return layout[targetObjectIndex].CandidateIndex;
             }
 
-            // 默认朝层外移动，部分 seed 会翻转为朝层内移动，避免形成固定方向的可学习模式。
-            bool moveOutward = ((sceneVariantSeed + layerIndex + changeTargetObjectIndex) & 1) == 0;
-            float signedDeltaX = deltaX * (moveOutward ? outwardSign : -outwardSign);
-            return new Vector3(local.x + signedDeltaX, local.y, local.z);
+            int choice = PositiveMod(sceneVariantSeed + targetObjectIndex * salt, empty.Count);
+            return empty[choice];
         }
 
         private static Material CreateObjectMaterial()
@@ -758,16 +716,40 @@ namespace VRPerception.Tasks
             return mat;
         }
 
-        private static void AdjustShapeTransform(GameObject go, string kind, float baseScale, Vector3 basePos, float groundY)
+        private Material GetObjectMaterial()
+        {
+            if (_grayMaterial == null)
+            {
+                _grayMaterial = CreateObjectMaterial();
+            }
+
+            return _grayMaterial;
+        }
+
+        private static void DestroyMaterial(Material mat)
+        {
+            if (mat == null) return;
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                UnityEngine.Object.DestroyImmediate(mat);
+            }
+            else
+            {
+                UnityEngine.Object.Destroy(mat);
+            }
+#else
+            UnityEngine.Object.Destroy(mat);
+#endif
+        }
+
+        private static void AdjustPlaneObjectTransform(GameObject go, string kind, float baseScale, Vector3 centerPos)
         {
             if (go == null) return;
 
-            var scale = GetShapeScale(kind, baseScale);
-            var pos = basePos;
-            pos.y = groundY + scale.y * 0.5f;
-
-            go.transform.position = pos;
-            go.transform.localScale = scale;
+            go.transform.position = centerPos;
+            go.transform.localScale = GetShapeScale(kind, baseScale);
         }
 
         private static Vector3 GetShapeScale(string kind, float baseScale)
@@ -776,7 +758,7 @@ namespace VRPerception.Tasks
             return k switch
             {
                 "sphere" => Vector3.one * (baseScale * 1.1f),
-                "cylinder" => new Vector3(baseScale * 0.90f, baseScale * 0.62f, baseScale * 0.90f),
+                "cylinder" => new Vector3(baseScale * 0.95f, baseScale * 0.55f, baseScale * 0.95f),
                 "capsule" => new Vector3(baseScale * 0.90f, baseScale * 0.70f, baseScale * 0.90f),
                 _ => Vector3.one * baseScale
             };
@@ -797,27 +779,9 @@ namespace VRPerception.Tasks
             return shapePool[idx % shapePool.Count];
         }
 
-        private static float GetBaseScale(int idx)
+        private static string GetReplacementKind(string current)
         {
-            return s_scalePool[idx % s_scalePool.Length];
-        }
-
-        private static string GetReplacementKind(int idx)
-        {
-            var current = GetBaseKind(idx);
-            return current switch
-            {
-                "cube" => "cylinder",
-                "sphere" => "capsule",
-                "cylinder" => "cube",
-                "capsule" => "sphere",
-                _ => "cylinder"
-            };
-        }
-
-        private static string GetReplacementKind(IReadOnlyList<string> shapePool, int idx)
-        {
-            var current = GetBaseKind(shapePool, idx);
+            current = (current ?? "cube").ToLowerInvariant();
             return current switch
             {
                 "cube" => "cylinder",
@@ -831,7 +795,7 @@ namespace VRPerception.Tasks
         private static string[] BuildShapePoolVariant(int seed)
         {
             var variant = (string[])s_shapePool.Clone();
-            var rand = new System.Random(seed);
+            var rand = CreateDeterministicRandom(seed, 0x21C0);
 
             for (int i = variant.Length - 1; i > 0; i--)
             {
@@ -840,6 +804,27 @@ namespace VRPerception.Tasks
             }
 
             return variant;
+        }
+
+        private static string ResolveAppearanceKind(int sceneVariantSeed, int targetObjectIndex)
+        {
+            var shapePool = BuildShapePoolVariant(sceneVariantSeed ^ 0x3A91);
+            return GetBaseKind(shapePool, MaxBaseObjectCount + targetObjectIndex);
+        }
+
+        private static System.Random CreateDeterministicRandom(int seed, int salt)
+        {
+            unchecked
+            {
+                return new System.Random((seed ^ salt) & 0x7fffffff);
+            }
+        }
+
+        private static int PositiveMod(int value, int modulus)
+        {
+            if (modulus <= 0) return 0;
+            int result = value % modulus;
+            return result < 0 ? result + modulus : result;
         }
 
         private static GameObject CreatePrimitiveForKind(string kind)
@@ -858,6 +843,19 @@ namespace VRPerception.Tasks
         private void ClearChangeScene()
         {
             TryDestroyByPrefix(SceneObjectPrefix);
+        }
+
+        private void RecordTrialObjects(TrialSpec trial, string phase)
+        {
+            if (trial == null || _ctx?.trialObjectCsvRecorder == null) return;
+
+            _ctx.trialObjectCsvRecorder.RecordTrialObjects(
+                _ctx.runner != null ? _ctx.runner.CurrentRunId : null,
+                _ctx.runner != null ? _ctx.runner.CurrentSubjectMode : SubjectMode.MLLM,
+                _ctx.runner != null ? _ctx.runner.CurrentRandomSeed : 0,
+                trial.trialId,
+                trial,
+                phase);
         }
 
         private void ShowBlackout()
@@ -882,7 +880,14 @@ namespace VRPerception.Tasks
                     if (go == null) continue;
                     if (!go.name.StartsWith(prefix, StringComparison.Ordinal)) continue;
 #if UNITY_EDITOR
-                    UnityEngine.Object.DestroyImmediate(go);
+                    if (!Application.isPlaying)
+                    {
+                        UnityEngine.Object.DestroyImmediate(go);
+                    }
+                    else
+                    {
+                        UnityEngine.Object.Destroy(go);
+                    }
 #else
                     UnityEngine.Object.Destroy(go);
 #endif
@@ -916,29 +921,10 @@ namespace VRPerception.Tasks
             };
         }
 
-        /// <summary>
-        /// 从复合编码 "category_layer" 中解析出纯 category 和 layer。
-        /// 例如 "movement_back" → category="movement", layer="back"；"none" → category="none", layer=null。
-        /// </summary>
-        private static void ParseCategoryAndLayer(string raw, out string category, out string layer)
+        private static string NormalizeTrialCategory(string raw)
         {
-            category = "none";
-            layer = null;
-            if (string.IsNullOrEmpty(raw)) return;
-
-            var s = raw.Trim().ToLowerInvariant();
-            int idx = s.LastIndexOf('_');
-            if (idx > 0)
-            {
-                var suffix = s.Substring(idx + 1);
-                if (suffix == "front" || suffix == "middle" || suffix == "back")
-                {
-                    category = s.Substring(0, idx);
-                    layer = suffix;
-                    return;
-                }
-            }
-            category = s;
+            if (string.IsNullOrWhiteSpace(raw)) return "none";
+            return NormalizeCategory(raw) ?? "none";
         }
 
         private static bool TryExtractChangeFromAnswer(object answer, out bool changed, out string category)
@@ -976,8 +962,8 @@ namespace VRPerception.Tasks
 
                 if (changedVal.HasValue || !string.IsNullOrEmpty(categoryVal))
                 {
-                    changed = changedVal ?? false;
                     category = NormalizeCategory(categoryVal);
+                    changed = changedVal ?? CategoryImpliesChanged(category);
                     return true;
                 }
 
@@ -985,11 +971,13 @@ namespace VRPerception.Tasks
                 var json = JsonUtility.ToJson(answer);
                 if (!string.IsNullOrEmpty(json))
                 {
+                    bool hasChangedField = ContainsJsonField(json, "changed");
+                    bool hasCategoryField = ContainsJsonField(json, "category");
                     var parsed = JsonUtility.FromJson<ChangeAnswer>(json);
-                    if (parsed != null)
+                    if (parsed != null && (hasChangedField || hasCategoryField))
                     {
-                        changed = parsed.changed;
                         category = NormalizeCategory(parsed.category);
+                        changed = hasChangedField ? parsed.changed : CategoryImpliesChanged(category);
                         return true;
                     }
                 }
@@ -1027,11 +1015,14 @@ namespace VRPerception.Tasks
             category = null;
             if (string.IsNullOrEmpty(text)) return false;
 
+            bool hasChangedSignal = false;
+
             // 尝试匹配 "changed": true/false
             var mChanged = Regex.Match(text, @"changed[^A-Za-z0-9]*(true|false)", RegexOptions.IgnoreCase);
             if (mChanged.Success && bool.TryParse(mChanged.Groups[1].Value, out var b))
             {
                 changed = b;
+                hasChangedSignal = true;
             }
             else
             {
@@ -1040,10 +1031,12 @@ namespace VRPerception.Tasks
                     text.IndexOf("unchanged", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     changed = false;
+                    hasChangedSignal = true;
                 }
                 else if (text.IndexOf("change", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     changed = true;
+                    hasChangedSignal = true;
                 }
             }
 
@@ -1064,15 +1057,24 @@ namespace VRPerception.Tasks
             {
                 category = "replacement";
             }
-            else if (!changed)
+            else if (Regex.IsMatch(text, @"\bnone\b|no change|unchanged", RegexOptions.IgnoreCase))
+            {
+                category = "none";
+            }
+            else if (hasChangedSignal && !changed)
             {
                 category = "none";
             }
 
             category = NormalizeCategory(category);
 
+            if (!hasChangedSignal && CategoryImpliesChanged(category))
+            {
+                changed = true;
+            }
+
             // 只要能确定 changed 或 category 之一，即认为有预测
-            return mChanged.Success || category != null;
+            return hasChangedSignal || category != null;
         }
 
         private static string NormalizeCategory(string raw)
@@ -1088,6 +1090,19 @@ namespace VRPerception.Tasks
                 "replacement" => "replacement",
                 _ => s
             };
+        }
+
+        private static bool CategoryImpliesChanged(string category)
+        {
+            return !string.IsNullOrEmpty(category) &&
+                   !string.Equals(category, "none", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ContainsJsonField(string json, string fieldName)
+        {
+            return !string.IsNullOrEmpty(json) &&
+                   !string.IsNullOrEmpty(fieldName) &&
+                   Regex.IsMatch(json, $"\"{Regex.Escape(fieldName)}\"\\s*:", RegexOptions.IgnoreCase);
         }
 
         private static bool TryToBool(object v, out bool b)

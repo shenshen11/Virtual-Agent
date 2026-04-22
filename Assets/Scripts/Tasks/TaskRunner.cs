@@ -121,6 +121,8 @@ namespace VRPerception.Tasks
 
         public SubjectMode CurrentSubjectMode => subjectMode;
 
+        public string CurrentRunId => _runId;
+
         public bool IsRunning => _runCts != null;
 
         private void Awake()
@@ -170,6 +172,7 @@ namespace VRPerception.Tasks
             Context.perception = perception;
             Context.stimulus = stimulus;
             Context.humanReferenceFrame = humanReferenceFrame;
+            Context.trialObjectCsvRecorder = trialObjectCsvRecorder;
         }
 
         private void Start()
@@ -734,6 +737,7 @@ namespace VRPerception.Tasks
         private void RecordTrialObjects(TrialSpec trial, int trialExecutionIndex)
         {
             if (trialObjectCsvRecorder == null || trial == null) return;
+            if (string.Equals(trial.taskId, "change_detection", StringComparison.OrdinalIgnoreCase)) return;
 
             trialObjectCsvRecorder.RecordTrialObjects(
                 _runId,

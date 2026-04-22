@@ -288,7 +288,7 @@ namespace VRPerception.Perception
                 $"Output STRICT JSON exactly in this schema: {{\"task\":\"visual_crowding\",\"trial_id\":\"{id}\",\"response\":{{\"letter\":\"<letter>\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}";
         }
 
-        public static string BuildChangeDetectionPrompt(string background, float fovDeg, int trialId)
+        public static string BuildChangeDetectionPrompt(int trialId)
         {
             var id = trialId.ToString(CultureInfo.InvariantCulture);
             return
