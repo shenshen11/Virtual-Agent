@@ -163,6 +163,13 @@ namespace VRPerception.Tasks
         public string targetLetter;               // 真值：目标字母
         public string[] flankerLetters;           // 干扰字母序列（长度 5 时目标索引在 2）
         public int targetIndex = 2;               // 目标在串中的索引位置，默认 0..4 中的 2
+
+        // Visual Weight Judgment 专用字段
+        public string weightDescA;                // A 的语义外观组合，如 dark_heavy/light_light
+        public string weightDescB;                // B 的语义外观组合，如 dark_heavy/light_light
+        public string materialVariantA;           // A 的具体材质变体，如 Metal_Dark/Fabric_Light
+        public string materialVariantB;           // B 的具体材质变体，如 Metal_Dark/Fabric_Light
+        public string weightTrialType;            // conflict_*/congruent/size_only/material_only/lightness_only
     }
 
     /// <summary>
@@ -227,6 +234,11 @@ namespace VRPerception.Tasks
         public string predictedLetter;            // 模型/人类预测的字母
         public string trueLetter;                 // 真值字母
         public bool isLetterCorrect;              // 是否识别正确
+
+        // Visual Weight Judgment 指标
+        public string predictedHeavierSide;       // "A"|"B"
+        public string weightTrialType;            // conflict_*/congruent/size_only/material_only/lightness_only
+        public string cueFollowed;                // 冲突题中跟随的线索组合
 
         // 其他扩展指标（键值对）
         public string extraJson;

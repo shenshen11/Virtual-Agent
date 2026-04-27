@@ -435,6 +435,53 @@ namespace VRPerception.Infra
                     savedCsvPaths.Add(vcPath);
                 }
 
+                // visual_weight_judgment
+                if (_completed.Exists(r => r.taskId == "visual_weight_judgment"))
+                {
+                    var path = Path.Combine(_sessionDir, "visual_weight_judgment_summary.csv");
+                    using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                    {
+                        // visual_weight_judgment_summary.csv 字段说明：
+                        // - descA/descB: A/B 的语义外观组合（dark/light × heavy/light material group）
+                        // - materialVariantA/materialVariantB: A/B 的具体材质变体（Metal/Stone/Wood/Fabric × Dark/Light）
+                        // - scaleA/scaleB: A/B 的统一缩放
+                        // - trialType: conflict_*/congruent/size_only/material_only/lightness_only
+                        // - predictedHeavierSide: 模型/人类判断更重的一侧（A/B）
+                        // - cueFollowed: 冲突题中跟随的线索组合；非冲突题通常为空
+                        // - isCorrect: 一致题/控制题正确性；冲突题无客观正确，默认为 0
+                        // - confidence/providerId/latencyMs: 同上
+                        sw.WriteLine("taskId,trialId,environment,fovDeg,descA,descB,materialVariantA,materialVariantB,scaleA,scaleB,trialType,predictedHeavierSide,cueFollowed,isCorrect,confidence,providerId,latencyMs");
+
+                        foreach (var r in _completed)
+                        {
+                            if (r.taskId != "visual_weight_judgment") continue;
+                            var t = r.trial;
+                            var e = r.evaluation;
+
+                            sw.WriteLine(string.Join(",",
+                                Escape(r.taskId),
+                                r.trialId,
+                                Escape(t.environment),
+                                t.fovDeg.ToString("F0"),
+                                Escape(t.weightDescA),
+                                Escape(t.weightDescB),
+                                Escape(t.materialVariantA),
+                                Escape(t.materialVariantB),
+                                t.scaleA.ToString("F3"),
+                                t.scaleB.ToString("F3"),
+                                Escape(t.weightTrialType),
+                                Escape(e.predictedHeavierSide),
+                                Escape(e.cueFollowed),
+                                e.isCorrect ? "1" : "0",
+                                e.confidence.ToString("F3"),
+                                Escape(e.providerId),
+                                e.latencyMs
+                            ));
+                        }
+                    }
+                    savedCsvPaths.Add(path);
+                }
+
                 // depth_jnd_staircase
                 if (_completed.Exists(r => r.taskId == "depth_jnd_staircase"))
                 {

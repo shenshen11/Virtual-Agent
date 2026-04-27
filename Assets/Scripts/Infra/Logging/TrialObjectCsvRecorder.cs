@@ -17,7 +17,7 @@ namespace VRPerception.Tasks
         private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
         private static readonly string[] IncludedNamePrefixes =
         {
-            "dc_","ssb_","rdo_","cd_","occ_","cc_","cca_","mp_","mr_","num_","vs_","cnt_","djnd_","vc_","hci_"
+            "dc_","ssb_","rdo_","cd_","occ_","cc_","cca_","mp_","mr_","num_","vs_","cnt_","djnd_","vc_","hci_","vwj_"
         };
 
         [Header("Output")]

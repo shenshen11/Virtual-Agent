@@ -148,7 +148,7 @@ namespace VRPerception.Perception
             }
             else
             {
-                promptBuilder.AppendLine("\nRespond with ONLY JSON in the format: {\"type\": \"inference\", \"answer\": {...}, \"confidence\": 0.0-1.0}");
+                promptBuilder.AppendLine("\nRespond with ONLY the exact JSON schema requested in the user task. Do not wrap it in markdown or extra text.");
             }
             
             var requestBody = new OllamaRequestBody
@@ -224,6 +224,27 @@ namespace VRPerception.Perception
                 
                 try
                 {
+                    var newFormat = JsonUtility.FromJson<NewFormatResponse>(jsonContent);
+                    if (newFormat != null && newFormat.response != null)
+                    {
+                        var resolvedConfidence = newFormat.confidence;
+                        if (resolvedConfidence <= 0f && newFormat.response.confidence > 0f)
+                        {
+                            resolvedConfidence = newFormat.response.confidence;
+                        }
+
+                        newFormat.response.raw_json = jsonContent;
+                        return new LLMResponse
+                        {
+                            type = "inference",
+                            taskId = request.taskId,
+                            trialId = request.trialId,
+                            answer = newFormat.response,
+                            confidence = resolvedConfidence,
+                            latencyMs = latencyMs
+                        };
+                    }
+
                     // 尝试解析为通用响应
                     var genericResponse = JsonUtility.FromJson<OllamaGenericResponse>(jsonContent);
                     

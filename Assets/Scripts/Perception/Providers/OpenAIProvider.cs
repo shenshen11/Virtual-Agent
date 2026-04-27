@@ -643,6 +643,9 @@ namespace VRPerception.Perception
         // Depth JND Staircase
         public string closer;
 
+        // Visual Weight Judgment
+        public string heavier;
+
         // Color Constancy Adjustment
         public string choice;
         // RGB 数组（JsonUtility 对数组支持有限，使用字段映射）

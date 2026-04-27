@@ -39,6 +39,7 @@ namespace VRPerception.Tasks
             TryRegisterInternal("depth_jnd_staircase", ctx => new DepthJndStaircaseTask(ctx));
             TryRegisterInternal("horizon_cue_integration", ctx => new HorizonCueIntegrationTask(ctx));
             TryRegisterInternal("visual_crowding", ctx => new VisualCrowdingTask(ctx));
+            TryRegisterInternal("visual_weight_judgment", ctx => new VisualWeightJudgmentTask(ctx));
         }
 
         /// <summary>

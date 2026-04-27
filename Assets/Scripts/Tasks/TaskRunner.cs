@@ -485,7 +485,8 @@ namespace VRPerception.Tasks
                 string.Equals(task.TaskId, "material_roughness", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "material_roughness_motion", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(task.TaskId, "visual_crowding", StringComparison.OrdinalIgnoreCase);
+                string.Equals(task.TaskId, "visual_crowding", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(task.TaskId, "visual_weight_judgment", StringComparison.OrdinalIgnoreCase);
             if (!requiresCalibration) return;
             if (humanReferenceFrame == null) return;
 
@@ -682,6 +683,7 @@ namespace VRPerception.Tasks
                 TaskMode.DepthJndStaircase => "depth_jnd_staircase",
                 TaskMode.HorizonCueIntegration => "horizon_cue_integration",
                 TaskMode.VisualCrowding => "visual_crowding",
+                TaskMode.VisualWeightJudgment => "visual_weight_judgment",
                 TaskMode.ColorConstancyAdjustment => "color_constancy_adjustment",
                 TaskMode.MaterialRoughnessAmbiguity => "material_roughness",
                 _ => null
@@ -843,7 +845,8 @@ namespace VRPerception.Tasks
         HorizonCueIntegration,
         VisualCrowding,
         ColorConstancyAdjustment,
-        MaterialRoughnessAmbiguity
+        MaterialRoughnessAmbiguity,
+        VisualWeightJudgment
     }
 
     public enum SubjectMode
