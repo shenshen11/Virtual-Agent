@@ -28,7 +28,6 @@ namespace VRPerception.Tasks
         private bool _referenceFrameInitialized;
         private Vector3 _referenceOrigin;
         private Vector3 _referenceForward;
-        private Vector3 _referenceRight;
         private float _referenceEyeY;
 
         // ── 布局常量 ──
@@ -92,6 +91,8 @@ namespace VRPerception.Tasks
         public Task OnRunEndAsync(CancellationToken ct)
         {
             _referenceFrameInitialized = false;
+            _matCache.Clear();
+            TryDestroyFallbackObjects();
             return Task.CompletedTask;
         }
 
@@ -213,11 +214,7 @@ namespace VRPerception.Tasks
                 _placer.ClearAll();
                 _placer.ClearActiveTrialContext();
             }
-            else
-            {
-                TryDestroyByName("vwj_A");
-                TryDestroyByName("vwj_B");
-            }
+            TryDestroyFallbackObjects();
             await Task.Yield();
         }
 
@@ -639,8 +636,6 @@ namespace VRPerception.Tasks
             _referenceForward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
             if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
             _referenceForward.Normalize();
-            _referenceRight = Vector3.Cross(Vector3.up, _referenceForward).normalized;
-            if (_referenceRight.sqrMagnitude < 1e-6f) _referenceRight = cam.transform.right;
             _referenceEyeY = cam.transform.position.y;
             _referenceFrameInitialized = true;
         }
@@ -653,11 +648,9 @@ namespace VRPerception.Tasks
             if (humanRef == null || !humanRef.HasReferenceFrame) return false;
 
             _referenceOrigin = humanRef.Origin;
-            _referenceForward = humanRef.Forward;
+            _referenceForward = Vector3.ProjectOnPlane(humanRef.Forward, Vector3.up);
             if (_referenceForward.sqrMagnitude < 1e-6f) _referenceForward = Vector3.forward;
             _referenceForward.Normalize();
-            _referenceRight = humanRef.Right;
-            if (_referenceRight.sqrMagnitude < 1e-6f) _referenceRight = Vector3.Cross(Vector3.up, _referenceForward).normalized;
             _referenceEyeY = humanRef.EyeY;
             _referenceFrameInitialized = true;
             return true;
@@ -665,12 +658,18 @@ namespace VRPerception.Tasks
 
         private void ResolvePlacementReference(Camera cam, out Vector3 origin, out Vector3 forward, out Vector3 right, out float eyeY)
         {
+            var fallbackRight = cam != null ? cam.transform.right : Vector3.right;
             if (TryUseHumanSharedReferenceFrame())
             {
                 origin = _referenceOrigin;
                 forward = _referenceForward;
-                right = _referenceRight;
                 eyeY = _referenceEyeY;
+
+                var humanRef = _ctx?.humanReferenceFrame;
+                if (humanRef != null && humanRef.HasReferenceFrame && humanRef.Right.sqrMagnitude >= 1e-6f)
+                    fallbackRight = humanRef.Right;
+
+                right = ComputePlacementRight(forward, fallbackRight);
                 return;
             }
 
@@ -678,9 +677,31 @@ namespace VRPerception.Tasks
             forward = _referenceFrameInitialized ? _referenceForward : Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
             if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
             forward.Normalize();
-            right = _referenceFrameInitialized ? _referenceRight : Vector3.Cross(Vector3.up, forward).normalized;
-            if (right.sqrMagnitude < 1e-6f) right = cam.transform.right;
             eyeY = _referenceFrameInitialized ? _referenceEyeY : cam.transform.position.y;
+            right = ComputePlacementRight(forward, fallbackRight);
+        }
+
+        private Vector3 ComputePlacementRight(Vector3 forward, Vector3 fallbackRight)
+        {
+            var horizontalForward = Vector3.ProjectOnPlane(forward, Vector3.up);
+            if (horizontalForward.sqrMagnitude < 1e-6f) horizontalForward = Vector3.forward;
+            horizontalForward.Normalize();
+
+            var right = Vector3.Cross(Vector3.up, horizontalForward);
+            if (right.sqrMagnitude >= 1e-6f)
+            {
+                right.Normalize();
+                return right;
+            }
+
+            var projectedFallback = Vector3.ProjectOnPlane(fallbackRight, Vector3.up);
+            if (projectedFallback.sqrMagnitude >= 1e-6f)
+            {
+                projectedFallback.Normalize();
+                return projectedFallback;
+            }
+
+            return Vector3.right;
         }
 
         private bool IsHumanMode()
@@ -698,15 +719,24 @@ namespace VRPerception.Tasks
             }
         }
 
-        private static void TryDestroyByName(string name)
+        private static void TryDestroyFallbackObjects()
         {
-            var go = GameObject.Find(name);
-            if (go == null) return;
+            GameObject[] all;
+            try { all = Resources.FindObjectsOfTypeAll<GameObject>(); }
+            catch { return; }
+
+            foreach (var go in all)
+            {
+                if (go == null) continue;
+                if (!go.scene.IsValid()) continue;
+                if (!string.Equals(go.name, "vwj_A", StringComparison.Ordinal) &&
+                    !string.Equals(go.name, "vwj_B", StringComparison.Ordinal)) continue;
 #if UNITY_EDITOR
-            UnityEngine.Object.DestroyImmediate(go);
+                UnityEngine.Object.DestroyImmediate(go);
 #else
-            UnityEngine.Object.Destroy(go);
+                UnityEngine.Object.Destroy(go);
 #endif
+            }
         }
 
         [Serializable]
