@@ -219,6 +219,29 @@ namespace VRPerception.UI
             return triggered;
         }
 
+        private bool ReadCurrentRightPrimaryButtonPressed()
+        {
+            if (!useRightControllerPrimaryButton) return false;
+
+            _rightHandDevices.Clear();
+            InputDevices.GetDevicesAtXRNode(XRNode.RightHand, _rightHandDevices);
+
+            for (int i = 0; i < _rightHandDevices.Count; i++)
+            {
+                var device = _rightHandDevices[i];
+
+                if (!device.isValid)
+                    continue;
+
+                if (device.TryGetFeatureValue(CommonUsages.primaryButton, out bool pressed) && pressed)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private void OnTrialLifecycle(TrialLifecycleEventData data)
         {
             if (data == null) return;
@@ -231,6 +254,7 @@ namespace VRPerception.UI
 
                 // 新 trial 开始等待输入时，重置每试次触发标记
                 _hasTriggeredForThisTrial = false;
+                _lastPrimaryButtonPressed = ReadCurrentRightPrimaryButtonPressed();
 
                 if (verboseLog)
                 {
