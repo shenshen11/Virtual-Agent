@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.XR;
 using Unity.XR.CoreUtils;
 using VRPerception.Infra;
 using VRPerception.Infra.EventBus;
@@ -17,9 +18,6 @@ namespace VRPerception.Tasks
     /// </summary>
     public class TaskRunner : MonoBehaviour
     {
-        private const int NumerosityPostCalibrationBlackoutMs = 1000;
-        private const int ChangeDetectionPostCalibrationBlackoutMs = 1000;
-
         private enum MllmCaptureMode
         {
             Single,
@@ -38,6 +36,7 @@ namespace VRPerception.Tasks
             public bool? enableActionPlanLoop;
             public int? actionPlanLoopTimeoutMs;
             public int? humanInputTimeoutMs;
+            public string preTaskMessage;
             public string humanInputPrompt;
         }
 
@@ -84,9 +83,24 @@ namespace VRPerception.Tasks
         [Tooltip("当前回合被试模式（Human 模式将由 UI 采集人类答案）")]
         [SerializeField] private SubjectMode subjectMode = SubjectMode.MLLM;
 
+        [Header("Human Fixation Guidance")]
+        [SerializeField] private bool showHumanPreFixationPrompt = true;
+        [SerializeField] private float humanPreFixationPromptSeconds = 4f;
+        [SerializeField] private string humanPreFixationTitle = "注视标定准备";
+        [TextArea]
+        [SerializeField] private string humanPreFixationMessage = "请看向即将出现的红色注视点，并保持头部稳定。";
+
+        [Header("Human Start Confirmation")]
+        [SerializeField] private bool waitForHumanStartConfirmationAfterFixation = true;
+        [SerializeField] private KeyCode editorStartKey = KeyCode.Space;
+        [SerializeField] private string humanStartConfirmationTitle = "准备开始正式实验";
+        [TextArea]
+        [SerializeField] private string humanStartConfirmationFallbackMessage = "请保持头部稳定。\n确认准备好后，按右手柄 A 键开始正式试次。";
+
         private ITask _task;
         private CancellationTokenSource _runCts;
         private string _overrideTaskId;
+        private string _preTaskMessage;
         private string _humanInputPrompt;
         private string _runId;
  
@@ -238,7 +252,8 @@ namespace VRPerception.Tasks
                     if (_runCts.IsCancellationRequested) throw new OperationCanceledException();
                 }
 
-                await RunHumanReferenceCalibrationIfNeededAsync(_task, _runCts.Token);
+                bool didHumanCalibration = await RunHumanReferenceCalibrationIfNeededAsync(_task, _runCts.Token);
+                await WaitForHumanStartConfirmationIfNeededAsync(_task, didHumanCalibration, _runCts.Token);
 
                 if (_task is ITaskRunLifecycle lifecycle)
                 {
@@ -472,10 +487,10 @@ namespace VRPerception.Tasks
             };
         }
 
-        private async Task RunHumanReferenceCalibrationIfNeededAsync(ITask task, CancellationToken ct)
+        private async Task<bool> RunHumanReferenceCalibrationIfNeededAsync(ITask task, CancellationToken ct)
         {
-            if (subjectMode != SubjectMode.Human) return;
-            if (task == null) return;
+            if (subjectMode != SubjectMode.Human) return false;
+            if (task == null) return false;
             bool requiresCalibration =
                 string.Equals(task.TaskId, "distance_compression", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "change_detection", StringComparison.OrdinalIgnoreCase) ||
@@ -487,23 +502,25 @@ namespace VRPerception.Tasks
                 string.Equals(task.TaskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "visual_crowding", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(task.TaskId, "visual_weight_judgment", StringComparison.OrdinalIgnoreCase);
-            if (!requiresCalibration) return;
-            if (humanReferenceFrame == null) return;
+            if (!requiresCalibration) return false;
+            if (humanReferenceFrame == null) return false;
 
             var headCamera = stimulus != null ? stimulus.HeadCamera : Camera.main;
             if (headCamera == null)
             {
                 Debug.LogWarning("[TaskRunner] Human fixation calibration skipped: HeadCamera is missing. Falling back to task-local reference.");
-                return;
+                return false;
             }
 
             TryResetTrialBlackoutOverlay();
+            await ShowHumanPreFixationPromptIfNeededAsync(ct);
 
             Transform xrRigTransform = ResolveHumanCalibrationRigTransform();
             humanTelemetryRecorder?.StartCalibrationRecording(task.TaskId);
+            bool calibrated;
             try
             {
-                await humanReferenceFrame.CalibrateAsync(
+                calibrated = await humanReferenceFrame.CalibrateAsync(
                     headCamera,
                     xrRigTransform,
                     ct,
@@ -514,22 +531,121 @@ namespace VRPerception.Tasks
                 humanTelemetryRecorder?.StopCalibrationRecording();
             }
 
-            if (string.Equals(task.TaskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
+            return calibrated;
+        }
+
+        private async Task ShowHumanPreFixationPromptIfNeededAsync(CancellationToken ct)
+        {
+            if (!showHumanPreFixationPrompt) return;
+            if (humanPreFixationPromptSeconds <= 0f) return;
+
+            var panel = FindTaskMessagePanel();
+            if (panel == null)
             {
-                bool maskArmed = TryArmTrialBlackoutOverlay(0);
-                if (maskArmed && NumerosityPostCalibrationBlackoutMs > 0)
+                Debug.LogWarning("[TaskRunner] WSTaskMessagePanel not found; human pre-fixation prompt will not be shown.");
+                return;
+            }
+
+            panel.ShowManualMessage(humanPreFixationTitle, humanPreFixationMessage);
+            int delayMs = Mathf.RoundToInt(humanPreFixationPromptSeconds * 1000f);
+            if (delayMs > 0)
+            {
+                await Task.Delay(delayMs, ct);
+            }
+            panel.HideManualMessage();
+        }
+
+        private async Task WaitForHumanStartConfirmationIfNeededAsync(ITask task, bool didHumanCalibration, CancellationToken ct)
+        {
+            if (!waitForHumanStartConfirmationAfterFixation) return;
+            if (!didHumanCalibration) return;
+            if (subjectMode != SubjectMode.Human) return;
+
+            var panel = FindTaskMessagePanel();
+            if (panel != null)
+            {
+                panel.ShowManualMessage(humanStartConfirmationTitle, BuildHumanStartConfirmationMessage());
+            }
+            else
+            {
+                Debug.LogWarning("[TaskRunner] WSTaskMessagePanel not found; waiting for human start confirmation without VR prompt.");
+            }
+
+            Debug.Log($"[TaskRunner] Human fixation completed for {task?.TaskId}. Press right controller A / primaryButton to start formal trials.");
+
+            bool lastPressed = IsHumanStartConfirmationPressed();
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                bool pressed = IsHumanStartConfirmationPressed();
+                if (pressed && !lastPressed)
                 {
-                    await Task.Delay(NumerosityPostCalibrationBlackoutMs, ct);
+                    break;
+                }
+
+                lastPressed = pressed;
+                await Task.Yield();
+            }
+
+            while (IsHumanStartConfirmationPressed())
+            {
+                ct.ThrowIfCancellationRequested();
+                await Task.Yield();
+            }
+
+            await Task.Delay(250, ct);
+
+            panel?.HideManualMessage();
+        }
+
+        private string BuildHumanStartConfirmationMessage()
+        {
+            string taskMessage = string.IsNullOrWhiteSpace(_preTaskMessage)
+                ? humanStartConfirmationFallbackMessage
+                : _preTaskMessage.Trim() + "\n\n请保持头部稳定。\n按右手柄 A 键开始正式试次。";
+
+            return taskMessage ?? string.Empty;
+        }
+
+        private bool IsHumanStartConfirmationPressed()
+        {
+#if UNITY_EDITOR
+            if (Input.GetKey(editorStartKey)) return true;
+#endif
+            var rightHandDevices = new List<InputDevice>(2);
+            InputDevices.GetDevicesAtXRNode(XRNode.RightHand, rightHandDevices);
+            for (int i = 0; i < rightHandDevices.Count; i++)
+            {
+                var device = rightHandDevices[i];
+                if (!device.isValid) continue;
+                if (device.TryGetFeatureValue(CommonUsages.primaryButton, out bool pressed) && pressed)
+                {
+                    return true;
                 }
             }
-            else if (string.Equals(task.TaskId, "change_detection", StringComparison.OrdinalIgnoreCase))
+
+            return false;
+        }
+
+        private static WSTaskMessagePanel FindTaskMessagePanel()
+        {
+            var panel = UnityEngine.Object.FindObjectOfType<WSTaskMessagePanel>();
+            if (panel != null) return panel;
+
+            var all = Resources.FindObjectsOfTypeAll<WSTaskMessagePanel>();
+            if (all == null) return null;
+
+            for (int i = 0; i < all.Length; i++)
             {
-                bool maskArmed = TryArmTrialBlackoutOverlay(0);
-                if (maskArmed && ChangeDetectionPostCalibrationBlackoutMs > 0)
-                {
-                    await Task.Delay(ChangeDetectionPostCalibrationBlackoutMs, ct);
-                }
+                var candidate = all[i];
+                if (candidate == null) continue;
+                var go = candidate.gameObject;
+                if (go == null) continue;
+                if (!go.scene.IsValid()) continue;
+                return candidate;
             }
+
+            return null;
         }
 
         private Transform ResolveHumanCalibrationRigTransform()
@@ -588,6 +704,8 @@ namespace VRPerception.Tasks
             {
                 humanInputTimeoutMs = Mathf.Max(0, config.humanInputTimeoutMs.Value);
             }
+
+            _preTaskMessage = config.preTaskMessage;
 
             if (!string.IsNullOrWhiteSpace(config.humanInputPrompt))
             {

@@ -335,6 +335,7 @@ namespace VRPerception.Orchestration
                 maxTrials = entry.maxTrials,
                 enableActionPlanLoop = entry.enableActionPlanLoop,
                 actionPlanLoopTimeoutMs = entry.actionPlanLoopTimeoutMs,
+                preTaskMessage = entry.preTaskMessage,
                 humanInputPrompt = entry.humanInputPrompt
             };
 

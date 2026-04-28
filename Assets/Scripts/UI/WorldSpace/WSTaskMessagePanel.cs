@@ -176,8 +176,29 @@ namespace VRPerception.UI
             ShowPanel(postTaskDisplayDuration);
         }
 
+        public void ShowManualMessage(string title, string message, float autoHideSeconds = 0f)
+        {
+            if (titleText != null)
+                titleText.text = string.IsNullOrWhiteSpace(title) ? "任务提示" : title;
+            if (messageText != null)
+                messageText.text = message ?? string.Empty;
+
+            ShowPanel(autoHideSeconds);
+        }
+
+        public void HideManualMessage()
+        {
+            HidePanel();
+        }
+
         private void ShowPanel(float autoDuration)
         {
+            if (_autoHideRoutine != null)
+            {
+                StopCoroutine(_autoHideRoutine);
+                _autoHideRoutine = null;
+            }
+
             if (panelRoot != null)
                 panelRoot.SetActive(true);
 
@@ -190,8 +211,6 @@ namespace VRPerception.UI
             // 如果设置了自动隐藏时长，启动自动隐藏
             if (autoDuration > 0f)
             {
-                if (_autoHideRoutine != null)
-                    StopCoroutine(_autoHideRoutine);
                 _autoHideRoutine = StartCoroutine(AutoHideAfterDelay(autoDuration));
             }
         }
