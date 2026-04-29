@@ -247,6 +247,7 @@ namespace VRPerception.UI
             }
 
             if (headCamera == null) return;
+            if (TryBindExistingOverlay()) return;
 
             // 在相机下创建一个根节点，便于整体启用/禁用与清理。
             _overlayRoot = new GameObject("trial_blackout_overlay");
@@ -298,6 +299,64 @@ namespace VRPerception.UI
 
             _overlayRoot.SetActive(_visible);
             UpdateOverlayPlacement();
+        }
+
+        private bool TryBindExistingOverlay()
+        {
+            if (headCamera == null) return false;
+
+            Transform selected = null;
+            var parent = headCamera.transform;
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                var child = parent.GetChild(i);
+                if (child == null || child.name != "trial_blackout_overlay") continue;
+                if (selected == null || (!selected.gameObject.activeInHierarchy && child.gameObject.activeInHierarchy))
+                {
+                    selected = child;
+                }
+            }
+
+            if (selected == null) return false;
+
+            for (int i = parent.childCount - 1; i >= 0; i--)
+            {
+                var child = parent.GetChild(i);
+                if (child == null || child == selected || child.name != "trial_blackout_overlay") continue;
+                DestroyObjectSafe(child.gameObject);
+            }
+
+            _overlayRoot = selected.gameObject;
+            _overlayQuad = null;
+
+            for (int i = 0; i < selected.childCount; i++)
+            {
+                var child = selected.GetChild(i);
+                if (child == null) continue;
+                if (child.name == "trial_blackout_quad" || child.GetComponent<MeshRenderer>() != null)
+                {
+                    _overlayQuad = child.gameObject;
+                    break;
+                }
+            }
+
+            if (_overlayQuad == null)
+            {
+                DestroyObjectSafe(_overlayRoot);
+                _overlayRoot = null;
+                return false;
+            }
+
+            _overlayQuadRenderer = _overlayQuad.GetComponent<MeshRenderer>();
+            if (_overlayQuadRenderer != null && _overlayQuadMaterial == null)
+            {
+                _overlayQuadMaterial = _overlayQuadRenderer.sharedMaterial;
+            }
+
+            SetLayerRecursively(_overlayRoot, headCamera.gameObject.layer);
+            _overlayRoot.SetActive(_visible);
+            UpdateOverlayPlacement();
+            return true;
         }
 
         private void UpdateOverlayPlacement()
