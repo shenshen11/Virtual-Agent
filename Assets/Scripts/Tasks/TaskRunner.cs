@@ -88,14 +88,14 @@ namespace VRPerception.Tasks
         [SerializeField] private float humanPreFixationPromptSeconds = 4f;
         [SerializeField] private string humanPreFixationTitle = "注视标定准备";
         [TextArea]
-        [SerializeField] private string humanPreFixationMessage = "请看向即将出现的红色注视点，并保持头部稳定。";
+        [SerializeField] private string humanPreFixationMessage = "请看向即将出现的红色\n注视点，并保持头部稳定。";
 
         [Header("Human Start Confirmation")]
         [SerializeField] private bool waitForHumanStartConfirmationAfterFixation = true;
         [SerializeField] private KeyCode editorStartKey = KeyCode.Space;
         [SerializeField] private string humanStartConfirmationTitle = "准备开始正式实验";
         [TextArea]
-        [SerializeField] private string humanStartConfirmationFallbackMessage = "请保持头部稳定。\n确认准备好后，按右手柄 A 键开始正式试次。";
+        [SerializeField] private string humanStartConfirmationFallbackMessage = "按右手柄 A 键开始实验。";
 
         private ITask _task;
         private CancellationTokenSource _runCts;
