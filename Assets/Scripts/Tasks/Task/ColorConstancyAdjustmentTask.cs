@@ -20,7 +20,7 @@ namespace VRPerception.Tasks
         public string TaskId => "color_constancy_adjustment";
 
         private const float DefaultFovDeg = 60f;
-        private const int DefaultRepeatsPerCondition = 5;
+        private const int DefaultRepeatsPerCondition = 3;
         private const int DefaultCandidateCount = 9;
         private const float DefaultAdaptSeconds = 30f;
         private const float DefaultRestSeconds = 15f;
@@ -188,6 +188,13 @@ namespace VRPerception.Tasks
             {
                 if (string.Equals(meta.phase, "red", StringComparison.OrdinalIgnoreCase) && !_redAdapted)
                 {
+                    await RestInNeutralLightingAsync(ct);
+                    if (_scene != null)
+                    {
+                        var lighting = string.IsNullOrEmpty(meta.lighting) ? "adapt_red" : meta.lighting;
+                        _scene.SetLighting(lighting);
+                        _scene.SetShadowMode(false);
+                    }
                     EnsureFurnitureForAdaptation(meta.phase);
                     await DelaySeconds(DefaultAdaptSeconds, ct);
                     _redAdapted = true;
@@ -196,8 +203,14 @@ namespace VRPerception.Tasks
                 {
                     if (!_restedForBlue && DefaultRestSeconds > 0.1f)
                     {
-                        await DelaySeconds(DefaultRestSeconds, ct);
+                        await RestInNeutralLightingAsync(ct);
                         _restedForBlue = true;
+                    }
+                    if (_scene != null)
+                    {
+                        var lighting = string.IsNullOrEmpty(meta.lighting) ? "adapt_blue" : meta.lighting;
+                        _scene.SetLighting(lighting);
+                        _scene.SetShadowMode(false);
                     }
                     EnsureFurnitureForAdaptation(meta.phase);
                     await DelaySeconds(DefaultAdaptSeconds, ct);
@@ -429,17 +442,7 @@ namespace VRPerception.Tasks
 
         private bool IsHumanSubject()
         {
-            if (_ctx?.runner == null) return false;
-            try
-            {
-                var field = typeof(TaskRunner).GetField("subjectMode", BindingFlags.Instance | BindingFlags.NonPublic);
-                if (field != null && field.GetValue(_ctx.runner) is SubjectMode mode)
-                {
-                    return mode == SubjectMode.Human;
-                }
-            }
-            catch { }
-            return false;
+            return IsHumanMode();
         }
 
         private void CaptureReferenceFrameIfNeeded(bool forceRefresh)
@@ -466,6 +469,18 @@ namespace VRPerception.Tasks
             if (_furniture == null) return;
             EnsureFurnitureLayout(phase);
             _furniture.SetActive(true);
+        }
+
+        private async Task RestInNeutralLightingAsync(CancellationToken ct)
+        {
+            if (DefaultRestSeconds <= 0.1f) return;
+            if (_scene != null)
+            {
+                _scene.SetLighting("white_neutral");
+                _scene.SetShadowMode(false);
+            }
+            _furniture?.SetActive(false);
+            await DelaySeconds(DefaultRestSeconds, ct);
         }
 
         private void ApplyFurniture(bool hasFurniture, string phase)

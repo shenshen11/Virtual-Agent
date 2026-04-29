@@ -43,6 +43,7 @@ namespace VRPerception.Tasks
         private const float Kappa = 1.4142135f; // sqrt(2)
         private const int ReversalTargetPerGroup = 8;
         private const int ThresholdUseLastReversals = 4;
+        private const int TrialTransitionBlackoutMs = 500;
 
         // ---- Runtime staircase state ----
         private float _deltaM = DeltaStartM;
@@ -185,6 +186,7 @@ namespace VRPerception.Tasks
                 // Keep the scene masked until the newly placed pair has had at least one frame to render.
                 await Task.Yield();
                 ct.ThrowIfCancellationRequested();
+                await Task.Delay(TrialTransitionBlackoutMs, ct);
                 TrySetTrialBlackoutVisible(false);
             }
 

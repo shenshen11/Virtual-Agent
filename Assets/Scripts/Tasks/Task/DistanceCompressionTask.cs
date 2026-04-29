@@ -64,7 +64,20 @@ namespace VRPerception.Tasks
 
         public Task OnRunEndAsync(CancellationToken ct)
         {
+            TryBindHelpers();
             _referenceFrameInitialized = false;
+
+            if (_placer != null)
+            {
+                _placer.ClearAll();
+                _placer.ClearActiveTrialContext();
+            }
+            else
+            {
+                TryDestroyByPrefix("dc_target_");
+            }
+
+            _scene?.ClearCurrent();
             return Task.CompletedTask;
         }
 
@@ -78,7 +91,7 @@ namespace VRPerception.Tasks
             // 改成用对数分布的6个距离点
             var dists = new[] { 2f, 3.5f, 5.5f, 8.5f, 13f, 20f };
             var textures = new[] { 0.5f, 1.0f, 1.5f };
-            var lightings = new[] { "bright", "dim" };
+            var lightings = new[] { "bright"};
 
             // 锚定试次：固定前三个，不打乱
             var anchorDistances = new[] { 2f, 8.5f, 20f };
@@ -153,7 +166,10 @@ namespace VRPerception.Tasks
             }
 
             // 仅打乱正式试次，锚定试次固定在前四个
-            Shuffle(mainTrials);
+            float? previousDistance = anchorTrials.Count > 0
+                ? anchorTrials[anchorTrials.Count - 1].trueDistanceM
+                : (float?)null;
+            ShuffleAvoidingAdjacentSameDistance(mainTrials, previousDistance);
 
             var all = new List<TrialSpec>(anchorTrials.Count + mainTrials.Count);
             all.AddRange(anchorTrials);
@@ -451,6 +467,34 @@ namespace VRPerception.Tasks
                 int j = _rand.Next(i + 1);
                 (list[i], list[j]) = (list[j], list[i]);
             }
+        }
+
+        private void ShuffleAvoidingAdjacentSameDistance(IList<TrialSpec> list, float? previousDistance)
+        {
+            if (list == null || list.Count <= 1)
+            {
+                return;
+            }
+
+            const int maxAttempts = 100;
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                Shuffle(list);
+                bool hasAdjacentSameDistance = previousDistance.HasValue &&
+                    Mathf.Approximately(previousDistance.Value, list[0].trueDistanceM);
+
+                for (int i = 1; !hasAdjacentSameDistance && i < list.Count; i++)
+                {
+                    hasAdjacentSameDistance = Mathf.Approximately(list[i - 1].trueDistanceM, list[i].trueDistanceM);
+                }
+
+                if (!hasAdjacentSameDistance)
+                {
+                    return;
+                }
+            }
+
+            Debug.LogWarning("[DistanceCompressionTask] Could not find a trial order without adjacent identical distances within retry limit.");
         }
 
         private bool TryExtractDistanceFromAnswer(object answer, out float distance)

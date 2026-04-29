@@ -38,7 +38,9 @@ namespace VRPerception.Tasks
         private const float GridJitterX = 0.30f;
         private const float GridJitterY = 0.08f;
         private const float DisplayObjectScale = 0.48f;
-        private const float DisplayPlaneMinCenterY = 1.60f;
+        private const float DisplayPlaneEyeYOffset = -0.20f;
+        private const float DisplayPlaneGroundY = -1.0f;
+        private const float DisplayPlaneGroundClearance = 0.15f;
 
         private TaskRunnerContext _ctx;
         private System.Random _rand = new System.Random(1234);
@@ -155,7 +157,7 @@ namespace VRPerception.Tasks
                         environment = "open_field",
                         background = background,
                         fovDeg = fov,
-                        lighting = BackgroundToLighting(background),
+                        lighting = "bright",
                         occlusion = false,
                         changed = changed,
                         changeCategory = cat,
@@ -198,9 +200,7 @@ namespace VRPerception.Tasks
             if (_scene != null)
             {
                 var env = string.IsNullOrEmpty(trial.environment) ? "open_field" : trial.environment;
-                var lighting = string.IsNullOrEmpty(trial.lighting)
-                    ? BackgroundToLighting(trial.background)
-                    : trial.lighting;
+                var lighting = string.IsNullOrEmpty(trial.lighting) ? "bright" : trial.lighting;
 
                 _scene.SetupEnvironment(env, trial.textureDensity, lighting, trial.occlusion);
             }
@@ -448,7 +448,7 @@ namespace VRPerception.Tasks
 
             _sceneRight = Vector3.Cross(Vector3.up, sceneForward).normalized;
             _sceneCenter = origin + sceneForward * ClusterDistance;
-            _sceneCenter.y = Mathf.Max(eyeY, DisplayPlaneMinCenterY);
+            _sceneCenter.y = Mathf.Max(eyeY + DisplayPlaneEyeYOffset, ResolveDisplayPlaneMinCenterY());
             _sceneAnchorReady = true;
         }
 
@@ -764,6 +764,13 @@ namespace VRPerception.Tasks
             };
         }
 
+        private static float ResolveDisplayPlaneMinCenterY()
+        {
+            float bottomRowOffset = ((GridRows - 1) * 0.5f * GridSpacingY) + GridJitterY;
+            float maxObjectHalfHeight = DisplayObjectScale * 0.70f;
+            return DisplayPlaneGroundY + DisplayPlaneGroundClearance + bottomRowOffset + maxObjectHalfHeight;
+        }
+
         private static string GetBaseKind(int idx)
         {
             return s_shapePool[idx % s_shapePool.Length];
@@ -908,17 +915,6 @@ namespace VRPerception.Tasks
                 int j = _rand.Next(i + 1);
                 (list[i], list[j]) = (list[j], list[i]);
             }
-        }
-
-        private static string BackgroundToLighting(string background)
-        {
-            var bg = (background ?? "none").ToLowerInvariant();
-            return bg switch
-            {
-                "indoor" => "dim",
-                "street" => "hdr",
-                _ => "bright"
-            };
         }
 
         private static string NormalizeTrialCategory(string raw)

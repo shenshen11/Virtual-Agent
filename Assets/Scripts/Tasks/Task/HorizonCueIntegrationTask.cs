@@ -717,12 +717,12 @@ namespace VRPerception.Tasks
                     rowColor = ground;
                 }
 
-                // 添加地平线光晕效果
+                // 添加地平线光晕效果（柔和雾气带，半宽 ±10.8° 纬度，峰值 40% 白色混合）
                 var horizonDist = Mathf.Abs(v - 0.5f);
-                if (horizonDist < 0.1f)
+                if (horizonDist < 0.06f)
                 {
-                    var halo = 1f - (horizonDist / 0.1f);
-                    rowColor = Color.Lerp(rowColor, horizonLine, halo * 0.5f);
+                    var halo = 1f - (horizonDist / 0.06f);
+                    rowColor = Color.Lerp(rowColor, horizonLine, halo * 0.4f);
                 }
 
                 for (int x = 0; x < w; x++)
