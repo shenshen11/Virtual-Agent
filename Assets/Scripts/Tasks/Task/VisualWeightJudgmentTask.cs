@@ -31,7 +31,7 @@ namespace VRPerception.Tasks
         private float _referenceEyeY;
 
         // ── 布局常量 ──
-        private const float SmallScale = 0.35f;
+        private const float SmallScale = 0.40f;
         private const float LargeScale = 0.50f;
         private const float PlacementDistance = 3.0f;
         private const float LateralOffset = 0.55f;
