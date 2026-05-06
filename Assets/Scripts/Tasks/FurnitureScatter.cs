@@ -5,113 +5,123 @@ using UnityEngine;
 namespace VRPerception.Tasks
 {
     /// <summary>
-    /// 随机摆放家具 Prefab（用于颜色恒常任务的环境参照）。
+    /// 以固定槽位摆放家具 Prefab：每个槽位显式指定 prefab、相对锚点的偏移、yaw 与缩放。
+    /// 同一份配置在任何 run / seed 下都得到完全一致的家具布局，便于复现。
     /// </summary>
     public sealed class FurnitureScatter : MonoBehaviour
     {
-        [Header("Prefabs")]
-        [SerializeField] private List<GameObject> furniturePrefabs = new List<GameObject>();
+        [Serializable]
+        public struct FurnitureSlot
+        {
+            [Tooltip("要实例化的家具 Prefab。")]
+            public GameObject prefab;
 
-        [Header("Spawn Count")]
-        [SerializeField] private int minCount = 6;
-        [SerializeField] private int maxCount = 10;
+            [Tooltip("相对锚点前向坐标系的偏移（米）：x=右, y=高度增量, z=前。useAnchorFrame=false 时按世界坐标解释。")]
+            public Vector3 localOffset;
 
-        [Header("Spawn Area")]
-        [Tooltip("相对于锚点/相机的中心偏移（米）。")]
-        [SerializeField] private Vector3 centerOffset = new Vector3(0f, 0f, 3f);
-        [Tooltip("生成区域尺寸（X/Z），Y 会被忽略或作为固定高度。")]
-        [SerializeField] private Vector3 areaSize = new Vector3(6f, 0f, 6f);
+            [Tooltip("相对锚点前向的 yaw（度，绕世界 Y）。faceAnchor=true 时忽略。")]
+            public float yawDegrees;
 
-        [Header("Distance Constraints")]
-        [Tooltip("与锚点/相机的最小水平距离（米），避免贴脸。")]
-        [SerializeField] private float minDistanceFromAnchor = 2.5f;
-        [Tooltip("家具之间的最小水平间距（米），尽量避免重叠。")]
-        [SerializeField] private float minSeparation = 1.2f;
-        [Tooltip("每个物体的放置尝试次数，越大越容易满足间距限制。")]
-        [SerializeField] private int maxPlacementAttempts = 24;
+            [Tooltip("统一缩放系数，<=0 视为 1。")]
+            public float uniformScale;
 
-        [Header("Placement")]
+            [Tooltip("true 时朝向锚点（投影到水平面），忽略 yawDegrees。")]
+            public bool faceAnchor;
+        }
+
+        [Header("Slots (Fixed Layout)")]
+        [Tooltip("固定槽位列表：按列表顺序实例化，位姿完全可复现。")]
+        [SerializeField] private List<FurnitureSlot> slots = new List<FurnitureSlot>();
+
+        [Header("Layout")]
+        [Tooltip("true 时使用锚点位置 + 投影前向作为局部坐标系；false 时直接以世界坐标解释 localOffset。")]
+        [SerializeField] private bool useAnchorFrame = true;
+        [Tooltip("true 时将每个家具的 y 强制对齐到 floorY。")]
         [SerializeField] private bool alignToFloor = true;
         [SerializeField] private float floorY = 0f;
-        [SerializeField] private bool randomYaw = true;
-        [SerializeField] private Vector2 scaleRange = new Vector2(0.8f, 1.2f);
+        [Tooltip("true 时把生成的家具父挂在本组件 transform 下。")]
         [SerializeField] private bool parentToThis = true;
+
+        // === Legacy fields (deprecated) ===
+        // 仅为保持现有 .unity 序列化兼容而保留，运行时不再消费。
+        // 若未来需要彻底清理，可在确认所有场景配置已迁移到 slots 后删除。
+#pragma warning disable 0414
+        [HideInInspector] [SerializeField] private List<GameObject> furniturePrefabs = new List<GameObject>();
+        [HideInInspector] [SerializeField] private int minCount = 0;
+        [HideInInspector] [SerializeField] private int maxCount = 0;
+        [HideInInspector] [SerializeField] private Vector3 centerOffset = Vector3.zero;
+        [HideInInspector] [SerializeField] private Vector3 areaSize = Vector3.zero;
+        [HideInInspector] [SerializeField] private float minDistanceFromAnchor = 0f;
+        [HideInInspector] [SerializeField] private float minSeparation = 0f;
+        [HideInInspector] [SerializeField] private int maxPlacementAttempts = 0;
+        [HideInInspector] [SerializeField] private bool randomYaw = false;
+        [HideInInspector] [SerializeField] private Vector2 scaleRange = new Vector2(1f, 1f);
+#pragma warning restore 0414
 
         private readonly List<GameObject> _spawned = new List<GameObject>();
 
         public bool HasSpawned => _spawned.Count > 0;
 
-        public void Spawn(System.Random rand, Transform anchor = null, int? countOverride = null)
+        /// <summary>
+        /// 按固定槽位列表实例化家具。幂等：若已生成则直接返回，不会重复实例化。
+        /// 参数 <paramref name="rand"/> 与 <paramref name="countOverride"/> 仅为 API 兼容保留，已忽略。
+        /// </summary>
+        public void Spawn(System.Random rand = null, Transform anchor = null, int? countOverride = null)
         {
-            Clear();
+            if (HasSpawned) return;
+            if (slots == null || slots.Count == 0) return;
 
-            if (furniturePrefabs == null || furniturePrefabs.Count == 0)
+            ResolveAnchorFrame(anchor, out var origin, out var forward, out var right);
+            float baseYawDeg = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
+
+            for (int i = 0; i < slots.Count; i++)
             {
-                return;
-            }
+                var slot = slots[i];
+                if (slot.prefab == null) continue;
 
-            if (rand == null)
-            {
-                rand = new System.Random(Environment.TickCount);
-            }
-
-            int count = countOverride ?? ResolveSpawnCount(rand);
-            if (count <= 0) return;
-
-            var basePos = anchor != null ? anchor.position : Vector3.zero;
-            var halfX = Mathf.Max(0.01f, areaSize.x) * 0.5f;
-            var halfZ = Mathf.Max(0.01f, areaSize.z) * 0.5f;
-            var placed = new List<Vector3>(count);
-            float minAnchorDist = Mathf.Max(0f, minDistanceFromAnchor);
-            float minSep = Mathf.Max(0f, minSeparation);
-            int attempts = Mathf.Max(1, maxPlacementAttempts);
-
-            if (minAnchorDist > 0f)
-            {
-                var center = new Vector2(basePos.x + centerOffset.x, basePos.z + centerOffset.z);
-                var anchorXZ = new Vector2(basePos.x, basePos.z);
-                float maxDx = Mathf.Abs(center.x - anchorXZ.x) + halfX;
-                float maxDz = Mathf.Abs(center.y - anchorXZ.y) + halfZ;
-                float maxPossible = Mathf.Sqrt(maxDx * maxDx + maxDz * maxDz);
-                if (maxPossible > 0f)
-                {
-                    minAnchorDist = Mathf.Min(minAnchorDist, maxPossible);
-                }
-            }
-
-            for (int i = 0; i < count; i++)
-            {
-                var prefab = furniturePrefabs[rand.Next(furniturePrefabs.Count)];
-                if (prefab == null) continue;
-
-                var go = Instantiate(prefab);
+                var go = Instantiate(slot.prefab);
                 if (parentToThis)
                 {
                     go.transform.SetParent(transform, true);
                 }
 
-                var pos = ResolvePlacement(rand, basePos, halfX, halfZ, placed, minAnchorDist, minSep, attempts);
+                var pos = origin
+                          + right * slot.localOffset.x
+                          + Vector3.up * slot.localOffset.y
+                          + forward * slot.localOffset.z;
                 if (alignToFloor)
                 {
                     pos.y = floorY;
                 }
-
                 go.transform.position = pos;
 
-                if (randomYaw)
+                Quaternion rot;
+                if (slot.faceAnchor)
                 {
-                    float yaw = NextRange(rand, 0f, 360f);
-                    go.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+                    var toAnchor = origin - pos;
+                    toAnchor.y = 0f;
+                    if (toAnchor.sqrMagnitude < 1e-6f)
+                    {
+                        rot = Quaternion.Euler(0f, baseYawDeg, 0f);
+                    }
+                    else
+                    {
+                        rot = Quaternion.LookRotation(toAnchor.normalized, Vector3.up);
+                    }
                 }
+                else
+                {
+                    rot = Quaternion.Euler(0f, baseYawDeg + slot.yawDegrees, 0f);
+                }
+                go.transform.rotation = rot;
 
-                float scale = NextRange(rand, scaleRange.x, scaleRange.y);
+                float scale = slot.uniformScale > 0.0001f ? slot.uniformScale : 1f;
                 if (Mathf.Abs(scale - 1f) > 0.001f)
                 {
                     go.transform.localScale = go.transform.localScale * scale;
                 }
 
                 _spawned.Add(go);
-                placed.Add(pos);
             }
         }
 
@@ -143,72 +153,24 @@ namespace VRPerception.Tasks
             }
         }
 
-        private int ResolveSpawnCount(System.Random rand)
+        private void ResolveAnchorFrame(Transform anchor, out Vector3 origin, out Vector3 forward, out Vector3 right)
         {
-            int min = Mathf.Max(0, minCount);
-            int max = Mathf.Max(min, maxCount);
-            if (max == min) return min;
-            return rand.Next(min, max + 1);
-        }
-
-        private static float NextRange(System.Random rand, float min, float max)
-        {
-            if (rand == null) return min;
-            if (max < min)
+            if (useAnchorFrame && anchor != null)
             {
-                (min, max) = (max, min);
+                origin = anchor.position;
+                forward = Vector3.ProjectOnPlane(anchor.forward, Vector3.up);
+                if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
+                forward.Normalize();
             }
-            return (float)(min + rand.NextDouble() * (max - min));
-        }
-
-        private Vector3 ResolvePlacement(System.Random rand, Vector3 basePos, float halfX, float halfZ, List<Vector3> placed, float minAnchorDist, float minSep, int attempts)
-        {
-            Vector3 bestPos = basePos + centerOffset;
-            float bestScore = -1f;
-            var anchorXZ = new Vector2(basePos.x, basePos.z);
-
-            for (int attempt = 0; attempt < attempts; attempt++)
+            else
             {
-                float offsetX = NextRange(rand, -halfX, halfX);
-                float offsetZ = NextRange(rand, -halfZ, halfZ);
-                var candidate = basePos + centerOffset + new Vector3(offsetX, 0f, offsetZ);
-
-                if (minAnchorDist > 0f)
-                {
-                    var candXZ = new Vector2(candidate.x, candidate.z);
-                    float anchorDist = Vector2.Distance(candXZ, anchorXZ);
-                    if (anchorDist < minAnchorDist)
-                    {
-                        continue;
-                    }
-                }
-
-                float nearest = float.PositiveInfinity;
-                if (placed.Count > 0)
-                {
-                    for (int i = 0; i < placed.Count; i++)
-                    {
-                        var p = placed[i];
-                        float dx = candidate.x - p.x;
-                        float dz = candidate.z - p.z;
-                        float dist = Mathf.Sqrt(dx * dx + dz * dz);
-                        if (dist < nearest) nearest = dist;
-                    }
-                }
-
-                if (minSep <= 0f || placed.Count == 0 || nearest >= minSep)
-                {
-                    return candidate;
-                }
-
-                if (nearest > bestScore)
-                {
-                    bestScore = nearest;
-                    bestPos = candidate;
-                }
+                origin = Vector3.zero;
+                forward = Vector3.forward;
             }
 
-            return bestPos;
+            right = Vector3.Cross(Vector3.up, forward);
+            if (right.sqrMagnitude < 1e-6f) right = Vector3.right;
+            right.Normalize();
         }
     }
 }

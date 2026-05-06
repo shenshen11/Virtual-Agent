@@ -8525,7 +8525,7 @@ MonoBehaviour:
   mllmScanSeed: 12345
   mllmVideoFps: 50
   mllmVideoDurationMs: 1500
-  subjectMode: 0
+  subjectMode: 1
   showHumanPreFixationPrompt: 1
   humanPreFixationPromptSeconds: 3
   humanPreFixationTitle: "\u6CE8\u89C6\u6807\u5B9A\u51C6\u5907"
@@ -10243,25 +10243,57 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3452813d524c46b4bf4763d30813f92b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  slots:
+  - prefab: {fileID: 4732485555463690425, guid: 5b7fa39770ebd274db60b487386f177a, type: 3}
+    localOffset: {x: 0, y: 0, z: 4.5}
+    yawDegrees: 0
+    uniformScale: 1
+    faceAnchor: 0
+  - prefab: {fileID: 919132149155446097, guid: bfbe5cdfd1128ff40b7909bf16a17d18, type: 3}
+    localOffset: {x: -2.5, y: 0, z: 2.8}
+    yawDegrees: 0
+    uniformScale: 1
+    faceAnchor: 0
+  - prefab: {fileID: 4638753047883582262, guid: 2a75334f03c2dac41a17a5902f95e8ab, type: 3}
+    localOffset: {x: 3, y: 0, z: 5.5}
+    yawDegrees: -90
+    uniformScale: 1
+    faceAnchor: 0
+  - prefab: {fileID: 2096574073484705116, guid: fdb15fa6ad23ba648ab85606d2bb1810, type: 3}
+    localOffset: {x: -3.2, y: 0, z: 5.5}
+    yawDegrees: 90
+    uniformScale: 1
+    faceAnchor: 0
+  - prefab: {fileID: 3773118562506407225, guid: 597bbbd553e8dca4594170fdf0f71aae, type: 3}
+    localOffset: {x: 2.5, y: 0, z: 3}
+    yawDegrees: -30
+    uniformScale: 1
+    faceAnchor: 0
+  - prefab: {fileID: 1492275316394028443, guid: f79049a5b996b9546aa026c405ca8436, type: 3}
+    localOffset: {x: 0, y: 0, z: 3}
+    yawDegrees: 0
+    uniformScale: 1
+    faceAnchor: 0
+  useAnchorFrame: 1
+  alignToFloor: 1
+  floorY: 0
+  parentToThis: 1
   furniturePrefabs:
   - {fileID: 4732485555463690425, guid: 5b7fa39770ebd274db60b487386f177a, type: 3}
-  - {fileID: 3307447181074394725, guid: 79633c521928c7e419dc442804191f32, type: 3}
+  - {fileID: 919132149155446097, guid: bfbe5cdfd1128ff40b7909bf16a17d18, type: 3}
   - {fileID: 4638753047883582262, guid: 2a75334f03c2dac41a17a5902f95e8ab, type: 3}
   - {fileID: 2096574073484705116, guid: fdb15fa6ad23ba648ab85606d2bb1810, type: 3}
   - {fileID: 3773118562506407225, guid: 597bbbd553e8dca4594170fdf0f71aae, type: 3}
   - {fileID: 1492275316394028443, guid: f79049a5b996b9546aa026c405ca8436, type: 3}
   minCount: 6
-  maxCount: 10
+  maxCount: 6
   centerOffset: {x: 0, y: 0, z: 3}
   areaSize: {x: 6, y: 0, z: 6}
   minDistanceFromAnchor: 4
   minSeparation: 2.5
   maxPlacementAttempts: 24
-  alignToFloor: 1
-  floorY: 0
   randomYaw: 1
   scaleRange: {x: 0.8, y: 1.2}
-  parentToThis: 1
 --- !u!114 &2671414045
 MonoBehaviour:
   m_ObjectHideFlags: 0

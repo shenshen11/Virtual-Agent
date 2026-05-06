@@ -42,7 +42,6 @@ namespace VRPerception.Tasks
         private readonly Dictionary<string, int> _snapshotObjectCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         private int _plannedTrialCount;
-        private string _currentFurniturePhase;
 
         private int[] _baselineRgb;
         private bool _baselineSet;
@@ -97,7 +96,6 @@ namespace VRPerception.Tasks
         {
             ClearSpawned();
             _furniture?.Clear();
-            _currentFurniturePhase = null;
             if (_scene != null)
             {
                 _scene.SetLighting("white_neutral");
@@ -117,7 +115,6 @@ namespace VRPerception.Tasks
             _redAdapted = false;
             _blueAdapted = false;
             _restedForBlue = false;
-            _currentFurniturePhase = null;
 
             var trials = new List<TrialSpec>();
 
@@ -169,7 +166,6 @@ namespace VRPerception.Tasks
 
             if (trial.trialId == 0)
             {
-                _currentFurniturePhase = null;
                 _furniture?.Clear();
             }
 
@@ -252,7 +248,6 @@ namespace VRPerception.Tasks
             if (IsLastTrial(trial))
             {
                 _furniture?.Clear();
-                _currentFurniturePhase = null;
             }
             await Task.Yield();
         }
@@ -467,7 +462,7 @@ namespace VRPerception.Tasks
         private void EnsureFurnitureForAdaptation(string phase)
         {
             if (_furniture == null) return;
-            EnsureFurnitureLayout(phase);
+            EnsureFurnitureLayout();
             _furniture.SetActive(true);
         }
 
@@ -492,20 +487,16 @@ namespace VRPerception.Tasks
                 return;
             }
 
-            EnsureFurnitureLayout(phase);
+            EnsureFurnitureLayout();
             _furniture.SetActive(true);
         }
 
-        private void EnsureFurnitureLayout(string phase)
+        private void EnsureFurnitureLayout()
         {
             if (_furniture == null) return;
-            var normalizedPhase = string.IsNullOrEmpty(phase) ? "unknown" : phase;
-            if (!string.Equals(_currentFurniturePhase, normalizedPhase, StringComparison.OrdinalIgnoreCase) || !_furniture.HasSpawned)
-            {
-                var cam = ResolveCamera();
-                _furniture.Spawn(_rand, cam != null ? cam.transform : null);
-                _currentFurniturePhase = normalizedPhase;
-            }
+            if (_furniture.HasSpawned) return;
+            var cam = ResolveCamera();
+            _furniture.Spawn(null, cam != null ? cam.transform : null);
         }
 
         private bool IsLastTrial(TrialSpec trial)
