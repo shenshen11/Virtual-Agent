@@ -602,7 +602,7 @@ namespace VRPerception.Tasks
         {
             string taskMessage = string.IsNullOrWhiteSpace(_preTaskMessage)
                 ? humanStartConfirmationFallbackMessage
-                : _preTaskMessage.Trim() + "\n\n请保持头部稳定。\n按右手柄 A 键开始正式试次。";
+                : _preTaskMessage.Trim() + "\n\n" + (humanStartConfirmationFallbackMessage ?? string.Empty);
 
             return taskMessage ?? string.Empty;
         }
