@@ -23,7 +23,9 @@ namespace VRPerception.Perception
         [SerializeField] private int defaultJpegQuality = 75;
         
         [Header("Performance")]
+#pragma warning disable CS0414
         [SerializeField] private bool useAsyncEncoding = true;
+#pragma warning restore CS0414
         [SerializeField] private int maxConcurrentCaptures = 3;
         
         [Header("Event Bus")]

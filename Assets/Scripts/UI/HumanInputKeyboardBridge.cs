@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.XR;
 using VRPerception.Infra.EventBus;
 using VRPerception.Perception;
+using VRPerception.Tasks;
 
 namespace VRPerception.UI
 {
@@ -74,6 +75,10 @@ namespace VRPerception.UI
         // 上一次成功触发跳转的时间（Time.time）
         private float _lastTriggerTime = -999f;
 
+        // anchor / 真实距离记录（仅 distance_compression 任务有效）
+        private bool _isAnchorTrial;
+        private float _trialTrueDistanceM;
+
         private void Awake()
         {
             if (autoFindEventBus && eventBus == null)
@@ -127,6 +132,13 @@ namespace VRPerception.UI
             if (Time.time - _lastTriggerTime < minTriggerIntervalSeconds)
             {
                 // 上一次触发离现在太近，丢弃当前输入
+                return;
+            }
+
+            // distance_compression 任务的非 anchor 试次：A 键提交由 WSHumanInputDialog 接管，
+            // 本桥不发送默认距离响应，避免覆盖被试通过 Slider 输入的真实数值。
+            if (!_isAnchorTrial && string.Equals(_taskId, "distance_compression", StringComparison.OrdinalIgnoreCase))
+            {
                 return;
             }
 
@@ -252,13 +264,22 @@ namespace VRPerception.UI
                 _taskId = data.taskId;
                 _trialId = data.trialId;
 
+                // 从 TrialSpec 读取 anchor 与真实距离（仅 distance_compression 任务关心）
+                _isAnchorTrial = false;
+                _trialTrueDistanceM = 0f;
+                if (data.trialConfig is TrialSpec ts)
+                {
+                    _isAnchorTrial = ts.isAnchor;
+                    _trialTrueDistanceM = ts.trueDistanceM;
+                }
+
                 // 新 trial 开始等待输入时，重置每试次触发标记
                 _hasTriggeredForThisTrial = false;
                 _lastPrimaryButtonPressed = ReadCurrentRightPrimaryButtonPressed();
 
                 if (verboseLog)
                 {
-                    Debug.Log($"[HumanInputKeyboardBridge] WaitingForInput {data.taskId}/{data.trialId}. Press PICO Right A / Keyboard 'A' (Editor) to continue.");
+                    Debug.Log($"[HumanInputKeyboardBridge] WaitingForInput {data.taskId}/{data.trialId} isAnchor={_isAnchorTrial} trueDistanceM={_trialTrueDistanceM:F2}");
                 }
             }
             else if (data.state == TrialLifecycleState.Completed ||
@@ -269,6 +290,8 @@ namespace VRPerception.UI
                 _awaitingInput = false;
                 _lastPrimaryButtonPressed = false;
                 _hasTriggeredForThisTrial = false;
+                _isAnchorTrial = false;
+                _trialTrueDistanceM = 0f;
             }
         }
 
@@ -335,10 +358,17 @@ namespace VRPerception.UI
 
             if (string.Equals(taskId, "distance_compression", StringComparison.OrdinalIgnoreCase))
             {
+                // 锚定/预实验试次：使用真实距离作为 acknowledged_distance_m，置信度 1.0
+                // DistanceCompressionTask.Evaluate 优先读 distance_m，其次 acknowledged_distance_m
+                bool isAnchor = _isAnchorTrial;
+                float distanceM = isAnchor ? _trialTrueDistanceM : defaultDistanceMeters;
+                float confidence = isAnchor ? 1f : conf;
+
                 var answer = new DistanceAnswer
                 {
-                    distance_m = defaultDistanceMeters,
-                    confidence = conf
+                    distance_m = distanceM,
+                    acknowledged_distance_m = isAnchor ? _trialTrueDistanceM : 0f,
+                    confidence = confidence
                 };
 
                 return new LLMResponse
@@ -346,8 +376,8 @@ namespace VRPerception.UI
                     type = "inference",
                     taskId = taskId,
                     trialId = trialId,
-                    providerId = "human",
-                    confidence = conf,
+                    providerId = isAnchor ? "human_anchor" : "human",
+                    confidence = confidence,
                     latencyMs = 0,
                     answer = answer
                 };
@@ -402,6 +432,7 @@ namespace VRPerception.UI
         private class DistanceAnswer
         {
             public float distance_m;
+            public float acknowledged_distance_m;
             public float confidence;
         }
 

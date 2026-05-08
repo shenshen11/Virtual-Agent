@@ -1,7 +1,11 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.XR;
 using UnityEngine.XR.Interaction.Toolkit.UI;
 using TMPro;
 using VRPerception.Infra.EventBus;
@@ -42,6 +46,55 @@ namespace VRPerception.UI
         [Header("Distance Compression")]
         [SerializeField] private GameObject distanceGroup;
         [SerializeField] private TMP_InputField distanceInput;
+        [Tooltip("距离压缩任务专用：置信度数字输入框（0-1），替代滑块")]
+        [SerializeField] private TMP_InputField confidenceNumericInput;
+
+        [Header("Distance Compression - Slider Input (替代 TMP_InputField，避免 VR 软键盘)")]
+        [Tooltip("距离 Slider，由 PICO 右手柄摇杆 Y 轴推动调整。若未在 Inspector 绑定，运行时会自动在 distanceGroup 内创建。")]
+        [SerializeField] private Slider distanceSlider;
+        [Tooltip("距离 Slider 当前值的只读显示文本。")]
+        [SerializeField] private TMP_Text distanceValueText;
+        [Tooltip("Slider 最小距离（米）。")]
+        [SerializeField] private float distanceMin = 0.5f;
+        [Tooltip("Slider 最大距离（米）。")]
+        [SerializeField] private float distanceMax = 25f;
+        [Tooltip("新 trial 开始时 Slider 的默认距离（米）。")]
+        [SerializeField] private float distanceDefault = 5f;
+        [Tooltip("摇杆 Y 轴推动时距离变化速率 (m/s)。")]
+        [SerializeField] private float distanceStickRateMps = 5f;
+        [Tooltip("摇杆死区，绝对值小于该值视为静止。")]
+        [SerializeField] private float stickDeadzone = 0.2f;
+
+        [Header("Confidence (1-5 离散评分，替代 0-1 数字/滑块)")]
+        [Tooltip("置信度 5 个 Toggle 的容器；若未绑定将运行时创建。")]
+        [SerializeField] private GameObject confidenceLevelGroup;
+        [Tooltip("5 个 Toggle，索引 0-4 对应 level 1-5。若长度不为 5 将按需创建。")]
+        [SerializeField] private Toggle[] confidenceLevelToggles;
+        [Tooltip("ToggleGroup，确保 5 个 Toggle 互斥。")]
+        [SerializeField] private ToggleGroup confidenceLevelToggleGroup;
+        [Tooltip("当前选中等级的提示文本（可选）。")]
+        [SerializeField] private TMP_Text confidenceLevelLabel;
+        [Tooltip("默认选中等级 (1..5)。")]
+        [SerializeField, Range(1, 5)] private int defaultConfidenceLevel = 3;
+
+        [Header("Anchor Trial Hint (前 N 次锚定/预实验试次)")]
+        [Tooltip("锚定试次提示卡片容器；若未绑定将运行时创建。")]
+        [SerializeField] private GameObject anchorHintGroup;
+        [Tooltip("锚定试次提示文本（显示真实距离与按 A 键继续提示）。")]
+        [SerializeField] private TMP_Text anchorHintText;
+
+        [Header("Panel Appearance")]
+        [Tooltip("面板整体透明度（0=全透明，1=不透明）")]
+        [SerializeField, Range(0f, 1f)] private float panelAlpha = 0.6f;
+        [Tooltip("面板位置偏移（世界空间），用于避免遮挡实验中心内容")]
+        [SerializeField] private Vector3 panelPositionOffset = new Vector3(0.5f, 0.2f, 0f);
+        [Tooltip("是否对距离压缩任务使用数字输入置信度（而非滑块）")]
+        [SerializeField] private bool useNumericConfidenceForDistance = true;
+
+        [Header("Data Export")]
+        [Tooltip("是否自动记录人类被试数据并在任务结束时导出CSV")]
+        [SerializeField] private bool enableHumanDataExport = true;
+        [SerializeField] private string exportFolderName = "VRP_HumanData";
 
         [Header("Semantic Size Bias")]
         [SerializeField] private GameObject sizeBiasGroup;
@@ -104,6 +157,20 @@ namespace VRPerception.UI
 
         private ColorAdjustableTarget _colorTarget;
 
+        // Human data export
+        private readonly List<HumanTrialRecord> _humanRecords = new List<HumanTrialRecord>();
+        private string _exportDir;
+        private TrialSpec _currentTrialSpec;
+        private Vector3 _dialogOriginalLocalPos;
+        private bool _originalPosRecorded;
+
+        // 右手柄摇杆/A键监听（仅在 distance_compression 普通试次时启用）
+        private readonly List<InputDevice> _rightHandDevicesForDialog = new List<InputDevice>(2);
+        private bool _lastDialogPrimaryButton;
+        private float _dialogLastSubmitTime = -999f;
+        private const float DialogAKeyDebounceSeconds = 1f;
+        private bool _isAnchorTrial;
+
         private void Awake()
         {
             _canvas = GetComponent<Canvas>();
@@ -130,6 +197,12 @@ namespace VRPerception.UI
             if (autoFindEventBus && eventBus == null)
                 eventBus = EventBusManager.Instance;
 
+            if (enableHumanDataExport)
+            {
+                _exportDir = Path.Combine(Application.persistentDataPath, exportFolderName,
+                    DateTime.Now.ToString("yyyy-MM-dd_HHmmss"));
+            }
+
             HideDialog();
             HookUIEvents(true);
             UpdateConfidenceLabel(confidenceSlider != null ? confidenceSlider.value : 0.9f);
@@ -150,6 +223,7 @@ namespace VRPerception.UI
                 StopCoroutine(_ensureSubscribeRoutine);
                 _ensureSubscribeRoutine = null;
             }
+            ExportHumanDataCsv();
         }
 
         private void OnDestroy()
@@ -216,9 +290,11 @@ namespace VRPerception.UI
                 _trialId = data.trialId;
 
                 _requireHeadMotion = false;
+                _currentTrialSpec = null;
                 if (data.trialConfig is TrialSpec ts)
                 {
                     _requireHeadMotion = ts.requireHeadMotion;
+                    _currentTrialSpec = ts;
                 }
 
                 _awaitingInputSinceRealtime = Time.realtimeSinceStartup;
@@ -249,10 +325,51 @@ namespace VRPerception.UI
             bool isColor = string.Equals(taskId, "color_constancy_adjustment", StringComparison.OrdinalIgnoreCase);
             bool isNumerosity = string.Equals(taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase);
 
+            // 判定是否为锚定/预实验试次（仅 distance_compression 任务有此概念）
+            _isAnchorTrial = isDistance && _currentTrialSpec != null && _currentTrialSpec.isAnchor;
+
             if (taskLabel != null) taskLabel.text = $"任务: {taskId}";
             if (trialLabel != null) trialLabel.text = $"试次: {_trialId}";
             if (errorHint != null) errorHint.text = string.Empty;
             if (motionGateHint != null) motionGateHint.text = string.Empty;
+
+            // ============ 锚定试次（前 N 次预实验）：仅显示提示卡片 + A 键跳过 ============
+            if (_isAnchorTrial)
+            {
+                EnsureAnchorHintWidgets();
+
+                if (taskPromptText != null)
+                {
+                    taskPromptText.text = "预实验适应阶段，无需输入数值，请观察后按右手柄 A 键继续。";
+                }
+
+                // 隐藏所有输入控件与提交按钮
+                if (distanceGroup != null) distanceGroup.SetActive(false);
+                if (sizeBiasGroup != null) sizeBiasGroup.SetActive(false);
+                if (roughnessGroup != null) roughnessGroup.SetActive(false);
+                if (colorGroup != null) colorGroup.SetActive(false);
+                if (confidenceLevelGroup != null) confidenceLevelGroup.SetActive(false);
+                if (confidenceSlider != null) confidenceSlider.gameObject.SetActive(false);
+                if (confidenceValueText != null) confidenceValueText.gameObject.SetActive(false);
+                if (confidenceNumericInput != null) confidenceNumericInput.gameObject.SetActive(false);
+                if (submitButton != null) submitButton.gameObject.SetActive(false);
+
+                // 显示锚定提示卡片
+                if (anchorHintGroup != null) anchorHintGroup.SetActive(true);
+                if (anchorHintText != null && _currentTrialSpec != null)
+                {
+                    anchorHintText.text =
+                        $"预实验试次 {_trialId + 1} / 3\n" +
+                        $"目标距离：{_currentTrialSpec.trueDistanceM:F1} 米\n" +
+                        $"请仔细观察并记住该距离感，\n" +
+                        $"准备好后按右手柄 A 键继续";
+                }
+                return;
+            }
+
+            // 普通试次：隐藏锚定提示卡片
+            if (anchorHintGroup != null) anchorHintGroup.SetActive(false);
+            if (submitButton != null) submitButton.gameObject.SetActive(true);
 
             // 设置任务提示文本：优先使用自定义提示，否则使用默认提示
             if (taskPromptText != null)
@@ -301,17 +418,68 @@ namespace VRPerception.UI
             if (colorGroup != null) colorGroup.SetActive(isColor);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(isSizeBias || isNumerosity);
 
-            if (isDistance && distanceInput != null)
+            // ============ 距离输入：Slider + 摇杆控制（替代 TMP_InputField 避免 VR 软键盘）============
+            if (isDistance)
             {
-                distanceInput.text = "10.0";
-                distanceInput.contentType = TMP_InputField.ContentType.DecimalNumber;
+                EnsureDistanceSliderWidgets();
+
+                // 强制隐藏旧的 TMP_InputField，避免触发系统软键盘
+                if (distanceInput != null) distanceInput.gameObject.SetActive(false);
+
+                if (distanceSlider != null)
+                {
+                    distanceSlider.gameObject.SetActive(true);
+                    distanceSlider.wholeNumbers = false;
+                    distanceSlider.minValue = distanceMin;
+                    distanceSlider.maxValue = distanceMax;
+                    distanceSlider.value = Mathf.Clamp(distanceDefault, distanceMin, distanceMax);
+                    UpdateDistanceValueLabel(distanceSlider.value);
+                }
+                if (distanceValueText != null) distanceValueText.gameObject.SetActive(true);
+            }
+            else
+            {
+                if (distanceSlider != null) distanceSlider.gameObject.SetActive(false);
+                if (distanceValueText != null) distanceValueText.gameObject.SetActive(false);
             }
 
-            if (confidenceSlider != null)
+            // ============ 置信度输入：5-级 Toggle（距离任务使用），其他任务沿用旧滑块 ============
+            bool useLevelToggles = isDistance;
+
+            if (useLevelToggles)
             {
-                confidenceSlider.value = 0.9f;
-                UpdateConfidenceLabel(confidenceSlider.value);
-                confidenceSlider.wholeNumbers = false;
+                EnsureConfidenceLevelWidgets();
+                if (confidenceLevelGroup != null) confidenceLevelGroup.SetActive(true);
+                SetSelectedConfidenceLevel(defaultConfidenceLevel);
+                UpdateConfidenceLevelLabel();
+
+                // 隐藏旧 numeric/slider 输入
+                if (confidenceNumericInput != null) confidenceNumericInput.gameObject.SetActive(false);
+                if (confidenceSlider != null) confidenceSlider.gameObject.SetActive(false);
+                if (confidenceValueText != null) confidenceValueText.gameObject.SetActive(false);
+            }
+            else
+            {
+                if (confidenceLevelGroup != null) confidenceLevelGroup.SetActive(false);
+
+                // 其他任务回退到原 slider 路径（保持兼容）
+                bool showNumericConfidence = false; // 非距离任务不再使用数字输入
+                if (confidenceNumericInput != null)
+                {
+                    confidenceNumericInput.gameObject.SetActive(showNumericConfidence);
+                }
+
+                if (confidenceSlider != null)
+                {
+                    confidenceSlider.gameObject.SetActive(!showNumericConfidence);
+                    confidenceSlider.value = 0.9f;
+                    UpdateConfidenceLabel(confidenceSlider.value);
+                    confidenceSlider.wholeNumbers = false;
+                }
+                if (confidenceValueText != null)
+                {
+                    confidenceValueText.gameObject.SetActive(!showNumericConfidence);
+                }
             }
 
             if (isRoughness)
@@ -367,7 +535,9 @@ namespace VRPerception.UI
             if (dialogRoot != null) dialogRoot.SetActive(true);
             if (backdrop != null) backdrop.SetActive(true);
 
-            // 强制设置渲染队列，确保 UI 在 3D 物体前面
+            ApplyPanelTransparency();
+            ApplyPositionOffset();
+
             if (alwaysOnTop)
             {
                 ForceUIRenderQueue();
@@ -375,7 +545,10 @@ namespace VRPerception.UI
 
             if (autoFocusInput)
             {
-                if (distanceGroup != null && distanceGroup.activeSelf && distanceInput != null)
+                // 避免对已隐藏的 distanceInput 调 ActivateInputField 触发 VR 软键盘；
+                // distance_compression 现使用 Slider+Toggle 输入，不需要 focus
+                if (distanceGroup != null && distanceGroup.activeSelf
+                    && distanceInput != null && distanceInput.gameObject.activeSelf)
                 {
                     distanceInput.Select();
                     distanceInput.ActivateInputField();
@@ -390,6 +563,30 @@ namespace VRPerception.UI
         private void Update()
         {
             if (!_awaitingInput) return;
+
+            // ============ 距离任务（非 anchor）：右手柄摇杆 Y 调整距离 + primaryButton 边沿提交 ============
+            if (!_isAnchorTrial && distanceSlider != null && distanceSlider.gameObject.activeSelf)
+            {
+                // 摇杆 Y 推动 → 增减距离
+                float stickY = ReadRightStickY();
+                if (Mathf.Abs(stickY) > stickDeadzone)
+                {
+                    float delta = stickY * distanceStickRateMps * Time.deltaTime;
+                    distanceSlider.value = Mathf.Clamp(distanceSlider.value + delta, distanceMin, distanceMax);
+                    UpdateDistanceValueLabel(distanceSlider.value);
+                }
+
+                // primaryButton 边沿触发 → 提交（带 1s 防抖）
+                if (ReadRightPrimaryButtonEdge())
+                {
+                    if (Time.time - _dialogLastSubmitTime >= DialogAKeyDebounceSeconds)
+                    {
+                        _dialogLastSubmitTime = Time.time;
+                        SubmitCurrent();
+                        return;
+                    }
+                }
+            }
 
             if (roughnessGroup != null && roughnessGroup.activeSelf)
             {
@@ -679,7 +876,7 @@ namespace VRPerception.UI
                 return;
             }
 
-            float confidence = confidenceSlider != null ? Mathf.Clamp01(confidenceSlider.value) : 0.9f;
+            float confidence = ReadConfidenceValue();
             long reactionMs = 0;
             try
             {
@@ -690,7 +887,13 @@ namespace VRPerception.UI
             if (distanceGroup != null && distanceGroup.activeSelf)
             {
                 float distance = 0f;
-                if (distanceInput != null)
+
+                // 优先从新的 Slider 读取（VR 场景下 distanceInput 已隐藏，避免软键盘）
+                if (distanceSlider != null && distanceSlider.gameObject.activeSelf)
+                {
+                    distance = distanceSlider.value;
+                }
+                else if (distanceInput != null && !string.IsNullOrEmpty(distanceInput.text))
                 {
                     if (!float.TryParse(distanceInput.text, out distance))
                     {
@@ -698,6 +901,13 @@ namespace VRPerception.UI
                         return;
                     }
                 }
+
+                if (confidence < 0f)
+                {
+                    if (errorHint != null) errorHint.text = "请选择置信度等级（1-5）。";
+                    return;
+                }
+                RecordHumanTrial(distance, confidence, reactionMs);
                 PublishDistance(distance, confidence, reactionMs);
             }
             else if (sizeBiasGroup != null && sizeBiasGroup.activeSelf)
@@ -916,10 +1126,489 @@ namespace VRPerception.UI
         private static void SetRenderQueueSafe(Material material)
         {
             if (material == null) return;
-
-            // 设置渲染队列为 Overlay (3000+)，确保在所有不透明和透明物体之后渲染
             material.renderQueue = 3000;
         }
+
+        // ============ Confidence Helpers ============
+
+        private float ReadConfidenceValue()
+        {
+            // 优先：5-级 Toggle（距离任务使用）
+            if (confidenceLevelGroup != null && confidenceLevelGroup.activeSelf
+                && confidenceLevelToggles != null && confidenceLevelToggles.Length == 5)
+            {
+                int level = GetSelectedConfidenceLevel();
+                if (level >= 1 && level <= 5)
+                {
+                    // 1->0.2, 2->0.4, 3->0.6, 4->0.8, 5->1.0
+                    return level / 5f;
+                }
+                return -1f;
+            }
+
+            // 兼容回退：旧 numeric input
+            bool useNumeric = useNumericConfidenceForDistance &&
+                              string.Equals(_taskId, "distance_compression", StringComparison.OrdinalIgnoreCase);
+
+            if (useNumeric && confidenceNumericInput != null && confidenceNumericInput.gameObject.activeSelf)
+            {
+                if (float.TryParse(confidenceNumericInput.text, out var val))
+                    return Mathf.Clamp01(val);
+                return -1f;
+            }
+
+            return confidenceSlider != null ? Mathf.Clamp01(confidenceSlider.value) : 0.9f;
+        }
+
+        // ============ Panel Appearance ============
+
+        private void ApplyPanelTransparency()
+        {
+            if (dialogRoot == null) return;
+
+            var images = dialogRoot.GetComponentsInChildren<Image>(true);
+            foreach (var img in images)
+            {
+                if (img == null) continue;
+                var c = img.color;
+                c.a = Mathf.Min(c.a, panelAlpha);
+                img.color = c;
+            }
+
+            if (backdrop != null)
+            {
+                var bgImage = backdrop.GetComponent<Image>();
+                if (bgImage != null)
+                {
+                    var c = bgImage.color;
+                    c.a = Mathf.Min(c.a, panelAlpha * 0.5f);
+                    bgImage.color = c;
+                }
+            }
+        }
+
+        private void ApplyPositionOffset()
+        {
+            if (dialogRoot == null || panelPositionOffset == Vector3.zero) return;
+
+            var rt = dialogRoot.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                if (!_originalPosRecorded)
+                {
+                    _dialogOriginalLocalPos = rt.localPosition;
+                    _originalPosRecorded = true;
+                }
+                rt.localPosition = _dialogOriginalLocalPos + panelPositionOffset;
+            }
+        }
+
+        // ============ Human Data Recording & Export ============
+
+        private void RecordHumanTrial(float estimatedDistance, float confidence, long reactionMs)
+        {
+            if (!enableHumanDataExport) return;
+
+            var record = new HumanTrialRecord
+            {
+                timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"),
+                taskId = _taskId,
+                trialId = _trialId,
+                estimatedDistanceM = estimatedDistance,
+                confidence = confidence,
+                reactionTimeMs = reactionMs,
+                trueDistanceM = _currentTrialSpec?.trueDistanceM ?? 0f,
+                environment = _currentTrialSpec?.environment ?? "unknown",
+                targetKind = _currentTrialSpec?.targetKind ?? "unknown",
+                fovDeg = _currentTrialSpec?.fovDeg ?? 0f,
+                isAnchor = _currentTrialSpec?.isAnchor ?? false
+            };
+
+            float trueD = record.trueDistanceM;
+            record.absError = Mathf.Abs(estimatedDistance - trueD);
+            record.relError = trueD > 0.001f ? record.absError / trueD : 0f;
+
+            _humanRecords.Add(record);
+            Debug.Log($"[WSHumanInputDialog] Recorded trial {_trialId}: est={estimatedDistance:F2}m, " +
+                      $"true={trueD:F2}m, conf={confidence:F2}, rt={reactionMs}ms");
+        }
+
+        private void ExportHumanDataCsv()
+        {
+            if (!enableHumanDataExport || _humanRecords.Count == 0) return;
+
+            try
+            {
+                if (!Directory.Exists(_exportDir))
+                    Directory.CreateDirectory(_exportDir);
+
+                var path = Path.Combine(_exportDir, "human_distance_compression_data.csv");
+                using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+                {
+                    sw.WriteLine("timestamp,taskId,trialId,estimatedDistanceM,trueDistanceM," +
+                                 "absError,relError,confidence,reactionTimeMs," +
+                                 "environment,targetKind,fovDeg,isAnchor");
+
+                    foreach (var r in _humanRecords)
+                    {
+                        sw.WriteLine(string.Join(",",
+                            CsvEscape(r.timestamp),
+                            CsvEscape(r.taskId),
+                            r.trialId,
+                            r.estimatedDistanceM.ToString("F3"),
+                            r.trueDistanceM.ToString("F3"),
+                            r.absError.ToString("F3"),
+                            r.relError.ToString("F3"),
+                            r.confidence.ToString("F3"),
+                            r.reactionTimeMs,
+                            CsvEscape(r.environment),
+                            CsvEscape(r.targetKind),
+                            r.fovDeg.ToString("F0"),
+                            r.isAnchor ? "true" : "false"
+                        ));
+                    }
+                }
+
+                Debug.Log($"[WSHumanInputDialog] Exported {_humanRecords.Count} human trial records to: {path}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[WSHumanInputDialog] CSV export failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 手动触发导出（可从 Inspector 右键 ContextMenu 调用）
+        /// </summary>
+        [ContextMenu("Export Human Data CSV Now")]
+        public void ForceExportCsv()
+        {
+            ExportHumanDataCsv();
+        }
+
+        private static string CsvEscape(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            if (s.Contains(",") || s.Contains("\"") || s.Contains("\n"))
+                return "\"" + s.Replace("\"", "\"\"") + "\"";
+            return s;
+        }
+
+        // ============ Distance Slider / Confidence Level / Anchor Hint Helpers ============
+
+        private void UpdateDistanceValueLabel(float value)
+        {
+            if (distanceValueText != null)
+            {
+                distanceValueText.text = $"距离: {value:F1} m";
+            }
+        }
+
+        private int GetSelectedConfidenceLevel()
+        {
+            if (confidenceLevelToggles == null || confidenceLevelToggles.Length != 5)
+            {
+                return Mathf.Clamp(defaultConfidenceLevel, 1, 5);
+            }
+            for (int i = 0; i < 5; i++)
+            {
+                if (confidenceLevelToggles[i] != null && confidenceLevelToggles[i].isOn)
+                {
+                    return i + 1;
+                }
+            }
+            return Mathf.Clamp(defaultConfidenceLevel, 1, 5);
+        }
+
+        private void SetSelectedConfidenceLevel(int level)
+        {
+            int clamped = Mathf.Clamp(level, 1, 5);
+            if (confidenceLevelToggles == null || confidenceLevelToggles.Length != 5)
+            {
+                return;
+            }
+            for (int i = 0; i < 5; i++)
+            {
+                if (confidenceLevelToggles[i] == null) continue;
+                bool shouldBeOn = (i + 1) == clamped;
+                if (confidenceLevelToggles[i].isOn != shouldBeOn)
+                {
+                    confidenceLevelToggles[i].isOn = shouldBeOn;
+                }
+            }
+            UpdateConfidenceLevelLabel();
+        }
+
+        private void UpdateConfidenceLevelLabel()
+        {
+            if (confidenceLevelLabel != null)
+            {
+                int level = GetSelectedConfidenceLevel();
+                confidenceLevelLabel.text = $"置信度等级: {level} / 5";
+            }
+        }
+
+        private float ReadRightStickY()
+        {
+            _rightHandDevicesForDialog.Clear();
+            InputDevices.GetDevicesAtXRNode(XRNode.RightHand, _rightHandDevicesForDialog);
+
+            for (int i = 0; i < _rightHandDevicesForDialog.Count; i++)
+            {
+                var device = _rightHandDevicesForDialog[i];
+                if (!device.isValid) continue;
+                if (device.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 axis))
+                {
+                    return axis.y;
+                }
+            }
+
+#if UNITY_EDITOR
+            // Editor 调试：上下方向键模拟摇杆 Y
+            if (Input.GetKey(KeyCode.UpArrow)) return 1f;
+            if (Input.GetKey(KeyCode.DownArrow)) return -1f;
+#endif
+            return 0f;
+        }
+
+        private bool ReadRightPrimaryButtonEdge()
+        {
+            _rightHandDevicesForDialog.Clear();
+            InputDevices.GetDevicesAtXRNode(XRNode.RightHand, _rightHandDevicesForDialog);
+
+            bool pressedThisFrame = false;
+            for (int i = 0; i < _rightHandDevicesForDialog.Count; i++)
+            {
+                var device = _rightHandDevicesForDialog[i];
+                if (!device.isValid) continue;
+                if (device.TryGetFeatureValue(CommonUsages.primaryButton, out bool pressed) && pressed)
+                {
+                    pressedThisFrame = true;
+                    break;
+                }
+            }
+
+#if UNITY_EDITOR
+            // Editor 调试：S 键模拟 A 键提交（避免与 HumanInputKeyboardBridge 的 A 键调试冲突）
+            if (Input.GetKeyDown(KeyCode.S)) return true;
+#endif
+
+            bool edge = pressedThisFrame && !_lastDialogPrimaryButton;
+            _lastDialogPrimaryButton = pressedThisFrame;
+            return edge;
+        }
+
+        private void EnsureDistanceSliderWidgets()
+        {
+            if (distanceSlider != null && distanceValueText != null)
+            {
+                return;
+            }
+
+            // 优先使用现有 distanceGroup 作为父节点，否则使用 dialogRoot
+            Transform parent = (distanceGroup != null) ? distanceGroup.transform
+                              : (dialogRoot != null ? dialogRoot.transform : transform);
+            if (parent == null) return;
+
+            TMP_Text textTemplate = taskLabel != null ? taskLabel : GetComponentInChildren<TMP_Text>(true);
+            Slider sliderTemplate = confidenceSlider != null ? confidenceSlider : GetComponentInChildren<Slider>(true);
+
+            if (sliderTemplate == null || textTemplate == null)
+            {
+                return;
+            }
+
+            if (distanceValueText == null)
+            {
+                var valueObj = Instantiate(textTemplate.gameObject, parent);
+                valueObj.name = "DistanceValueText";
+                valueObj.SetActive(true);
+                distanceValueText = valueObj.GetComponent<TMP_Text>();
+                if (distanceValueText != null)
+                {
+                    distanceValueText.text = $"距离: {distanceDefault:F1} m";
+                    distanceValueText.alignment = TextAlignmentOptions.MidlineLeft;
+                    distanceValueText.raycastTarget = false;
+                }
+                var le = valueObj.GetComponent<LayoutElement>() ?? valueObj.AddComponent<LayoutElement>();
+                le.preferredHeight = 24f;
+            }
+
+            if (distanceSlider == null)
+            {
+                var sliderObj = Instantiate(sliderTemplate.gameObject, parent);
+                sliderObj.name = "DistanceSlider";
+                sliderObj.SetActive(true);
+                distanceSlider = sliderObj.GetComponent<Slider>();
+                if (distanceSlider != null)
+                {
+                    distanceSlider.onValueChanged.RemoveAllListeners();
+                    distanceSlider.wholeNumbers = false;
+                    distanceSlider.minValue = distanceMin;
+                    distanceSlider.maxValue = distanceMax;
+                    distanceSlider.value = Mathf.Clamp(distanceDefault, distanceMin, distanceMax);
+                    distanceSlider.onValueChanged.AddListener(UpdateDistanceValueLabel);
+                }
+                var le = sliderObj.GetComponent<LayoutElement>() ?? sliderObj.AddComponent<LayoutElement>();
+                le.preferredHeight = 28f;
+                le.flexibleWidth = 1f;
+            }
+        }
+
+        private void EnsureConfidenceLevelWidgets()
+        {
+            if (confidenceLevelGroup != null
+                && confidenceLevelToggles != null && confidenceLevelToggles.Length == 5
+                && confidenceLevelToggles[0] != null && confidenceLevelToggles[4] != null)
+            {
+                return;
+            }
+
+            Transform root = dialogRoot != null ? dialogRoot.transform : transform;
+            if (root == null) return;
+
+            // 创建容器
+            if (confidenceLevelGroup == null)
+            {
+                confidenceLevelGroup = new GameObject("ConfidenceLevelGroup", typeof(RectTransform));
+                confidenceLevelGroup.transform.SetParent(root, false);
+
+                var bg = confidenceLevelGroup.AddComponent<Image>();
+                bg.color = new Color(0f, 0f, 0f, 0.25f);
+                bg.raycastTarget = false;
+
+                var layout = confidenceLevelGroup.AddComponent<HorizontalLayoutGroup>();
+                layout.childAlignment = TextAnchor.MiddleCenter;
+                layout.childControlWidth = true;
+                layout.childForceExpandWidth = true;
+                layout.childControlHeight = true;
+                layout.childForceExpandHeight = false;
+                layout.spacing = 6f;
+                layout.padding = new RectOffset(8, 8, 4, 4);
+
+                var le = confidenceLevelGroup.AddComponent<LayoutElement>();
+                le.preferredHeight = 36f;
+            }
+
+            if (confidenceLevelToggleGroup == null)
+            {
+                confidenceLevelToggleGroup = confidenceLevelGroup.GetComponent<ToggleGroup>()
+                                          ?? confidenceLevelGroup.AddComponent<ToggleGroup>();
+                confidenceLevelToggleGroup.allowSwitchOff = false;
+            }
+
+            // 准备 toggle 模板：优先使用现有 optionAToggle/optionBToggle 之一
+            Toggle toggleTemplate = optionAToggle != null ? optionAToggle
+                                  : (optionBToggle != null ? optionBToggle : GetComponentInChildren<Toggle>(true));
+
+            if (toggleTemplate == null)
+            {
+                Debug.LogWarning("[WSHumanInputDialog] EnsureConfidenceLevelWidgets: 无法找到 Toggle 模板，请在 Inspector 绑定 confidenceLevelToggles 或确保场景中存在至少一个 Toggle。");
+                return;
+            }
+
+            if (confidenceLevelToggles == null || confidenceLevelToggles.Length != 5)
+            {
+                confidenceLevelToggles = new Toggle[5];
+            }
+
+            for (int i = 0; i < 5; i++)
+            {
+                if (confidenceLevelToggles[i] != null) continue;
+
+                var toggleObj = Instantiate(toggleTemplate.gameObject, confidenceLevelGroup.transform);
+                toggleObj.name = $"ConfidenceLevelToggle_{i + 1}";
+                toggleObj.SetActive(true);
+
+                var t = toggleObj.GetComponent<Toggle>();
+                if (t != null)
+                {
+                    t.onValueChanged.RemoveAllListeners();
+                    t.group = confidenceLevelToggleGroup;
+                    t.isOn = (i + 1) == defaultConfidenceLevel;
+                    t.onValueChanged.AddListener(_ => UpdateConfidenceLevelLabel());
+                }
+
+                // 设置子文本为 "1".."5"
+                var label = toggleObj.GetComponentInChildren<TMP_Text>(true);
+                if (label != null)
+                {
+                    label.text = (i + 1).ToString();
+                    label.alignment = TextAlignmentOptions.Center;
+                    label.raycastTarget = false;
+                }
+
+                var le = toggleObj.GetComponent<LayoutElement>() ?? toggleObj.AddComponent<LayoutElement>();
+                le.preferredWidth = 48f;
+                le.flexibleWidth = 1f;
+
+                confidenceLevelToggles[i] = t;
+            }
+        }
+
+        private void EnsureAnchorHintWidgets()
+        {
+            if (anchorHintGroup != null && anchorHintText != null)
+            {
+                return;
+            }
+
+            Transform root = dialogRoot != null ? dialogRoot.transform : transform;
+            if (root == null) return;
+
+            if (anchorHintGroup == null)
+            {
+                anchorHintGroup = new GameObject("AnchorHintGroup", typeof(RectTransform));
+                anchorHintGroup.transform.SetParent(root, false);
+
+                var rt = anchorHintGroup.GetComponent<RectTransform>();
+                rt.anchorMin = new Vector2(0.05f, 0.2f);
+                rt.anchorMax = new Vector2(0.95f, 0.8f);
+                rt.offsetMin = Vector2.zero;
+                rt.offsetMax = Vector2.zero;
+
+                var bg = anchorHintGroup.AddComponent<Image>();
+                bg.color = new Color(0f, 0f, 0f, 0.4f);
+                bg.raycastTarget = false;
+
+                var layout = anchorHintGroup.AddComponent<VerticalLayoutGroup>();
+                layout.childAlignment = TextAnchor.MiddleCenter;
+                layout.childControlHeight = true;
+                layout.childControlWidth = true;
+                layout.padding = new RectOffset(16, 16, 16, 16);
+            }
+
+            if (anchorHintText == null)
+            {
+                TMP_Text textTemplate = taskLabel != null ? taskLabel : GetComponentInChildren<TMP_Text>(true);
+                if (textTemplate != null)
+                {
+                    var hintObj = Instantiate(textTemplate.gameObject, anchorHintGroup.transform);
+                    hintObj.name = "AnchorHintText";
+                    hintObj.SetActive(true);
+                    anchorHintText = hintObj.GetComponent<TMP_Text>();
+                    if (anchorHintText != null)
+                    {
+                        anchorHintText.text = string.Empty;
+                        anchorHintText.alignment = TextAlignmentOptions.Center;
+                        anchorHintText.fontSize = Mathf.Max(16f, textTemplate.fontSize);
+                        anchorHintText.raycastTarget = false;
+                    }
+                }
+                else
+                {
+                    var hintObj = new GameObject("AnchorHintText", typeof(RectTransform));
+                    hintObj.transform.SetParent(anchorHintGroup.transform, false);
+                    anchorHintText = hintObj.AddComponent<TextMeshProUGUI>();
+                    anchorHintText.alignment = TextAlignmentOptions.Center;
+                    anchorHintText.fontSize = 24f;
+                    anchorHintText.color = Color.white;
+                    anchorHintText.raycastTarget = false;
+                }
+            }
+        }
+
+        // ============ Data Models ============
 
         [Serializable]
         private class DistanceAnswer
@@ -955,6 +1644,23 @@ namespace VRPerception.UI
         {
             public string more_side;
             public float confidence;
+        }
+
+        private class HumanTrialRecord
+        {
+            public string timestamp;
+            public string taskId;
+            public int trialId;
+            public float estimatedDistanceM;
+            public float trueDistanceM;
+            public float absError;
+            public float relError;
+            public float confidence;
+            public long reactionTimeMs;
+            public string environment;
+            public string targetKind;
+            public float fovDeg;
+            public bool isAnchor;
         }
     }
 }

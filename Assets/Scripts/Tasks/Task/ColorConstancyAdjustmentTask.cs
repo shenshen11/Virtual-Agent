@@ -468,7 +468,6 @@ namespace VRPerception.Tasks
 
         private async Task RestInNeutralLightingAsync(CancellationToken ct)
         {
-            if (DefaultRestSeconds <= 0.1f) return;
             if (_scene != null)
             {
                 _scene.SetLighting("white_neutral");

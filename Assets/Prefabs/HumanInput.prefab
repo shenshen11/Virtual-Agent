@@ -3254,7 +3254,7 @@ MonoBehaviour:
   motionGateHint: {fileID: 0}
   autoFocusInput: 1
   errorHint: {fileID: 0}
-  onlyShowForColorConstancyAdjustment: 1
+  onlyShowForColorConstancyAdjustment: 0
   canvasSortingOrder: 100
   alwaysOnTop: 1
 --- !u!114 &4026062319251139747

@@ -23,7 +23,9 @@ namespace VRPerception.AvatarAction
         [SerializeField] private int maxQueueSize = 100;
         [SerializeField] private int maxConcurrentNonBlocking = 3;
         [SerializeField] private float defaultTimeout = 10f;
+#pragma warning disable CS0414
         [SerializeField] private int defaultRetries = 2;
+#pragma warning restore CS0414
         
         [Header("Movement")]
         [SerializeField] private float moveSpeed = 2f;
