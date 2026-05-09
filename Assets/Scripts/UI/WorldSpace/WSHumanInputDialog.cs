@@ -99,6 +99,14 @@ namespace VRPerception.UI
         private const int DefaultConfidenceRating = 3;
         private int _confidenceRating = DefaultConfidenceRating;
         private bool _syncingConfidenceToggles;
+        private bool _isDistanceAnchorTrial;
+        private float _currentTrueDistanceM;
+        private TouchScreenKeyboard _softKeyboard;
+        private TMP_InputField _activeSoftKeyboardInput;
+        private bool _openingSoftKeyboard;
+        private TMP_Text _submitButtonText;
+        private string _submitButtonDefaultText;
+        private bool _submitButtonDefaultTextCaptured;
 
         private Canvas _canvas;
 
@@ -217,9 +225,13 @@ namespace VRPerception.UI
                 _trialId = data.trialId;
 
                 _requireHeadMotion = false;
+                _isDistanceAnchorTrial = false;
+                _currentTrueDistanceM = 0f;
                 if (data.trialConfig is TrialSpec ts)
                 {
                     _requireHeadMotion = ts.requireHeadMotion;
+                    _isDistanceAnchorTrial = string.Equals(data.taskId, "distance_compression", StringComparison.OrdinalIgnoreCase) && ts.isAnchor;
+                    _currentTrueDistanceM = ts.trueDistanceM;
                 }
 
                 _awaitingInputSinceRealtime = Time.realtimeSinceStartup;
@@ -247,11 +259,17 @@ namespace VRPerception.UI
             if (trialLabel != null) trialLabel.text = $"试次: {_trialId}";
             if (errorHint != null) errorHint.text = string.Empty;
             if (motionGateHint != null) motionGateHint.text = string.Empty;
+            if (submitButton != null) submitButton.interactable = true;
+            if (skipButton != null) skipButton.gameObject.SetActive(!_isDistanceAnchorTrial);
+            SetSubmitButtonText(_isDistanceAnchorTrial ? "继续" : null);
 
-            // 设置任务提示文本：优先使用自定义提示，否则使用默认提示
             if (taskPromptText != null)
             {
-                if (!string.IsNullOrWhiteSpace(customPrompt))
+                if (isDistance && _isDistanceAnchorTrial)
+                {
+                    taskPromptText.text = $"校准试次：当前目标物体的真实距离为 {_currentTrueDistanceM:0.##} 米。\n请观察并记住该距离感，然后点击继续。";
+                }
+                else if (!string.IsNullOrWhiteSpace(customPrompt))
                 {
                     taskPromptText.text = customPrompt;
                 }
@@ -285,7 +303,7 @@ namespace VRPerception.UI
                 }
             }
 
-            if (distanceGroup != null) distanceGroup.SetActive(isDistance);
+            if (distanceGroup != null) distanceGroup.SetActive(isDistance && !_isDistanceAnchorTrial);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(isSizeBias);
             if (roughnessGroup != null) roughnessGroup.SetActive(isRoughness);
             if (isColor)
@@ -295,13 +313,16 @@ namespace VRPerception.UI
             if (colorGroup != null) colorGroup.SetActive(isColor);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(isSizeBias || isNumerosity);
 
-            if (isDistance && distanceInput != null)
+            if (isDistance && !_isDistanceAnchorTrial && distanceInput != null)
             {
                 distanceInput.text = "10.0";
                 distanceInput.contentType = TMP_InputField.ContentType.DecimalNumber;
+                distanceInput.keyboardType = TouchScreenKeyboardType.DecimalPad;
+                distanceInput.lineType = TMP_InputField.LineType.SingleLine;
             }
 
             if (confidenceSlider != null) confidenceSlider.gameObject.SetActive(false);
+            if (confidenceRatingGroup != null) confidenceRatingGroup.SetActive(!_isDistanceAnchorTrial);
             SetConfidenceRating(DefaultConfidenceRating);
 
             if (isRoughness)
@@ -367,8 +388,7 @@ namespace VRPerception.UI
             {
                 if (distanceGroup != null && distanceGroup.activeSelf && distanceInput != null)
                 {
-                    distanceInput.Select();
-                    distanceInput.ActivateInputField();
+                    OpenSoftKeyboardForInput(distanceInput, TouchScreenKeyboardType.DecimalPad);
                 }
                 else if (sizeBiasGroup != null && sizeBiasGroup.activeSelf && optionAToggle != null)
                 {
@@ -379,6 +399,8 @@ namespace VRPerception.UI
 
         private void Update()
         {
+            UpdateSoftKeyboardInput();
+
             if (!_awaitingInput) return;
 
             if (roughnessGroup != null && roughnessGroup.activeSelf)
@@ -432,6 +454,8 @@ namespace VRPerception.UI
 
         private void HideDialog()
         {
+            CloseSoftKeyboard();
+
             if (dialogRoot != null) dialogRoot.SetActive(false);
             if (backdrop != null) backdrop.SetActive(false);
 
@@ -440,6 +464,9 @@ namespace VRPerception.UI
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(false);
             if (roughnessGroup != null) roughnessGroup.SetActive(false);
             if (colorGroup != null) colorGroup.SetActive(false);
+            if (skipButton != null) skipButton.gameObject.SetActive(true);
+            if (confidenceRatingGroup != null) confidenceRatingGroup.SetActive(true);
+            SetSubmitButtonText(null);
         }
 
         private void HookUIEvents(bool bind)
@@ -455,6 +482,7 @@ namespace VRPerception.UI
                 if (colorRSlider != null) colorRSlider.onValueChanged.AddListener(OnColorSliderChanged);
                 if (colorGSlider != null) colorGSlider.onValueChanged.AddListener(OnColorSliderChanged);
                 if (colorBSlider != null) colorBSlider.onValueChanged.AddListener(OnColorSliderChanged);
+                if (distanceInput != null) distanceInput.onSelect.AddListener(OnDistanceInputSelected);
                 if (submitButton != null) submitButton.onClick.AddListener(SubmitCurrent);
                 if (skipButton != null) skipButton.onClick.AddListener(SkipCurrent);
             }
@@ -469,6 +497,7 @@ namespace VRPerception.UI
                 if (colorRSlider != null) colorRSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
                 if (colorGSlider != null) colorGSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
                 if (colorBSlider != null) colorBSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
+                if (distanceInput != null) distanceInput.onSelect.RemoveListener(OnDistanceInputSelected);
                 if (submitButton != null) submitButton.onClick.RemoveListener(SubmitCurrent);
                 if (skipButton != null) skipButton.onClick.RemoveListener(SkipCurrent);
             }
@@ -479,6 +508,83 @@ namespace VRPerception.UI
         private void OnConfidence3Changed(bool isOn) { if (isOn && !_syncingConfidenceToggles) SetConfidenceRating(3); }
         private void OnConfidence4Changed(bool isOn) { if (isOn && !_syncingConfidenceToggles) SetConfidenceRating(4); }
         private void OnConfidence5Changed(bool isOn) { if (isOn && !_syncingConfidenceToggles) SetConfidenceRating(5); }
+
+        private void OnDistanceInputSelected(string _)
+        {
+            if (_isDistanceAnchorTrial) return;
+            if (distanceGroup != null && distanceGroup.activeSelf && distanceInput != null)
+                OpenSoftKeyboardForInput(distanceInput, TouchScreenKeyboardType.DecimalPad);
+        }
+
+        private void OpenSoftKeyboardForInput(TMP_InputField input, TouchScreenKeyboardType keyboardType)
+        {
+            if (input == null || _openingSoftKeyboard) return;
+
+            _openingSoftKeyboard = true;
+            try
+            {
+                _activeSoftKeyboardInput = input;
+                input.Select();
+                input.ActivateInputField();
+
+#if UNITY_ANDROID || UNITY_IOS
+                if (TouchScreenKeyboard.isSupported)
+                    _softKeyboard = TouchScreenKeyboard.Open(input.text ?? string.Empty, keyboardType, false, false, false, false);
+#endif
+            }
+            finally
+            {
+                _openingSoftKeyboard = false;
+            }
+        }
+
+        private void UpdateSoftKeyboardInput()
+        {
+            if (_softKeyboard == null || _activeSoftKeyboardInput == null) return;
+
+            _activeSoftKeyboardInput.text = _softKeyboard.text;
+
+            if (_softKeyboard.status == TouchScreenKeyboard.Status.Done ||
+                _softKeyboard.status == TouchScreenKeyboard.Status.Canceled)
+            {
+                _activeSoftKeyboardInput.DeactivateInputField();
+                _activeSoftKeyboardInput = null;
+                _softKeyboard = null;
+            }
+        }
+
+        private void CloseSoftKeyboard()
+        {
+            if (_softKeyboard != null)
+            {
+                _softKeyboard.active = false;
+                _softKeyboard = null;
+            }
+
+            if (_activeSoftKeyboardInput != null)
+            {
+                _activeSoftKeyboardInput.DeactivateInputField();
+                _activeSoftKeyboardInput = null;
+            }
+        }
+
+        private void SetSubmitButtonText(string overrideText)
+        {
+            if (submitButton == null) return;
+
+            if (_submitButtonText == null)
+                _submitButtonText = submitButton.GetComponentInChildren<TMP_Text>(true);
+
+            if (_submitButtonText == null) return;
+
+            if (!_submitButtonDefaultTextCaptured)
+            {
+                _submitButtonDefaultText = _submitButtonText.text;
+                _submitButtonDefaultTextCaptured = true;
+            }
+
+            _submitButtonText.text = string.IsNullOrEmpty(overrideText) ? _submitButtonDefaultText : overrideText;
+        }
 
         private void SetConfidenceRating(int rating)
         {
@@ -725,6 +831,11 @@ namespace VRPerception.UI
             }
             catch { }
 
+            if (_isDistanceAnchorTrial)
+            {
+                PublishDistanceAnchorAcknowledgement(_currentTrueDistanceM, reactionMs);
+            }
+            else
             if (distanceGroup != null && distanceGroup.activeSelf)
             {
                 float distance = 0f;
@@ -831,6 +942,22 @@ namespace VRPerception.UI
                 confidence = confidence,
                 latencyMs = reactionMs,
                 answer = new DistanceAnswer { distance_m = distance, confidence = confidence }
+            };
+
+            PublishResponse(response);
+        }
+
+        private void PublishDistanceAnchorAcknowledgement(float distance, long reactionMs)
+        {
+            var response = new LLMResponse
+            {
+                type = "inference",
+                taskId = _taskId,
+                trialId = _trialId,
+                providerId = "human",
+                confidence = 1f,
+                latencyMs = reactionMs,
+                answer = new DistanceAnswer { acknowledged_distance_m = distance, confidence = 1f }
             };
 
             PublishResponse(response);
@@ -963,6 +1090,7 @@ namespace VRPerception.UI
         private class DistanceAnswer
         {
             public float distance_m;
+            public float acknowledged_distance_m;
             public float confidence;
         }
 

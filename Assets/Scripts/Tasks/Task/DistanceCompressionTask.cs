@@ -28,7 +28,7 @@ namespace VRPerception.Tasks
         private Vector3 _referenceOrigin;
         private Vector3 _referenceForward;
         private float _referenceEyeY;
-        
+
         public DistanceCompressionTask(TaskRunnerContext ctx)
         {
             _ctx = ctx;
@@ -269,6 +269,17 @@ namespace VRPerception.Tasks
                 {
                     predicted = d2;
                 }
+            }
+
+            if (trial != null && trial.isAnchor)
+            {
+                if (!float.IsNaN(predicted))
+                {
+                    eval.predictedDistanceM = predicted;
+                }
+
+                eval.success = true;
+                return eval;
             }
 
             if (!float.IsNaN(predicted))
