@@ -35,6 +35,13 @@ namespace VRPerception.UI
         [SerializeField] private TMP_Text trialLabel;
         [SerializeField] private TMP_Text taskPromptText;
         [SerializeField] private Slider confidenceSlider;
+        [SerializeField] private GameObject confidenceRatingGroup;
+        [SerializeField] private ToggleGroup confidenceToggleGroup;
+        [SerializeField] private Toggle confidence1Toggle;
+        [SerializeField] private Toggle confidence2Toggle;
+        [SerializeField] private Toggle confidence3Toggle;
+        [SerializeField] private Toggle confidence4Toggle;
+        [SerializeField] private Toggle confidence5Toggle;
         [SerializeField] private TMP_Text confidenceValueText;
         [SerializeField] private Button submitButton;
         [SerializeField] private Button skipButton;
@@ -77,8 +84,6 @@ namespace VRPerception.UI
         [SerializeField] private bool autoFocusInput = true;
         [Tooltip("提交失败时的提示文本（可选）")]
         [SerializeField] private TMP_Text errorHint;
-        [Tooltip("勾选后，仅在 color_constancy_adjustment 任务中显示该面板。")]
-        [SerializeField] private bool onlyShowForColorConstancyAdjustment = false;
 
         [Header("Rendering Settings")]
         [Tooltip("Canvas 排序顺序，数值越大越靠前（建议 100+ 确保在所有 3D 物体前面）")]
@@ -91,6 +96,9 @@ namespace VRPerception.UI
         private int _trialId = -1;
         private float _awaitingInputSinceRealtime;
         private Coroutine _ensureSubscribeRoutine;
+        private const int DefaultConfidenceRating = 3;
+        private int _confidenceRating = DefaultConfidenceRating;
+        private bool _syncingConfidenceToggles;
 
         private Canvas _canvas;
 
@@ -131,8 +139,8 @@ namespace VRPerception.UI
                 eventBus = EventBusManager.Instance;
 
             HideDialog();
+            SetConfidenceRating(DefaultConfidenceRating);
             HookUIEvents(true);
-            UpdateConfidenceLabel(confidenceSlider != null ? confidenceSlider.value : 0.9f);
         }
 
         private void OnEnable()
@@ -204,13 +212,6 @@ namespace VRPerception.UI
 
             if (data.state == TrialLifecycleState.WaitingForInput)
             {
-                if (!ShouldShowForTask(data.taskId))
-                {
-                    _awaitingInput = false;
-                    HideDialog();
-                    return;
-                }
-
                 _awaitingInput = true;
                 _taskId = data.taskId;
                 _trialId = data.trialId;
@@ -232,13 +233,6 @@ namespace VRPerception.UI
                 _awaitingInput = false;
                 HideDialog();
             }
-        }
-
-        private bool ShouldShowForTask(string taskId)
-        {
-            if (!onlyShowForColorConstancyAdjustment) return true;
-
-            return string.Equals(taskId, "color_constancy_adjustment", StringComparison.OrdinalIgnoreCase);
         }
 
         private void PrepareDialogForTask(string taskId, string customPrompt = null)
@@ -307,12 +301,8 @@ namespace VRPerception.UI
                 distanceInput.contentType = TMP_InputField.ContentType.DecimalNumber;
             }
 
-            if (confidenceSlider != null)
-            {
-                confidenceSlider.value = 0.9f;
-                UpdateConfidenceLabel(confidenceSlider.value);
-                confidenceSlider.wholeNumbers = false;
-            }
+            if (confidenceSlider != null) confidenceSlider.gameObject.SetActive(false);
+            SetConfidenceRating(DefaultConfidenceRating);
 
             if (isRoughness)
             {
@@ -456,7 +446,11 @@ namespace VRPerception.UI
         {
             if (bind)
             {
-                if (confidenceSlider != null) confidenceSlider.onValueChanged.AddListener(UpdateConfidenceLabel);
+                if (confidence1Toggle != null) confidence1Toggle.onValueChanged.AddListener(OnConfidence1Changed);
+                if (confidence2Toggle != null) confidence2Toggle.onValueChanged.AddListener(OnConfidence2Changed);
+                if (confidence3Toggle != null) confidence3Toggle.onValueChanged.AddListener(OnConfidence3Changed);
+                if (confidence4Toggle != null) confidence4Toggle.onValueChanged.AddListener(OnConfidence4Changed);
+                if (confidence5Toggle != null) confidence5Toggle.onValueChanged.AddListener(OnConfidence5Changed);
                 if (roughnessSlider != null) roughnessSlider.onValueChanged.AddListener(UpdateRoughnessLabel);
                 if (colorRSlider != null) colorRSlider.onValueChanged.AddListener(OnColorSliderChanged);
                 if (colorGSlider != null) colorGSlider.onValueChanged.AddListener(OnColorSliderChanged);
@@ -466,7 +460,11 @@ namespace VRPerception.UI
             }
             else
             {
-                if (confidenceSlider != null) confidenceSlider.onValueChanged.RemoveListener(UpdateConfidenceLabel);
+                if (confidence1Toggle != null) confidence1Toggle.onValueChanged.RemoveListener(OnConfidence1Changed);
+                if (confidence2Toggle != null) confidence2Toggle.onValueChanged.RemoveListener(OnConfidence2Changed);
+                if (confidence3Toggle != null) confidence3Toggle.onValueChanged.RemoveListener(OnConfidence3Changed);
+                if (confidence4Toggle != null) confidence4Toggle.onValueChanged.RemoveListener(OnConfidence4Changed);
+                if (confidence5Toggle != null) confidence5Toggle.onValueChanged.RemoveListener(OnConfidence5Changed);
                 if (roughnessSlider != null) roughnessSlider.onValueChanged.RemoveListener(UpdateRoughnessLabel);
                 if (colorRSlider != null) colorRSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
                 if (colorGSlider != null) colorGSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
@@ -476,10 +474,50 @@ namespace VRPerception.UI
             }
         }
 
-        private void UpdateConfidenceLabel(float value)
+        private void OnConfidence1Changed(bool isOn) { if (isOn && !_syncingConfidenceToggles) SetConfidenceRating(1); }
+        private void OnConfidence2Changed(bool isOn) { if (isOn && !_syncingConfidenceToggles) SetConfidenceRating(2); }
+        private void OnConfidence3Changed(bool isOn) { if (isOn && !_syncingConfidenceToggles) SetConfidenceRating(3); }
+        private void OnConfidence4Changed(bool isOn) { if (isOn && !_syncingConfidenceToggles) SetConfidenceRating(4); }
+        private void OnConfidence5Changed(bool isOn) { if (isOn && !_syncingConfidenceToggles) SetConfidenceRating(5); }
+
+        private void SetConfidenceRating(int rating)
+        {
+            _confidenceRating = Mathf.Clamp(rating, 1, 5);
+            SyncConfidenceToggles();
+            UpdateConfidenceLabel();
+        }
+
+        private float GetConfidenceValue()
+        {
+            return Mathf.Clamp01(_confidenceRating / 5f);
+        }
+
+        private void UpdateConfidenceLabel()
         {
             if (confidenceValueText != null)
-                confidenceValueText.text = $"置信度: {value:F2}";
+                confidenceValueText.text = $"置信度: {_confidenceRating}/5";
+        }
+
+        private void SyncConfidenceToggles()
+        {
+            _syncingConfidenceToggles = true;
+
+            if (confidenceToggleGroup != null)
+            {
+                if (confidence1Toggle != null) confidence1Toggle.group = confidenceToggleGroup;
+                if (confidence2Toggle != null) confidence2Toggle.group = confidenceToggleGroup;
+                if (confidence3Toggle != null) confidence3Toggle.group = confidenceToggleGroup;
+                if (confidence4Toggle != null) confidence4Toggle.group = confidenceToggleGroup;
+                if (confidence5Toggle != null) confidence5Toggle.group = confidenceToggleGroup;
+            }
+
+            if (confidence1Toggle != null) confidence1Toggle.isOn = _confidenceRating == 1;
+            if (confidence2Toggle != null) confidence2Toggle.isOn = _confidenceRating == 2;
+            if (confidence3Toggle != null) confidence3Toggle.isOn = _confidenceRating == 3;
+            if (confidence4Toggle != null) confidence4Toggle.isOn = _confidenceRating == 4;
+            if (confidence5Toggle != null) confidence5Toggle.isOn = _confidenceRating == 5;
+
+            _syncingConfidenceToggles = false;
         }
 
         private void UpdateRoughnessLabel(float value)
@@ -679,7 +717,7 @@ namespace VRPerception.UI
                 return;
             }
 
-            float confidence = confidenceSlider != null ? Mathf.Clamp01(confidenceSlider.value) : 0.9f;
+            float confidence = GetConfidenceValue();
             long reactionMs = 0;
             try
             {
