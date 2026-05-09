@@ -56,6 +56,12 @@ namespace VRPerception.UI
         [SerializeField] private Toggle optionBToggle;
         [SerializeField] private ToggleGroup sizeToggleGroup;
 
+        [Header("Depth JND")]
+        [SerializeField] private GameObject depthJndGroup;
+        [SerializeField] private Toggle depthJndLeftToggle;
+        [SerializeField] private Toggle depthJndRightToggle;
+        [SerializeField] private ToggleGroup depthJndToggleGroup;
+
         [Header("Material Roughness")]
         [SerializeField] private GameObject roughnessGroup;
         [SerializeField] private Slider roughnessSlider;
@@ -254,13 +260,14 @@ namespace VRPerception.UI
             bool isRoughness = !string.IsNullOrWhiteSpace(taskId) && taskId.StartsWith("material_roughness", StringComparison.OrdinalIgnoreCase);
             bool isColor = string.Equals(taskId, "color_constancy_adjustment", StringComparison.OrdinalIgnoreCase);
             bool isNumerosity = string.Equals(taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase);
+            bool isDepthJnd = string.Equals(taskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase);
 
             if (taskLabel != null) taskLabel.text = $"任务: {taskId}";
             if (trialLabel != null) trialLabel.text = $"试次: {_trialId}";
             if (errorHint != null) errorHint.text = string.Empty;
             if (motionGateHint != null) motionGateHint.text = string.Empty;
             if (submitButton != null) submitButton.interactable = true;
-            if (skipButton != null) skipButton.gameObject.SetActive(!_isDistanceAnchorTrial);
+            if (skipButton != null) skipButton.gameObject.SetActive(!_isDistanceAnchorTrial && !isDepthJnd);
             SetSubmitButtonText(_isDistanceAnchorTrial ? "继续" : null);
 
             if (taskPromptText != null)
@@ -268,6 +275,10 @@ namespace VRPerception.UI
                 if (isDistance && _isDistanceAnchorTrial)
                 {
                     taskPromptText.text = $"校准试次：当前目标物体的真实距离为 {_currentTrueDistanceM:0.##} 米。\n请观察并记住该距离感，然后点击继续。";
+                }
+                else if (isDepthJnd)
+                {
+                    taskPromptText.text = "请选择看起来更近的物体，并设置您的置信度。";
                 }
                 else if (!string.IsNullOrWhiteSpace(customPrompt))
                 {
@@ -305,6 +316,7 @@ namespace VRPerception.UI
 
             if (distanceGroup != null) distanceGroup.SetActive(isDistance && !_isDistanceAnchorTrial);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(isSizeBias);
+            if (depthJndGroup != null) depthJndGroup.SetActive(isDepthJnd);
             if (roughnessGroup != null) roughnessGroup.SetActive(isRoughness);
             if (isColor)
             {
@@ -371,6 +383,14 @@ namespace VRPerception.UI
                     if (optionBToggle != null) optionBToggle.isOn = false;
                 }
             }
+            else if (isDepthJnd && depthJndToggleGroup != null)
+            {
+                if (depthJndLeftToggle != null)
+                {
+                    depthJndLeftToggle.isOn = true;
+                    if (depthJndRightToggle != null) depthJndRightToggle.isOn = false;
+                }
+            }
         }
 
         private void ShowDialog()
@@ -393,6 +413,10 @@ namespace VRPerception.UI
                 else if (sizeBiasGroup != null && sizeBiasGroup.activeSelf && optionAToggle != null)
                 {
                     optionAToggle.Select();
+                }
+                else if (depthJndGroup != null && depthJndGroup.activeSelf && depthJndLeftToggle != null)
+                {
+                    depthJndLeftToggle.Select();
                 }
             }
         }
@@ -462,6 +486,7 @@ namespace VRPerception.UI
             // 显式隐藏任务特定的 Group，确保它们不会残留
             if (distanceGroup != null) distanceGroup.SetActive(false);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(false);
+            if (depthJndGroup != null) depthJndGroup.SetActive(false);
             if (roughnessGroup != null) roughnessGroup.SetActive(false);
             if (colorGroup != null) colorGroup.SetActive(false);
             if (skipButton != null) skipButton.gameObject.SetActive(true);
@@ -862,6 +887,11 @@ namespace VRPerception.UI
                     PublishSize(larger, confidence, reactionMs);
                 }
             }
+            else if (depthJndGroup != null && depthJndGroup.activeSelf)
+            {
+                string closer = depthJndLeftToggle != null && depthJndLeftToggle.isOn ? "A" : "B";
+                PublishDepthJnd(closer, confidence, reactionMs);
+            }
             else if (roughnessGroup != null && roughnessGroup.activeSelf)
             {
                 if (_requireHeadMotion && enableHeadMotionGate && submitButton != null && !submitButton.interactable)
@@ -974,6 +1004,22 @@ namespace VRPerception.UI
                 confidence = confidence,
                 latencyMs = reactionMs,
                 answer = new SizeAnswer { larger = larger, confidence = confidence }
+            };
+
+            PublishResponse(response);
+        }
+
+        private void PublishDepthJnd(string closer, float confidence, long reactionMs)
+        {
+            var response = new LLMResponse
+            {
+                type = "inference",
+                taskId = _taskId,
+                trialId = _trialId,
+                providerId = "human",
+                confidence = confidence,
+                latencyMs = reactionMs,
+                answer = new DepthJndAnswer { closer = closer, confidence = confidence }
             };
 
             PublishResponse(response);
@@ -1098,6 +1144,13 @@ namespace VRPerception.UI
         private class SizeAnswer
         {
             public string larger;
+            public float confidence;
+        }
+
+        [Serializable]
+        private class DepthJndAnswer
+        {
+            public string closer;
             public float confidence;
         }
 

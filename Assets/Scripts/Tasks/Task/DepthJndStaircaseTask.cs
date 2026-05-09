@@ -96,6 +96,8 @@ namespace VRPerception.Tasks
         public Task OnRunEndAsync(CancellationToken ct)
         {
             _referenceFrameInitialized = false;
+            // 防止最后一个试次（或取消路径）在 OnAfterTrialAsync 重新开启的遮罩滞留
+            TrySetTrialBlackoutVisible(false);
             return Task.CompletedTask;
         }
 
@@ -196,7 +198,10 @@ namespace VRPerception.Tasks
 
         public async Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
         {
-            if (IsHumanMode())
+            // 若 Run 正在结束（Evaluate 触发 CancelRun 或外部取消），不再开启过渡黑屏，
+            // 避免后续没有任何 TrialLifecycle 事件来隐藏遮罩导致黑屏滞留。
+            bool runEnding = _endRequested || ct.IsCancellationRequested;
+            if (IsHumanMode() && !runEnding)
             {
                 TrySetTrialBlackoutVisible(true);
             }
