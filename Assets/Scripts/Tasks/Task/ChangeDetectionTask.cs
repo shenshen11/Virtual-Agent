@@ -26,6 +26,7 @@ namespace VRPerception.Tasks
         private const int SceneRenderSettleDelayMs = 50;
         private const int SceneAExposureMs = 2000;
         private const int MaskDurationMs = 500;
+        private const int SceneBExposureMs = 2000;
         private const float ClusterDistance = 9f;
         private const int ChangeCategoryRepetitions = 5;
         private const int GridRows = 4;
@@ -222,7 +223,7 @@ namespace VRPerception.Tasks
             bool keepMaskedBetweenTrials = response == null ||
                                            string.Equals(response.providerId, "human", StringComparison.OrdinalIgnoreCase);
 
-            if (keepMaskedBetweenTrials)
+            if (keepMaskedBetweenTrials && !string.Equals(response?.providerId, "human", StringComparison.OrdinalIgnoreCase))
             {
                 ShowBlackout();
             }
@@ -239,7 +240,7 @@ namespace VRPerception.Tasks
 
         public async Task RunTemporalHumanPresentationAsync(TrialSpec trial, CancellationToken ct)
         {
-            await RunTemporalSequenceAsync(trial, captureFrames: false, ct);
+            await RunTemporalHumanBlankSequenceAsync(trial, ct);
         }
 
         public async Task<LLMResponse> RunTemporalMllmInferenceAsync(TrialSpec trial, CancellationToken ct)
@@ -383,6 +384,40 @@ namespace VRPerception.Tasks
             }
 
             return frames;
+        }
+
+        private async Task RunTemporalHumanBlankSequenceAsync(TrialSpec trial, CancellationToken ct)
+        {
+            TryBindHelpers();
+            PrepareSceneAnchor();
+            HideBlackout();
+
+            await WaitForRenderingComplete(ct);
+
+            if (SceneAExposureMs > 0)
+            {
+                await Task.Delay(SceneAExposureMs, ct);
+            }
+
+            ClearChangeScene();
+            await WaitForRenderingComplete(ct);
+
+            if (MaskDurationMs > 0)
+            {
+                await Task.Delay(MaskDurationMs, ct);
+            }
+
+            ApplySceneB(trial);
+            RecordTrialObjects(trial, "after");
+            await WaitForRenderingComplete(ct);
+
+            if (SceneBExposureMs > 0)
+            {
+                await Task.Delay(SceneBExposureMs, ct);
+            }
+
+            ClearChangeScene();
+            await WaitForRenderingComplete(ct);
         }
 
         private async Task<FrameCapturedEventData> CaptureCurrentFrameAsync(TrialSpec trial, string label, CancellationToken ct)

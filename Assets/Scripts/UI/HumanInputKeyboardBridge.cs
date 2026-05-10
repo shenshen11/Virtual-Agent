@@ -379,6 +379,11 @@ namespace VRPerception.UI
                 return null;
             }
 
+            if (string.Equals(taskId, "change_detection", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
             if (!allowGenericAnswer)
             {
                 return null;

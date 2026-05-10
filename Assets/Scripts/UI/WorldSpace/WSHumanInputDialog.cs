@@ -71,6 +71,15 @@ namespace VRPerception.UI
         [SerializeField] private GameObject visualCrowdingGroup;
         [SerializeField] private TMP_InputField visualCrowdingLetterInput;
 
+        [Header("Change Detection")]
+        [SerializeField] private GameObject changeDetectionGroup;
+        [SerializeField] private Toggle changeNoToggle;
+        [SerializeField] private Toggle changeAppearanceToggle;
+        [SerializeField] private Toggle changeDisappearanceToggle;
+        [SerializeField] private Toggle changeReplacementToggle;
+        [SerializeField] private Toggle changeMovementToggle;
+        [SerializeField] private ToggleGroup changeDetectionToggleGroup;
+
         [Header("Depth JND")]
         [SerializeField] private GameObject depthJndGroup;
         [SerializeField] private Toggle depthJndLeftToggle;
@@ -285,6 +294,7 @@ namespace VRPerception.UI
             bool isDepthJnd = string.Equals(taskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase);
             bool isVisualWeight = string.Equals(taskId, "visual_weight_judgment", StringComparison.OrdinalIgnoreCase);
             bool isVisualCrowding = string.Equals(taskId, "visual_crowding", StringComparison.OrdinalIgnoreCase);
+            bool isChangeDetection = string.Equals(taskId, "change_detection", StringComparison.OrdinalIgnoreCase);
 
             if (taskLabel != null) taskLabel.text = $"任务: {taskId}";
             if (trialLabel != null) trialLabel.text = $"试次: {_trialId}";
@@ -315,6 +325,12 @@ namespace VRPerception.UI
                     taskPromptText.text = !string.IsNullOrWhiteSpace(customPrompt)
                         ? customPrompt
                         : "字母已隐藏。请回忆右侧外周显示的字母；若为 5 字母串，请输入中间目标字母，并设置置信度。";
+                }
+                else if (isChangeDetection)
+                {
+                    taskPromptText.text = !string.IsNullOrWhiteSpace(customPrompt)
+                        ? customPrompt
+                        : "请判断前后两个场景是否发生变化，选择变化类型，并设置置信度。";
                 }
                 else if (!string.IsNullOrWhiteSpace(customPrompt))
                 {
@@ -356,6 +372,7 @@ namespace VRPerception.UI
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(isSizeBias);
             if (visualWeightGroup != null) visualWeightGroup.SetActive(isVisualWeight);
             if (visualCrowdingGroup != null) visualCrowdingGroup.SetActive(isVisualCrowding);
+            if (changeDetectionGroup != null) changeDetectionGroup.SetActive(isChangeDetection);
             if (depthJndGroup != null) depthJndGroup.SetActive(isDepthJnd);
             if (roughnessGroup != null) roughnessGroup.SetActive(isRoughness);
             if (isColor)
@@ -434,6 +451,10 @@ namespace VRPerception.UI
             {
                 ConfigureSizeChoiceToggles(false);
             }
+            else if (isChangeDetection)
+            {
+                ConfigureChangeDetectionToggles();
+            }
             else if (isDepthJnd && depthJndToggleGroup != null)
             {
                 if (depthJndLeftToggle != null)
@@ -466,6 +487,34 @@ namespace VRPerception.UI
             if (optionBToggle != null) optionBToggle.SetIsOnWithoutNotify(false);
         }
 
+        private void ConfigureChangeDetectionToggles()
+        {
+            if (changeDetectionToggleGroup == null && changeDetectionGroup != null)
+            {
+                changeDetectionToggleGroup = changeDetectionGroup.GetComponentInChildren<ToggleGroup>(true);
+                if (changeDetectionToggleGroup == null)
+                {
+                    changeDetectionToggleGroup = changeDetectionGroup.AddComponent<ToggleGroup>();
+                }
+            }
+
+            if (changeDetectionToggleGroup != null)
+            {
+                changeDetectionToggleGroup.allowSwitchOff = true;
+                if (changeNoToggle != null) changeNoToggle.group = changeDetectionToggleGroup;
+                if (changeAppearanceToggle != null) changeAppearanceToggle.group = changeDetectionToggleGroup;
+                if (changeDisappearanceToggle != null) changeDisappearanceToggle.group = changeDetectionToggleGroup;
+                if (changeReplacementToggle != null) changeReplacementToggle.group = changeDetectionToggleGroup;
+                if (changeMovementToggle != null) changeMovementToggle.group = changeDetectionToggleGroup;
+            }
+
+            if (changeNoToggle != null) changeNoToggle.SetIsOnWithoutNotify(false);
+            if (changeAppearanceToggle != null) changeAppearanceToggle.SetIsOnWithoutNotify(false);
+            if (changeDisappearanceToggle != null) changeDisappearanceToggle.SetIsOnWithoutNotify(false);
+            if (changeReplacementToggle != null) changeReplacementToggle.SetIsOnWithoutNotify(false);
+            if (changeMovementToggle != null) changeMovementToggle.SetIsOnWithoutNotify(false);
+        }
+
         private void ShowDialog()
         {
             if (dialogRoot != null) dialogRoot.SetActive(true);
@@ -494,6 +543,10 @@ namespace VRPerception.UI
                 else if (visualCrowdingGroup != null && visualCrowdingGroup.activeSelf && visualCrowdingLetterInput != null)
                 {
                     OpenSoftKeyboardForInput(visualCrowdingLetterInput, TouchScreenKeyboardType.Default);
+                }
+                else if (changeDetectionGroup != null && changeDetectionGroup.activeSelf && changeNoToggle != null)
+                {
+                    changeNoToggle.Select();
                 }
                 else if (depthJndGroup != null && depthJndGroup.activeSelf && depthJndLeftToggle != null)
                 {
@@ -568,6 +621,7 @@ namespace VRPerception.UI
             if (distanceGroup != null) distanceGroup.SetActive(false);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(false);
             if (visualCrowdingGroup != null) visualCrowdingGroup.SetActive(false);
+            if (changeDetectionGroup != null) changeDetectionGroup.SetActive(false);
             if (depthJndGroup != null) depthJndGroup.SetActive(false);
             if (roughnessGroup != null) roughnessGroup.SetActive(false);
             if (colorGroup != null) colorGroup.SetActive(false);
@@ -1009,6 +1063,16 @@ namespace VRPerception.UI
 
                 PublishVisualCrowding(letter, confidence, reactionMs);
             }
+            else if (changeDetectionGroup != null && changeDetectionGroup.activeSelf)
+            {
+                if (!TryGetChangeDetectionAnswer(out var changed, out var category))
+                {
+                    if (errorHint != null) errorHint.text = "请选择变化类型。";
+                    return;
+                }
+
+                PublishChangeDetection(changed, category, confidence, reactionMs);
+            }
             else if (depthJndGroup != null && depthJndGroup.activeSelf)
             {
                 string closer = depthJndLeftToggle != null && depthJndLeftToggle.isOn ? "A" : "B";
@@ -1162,6 +1226,48 @@ namespace VRPerception.UI
             return true;
         }
 
+        private bool TryGetChangeDetectionAnswer(out bool changed, out string category)
+        {
+            changed = false;
+            category = null;
+
+            if (changeNoToggle != null && changeNoToggle.isOn)
+            {
+                category = "none";
+                return true;
+            }
+
+            if (changeAppearanceToggle != null && changeAppearanceToggle.isOn)
+            {
+                changed = true;
+                category = "appearance";
+                return true;
+            }
+
+            if (changeDisappearanceToggle != null && changeDisappearanceToggle.isOn)
+            {
+                changed = true;
+                category = "disappearance";
+                return true;
+            }
+
+            if (changeReplacementToggle != null && changeReplacementToggle.isOn)
+            {
+                changed = true;
+                category = "replacement";
+                return true;
+            }
+
+            if (changeMovementToggle != null && changeMovementToggle.isOn)
+            {
+                changed = true;
+                category = "movement";
+                return true;
+            }
+
+            return false;
+        }
+
         private void PublishVisualWeight(string heavier, string[] evidenceCues, float confidence, long reactionMs)
         {
             var response = new LLMResponse
@@ -1189,6 +1295,22 @@ namespace VRPerception.UI
                 confidence = confidence,
                 latencyMs = reactionMs,
                 answer = new VisualCrowdingAnswer { letter = letter, confidence = confidence }
+            };
+
+            PublishResponse(response);
+        }
+
+        private void PublishChangeDetection(bool changed, string category, float confidence, long reactionMs)
+        {
+            var response = new LLMResponse
+            {
+                type = "inference",
+                taskId = _taskId,
+                trialId = _trialId,
+                providerId = "human",
+                confidence = confidence,
+                latencyMs = reactionMs,
+                answer = new ChangeDetectionAnswer { changed = changed, category = changed ? category : "none", confidence = confidence }
             };
 
             PublishResponse(response);
@@ -1344,6 +1466,14 @@ namespace VRPerception.UI
         private class VisualCrowdingAnswer
         {
             public string letter;
+            public float confidence;
+        }
+
+        [Serializable]
+        private class ChangeDetectionAnswer
+        {
+            public bool changed;
+            public string category;
             public float confidence;
         }
 
