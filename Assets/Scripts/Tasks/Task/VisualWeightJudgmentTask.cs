@@ -279,16 +279,19 @@ namespace VRPerception.Tasks
             };
 
             string predicted = null;
+            string evidenceCues = null;
             if (response != null && response.type == "inference")
             {
                 if (!TryExtractHeavier(response.answer, out predicted))
                     TryExtractHeavierFromText(response.explanation, out predicted);
+                if (!TryExtractEvidenceCues(response.answer, out evidenceCues))
+                    TryExtractEvidenceCuesFromString(response.explanation, out evidenceCues);
             }
 
             if (string.IsNullOrEmpty(predicted))
             {
                 eval.success = false;
-                eval.failureReason = "No heavier (A/B) found in model output";
+                eval.failureReason = "No heavier (A/B/C) found in model output";
                 return eval;
             }
 
@@ -301,6 +304,7 @@ namespace VRPerception.Tasks
             }
 
             eval.predictedHeavierSide = predicted;
+            eval.visualWeightEvidenceCues = evidenceCues;
             eval.success = true;
 
             var type = trial.weightTrialType ?? "";
@@ -331,7 +335,8 @@ namespace VRPerception.Tasks
                     scaleA = trial.scaleA,
                     scaleB = trial.scaleB,
                     trialType = trial.weightTrialType,
-                    cueFollowed = eval.cueFollowed
+                    cueFollowed = eval.cueFollowed,
+                    evidenceCues = eval.visualWeightEvidenceCues
                 };
                 eval.extraJson = JsonUtility.ToJson(extra);
             }
@@ -350,7 +355,7 @@ namespace VRPerception.Tasks
             if (string.IsNullOrWhiteSpace(value)) return false;
 
             var normalized = value.Trim().Trim('"').ToUpperInvariant();
-            if (normalized != "A" && normalized != "B") return false;
+            if (normalized != "A" && normalized != "B" && normalized != "C") return false;
 
             side = normalized;
             return true;
@@ -400,6 +405,11 @@ namespace VRPerception.Tasks
 
         private static string DetermineFollowedCue(TrialSpec trial, string predicted)
         {
+            if (string.Equals(predicted, "C", StringComparison.OrdinalIgnoreCase))
+            {
+                return "equal";
+            }
+
             var (sizeCue, matCue, lightCue) = GetCueDirections(trial);
 
             bool followedSize = sizeCue != null && string.Equals(predicted, sizeCue, StringComparison.OrdinalIgnoreCase);
@@ -515,6 +525,29 @@ namespace VRPerception.Tasks
         // ════════════════════════════════════════════
         //  Response parsing
         // ════════════════════════════════════════════
+        private static bool TryGetMemberValue(object source, string name, out object value)
+        {
+            value = null;
+            if (source == null) return false;
+
+            var t = source.GetType();
+            var prop = t.GetProperty(name, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+            if (prop != null)
+            {
+                value = prop.GetValue(source);
+                return value != null;
+            }
+
+            var field = t.GetField(name, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+            if (field != null)
+            {
+                value = field.GetValue(source);
+                return value != null;
+            }
+
+            return false;
+        }
+
         private static bool TryExtractHeavier(object answer, out string heavier)
         {
             heavier = null;
@@ -535,6 +568,13 @@ namespace VRPerception.Tasks
                 {
                     var v = field.GetValue(answer)?.ToString();
                     if (TryNormalizeSide(v, out heavier)) return true;
+                }
+
+                if (TryGetMemberValue(answer, "response", out var nestedResponse) &&
+                    !ReferenceEquals(nestedResponse, answer) &&
+                    TryExtractHeavier(nestedResponse, out heavier))
+                {
+                    return true;
                 }
 
                 var rawJsonProp = t.GetProperty("raw_json", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
@@ -582,21 +622,21 @@ namespace VRPerception.Tasks
             var trimmed = text.Trim();
             if (TryNormalizeSide(trimmed, out heavier)) return true;
 
-            var directJson = Regex.Match(trimmed, @"\bheavier\b\s*[:=]\s*[\""']?([AB])[\""']?", RegexOptions.IgnoreCase);
+            var directJson = Regex.Match(trimmed, @"\bheavier\b\s*[:=]\s*[\""']?([ABC])[\""']?", RegexOptions.IgnoreCase);
             if (directJson.Success)
             {
                 heavier = directJson.Groups[1].Value.ToUpperInvariant();
                 return true;
             }
 
-            var nestedJson = Regex.Match(trimmed, @"\bresponse\b.*?\bheavier\b\s*[:=]\s*[\""']?([AB])[\""']?", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            var nestedJson = Regex.Match(trimmed, @"\bresponse\b.*?\bheavier\b\s*[:=]\s*[\""']?([ABC])[\""']?", RegexOptions.IgnoreCase | RegexOptions.Singleline);
             if (nestedJson.Success)
             {
                 heavier = nestedJson.Groups[1].Value.ToUpperInvariant();
                 return true;
             }
 
-            var sentence = Regex.Match(trimmed, @"\bheavier\b[^AB\r\n]*\b([AB])\b", RegexOptions.IgnoreCase);
+            var sentence = Regex.Match(trimmed, @"\bheavier\b[^ABC\r\n]*\b([ABC])\b", RegexOptions.IgnoreCase);
             if (sentence.Success)
             {
                 heavier = sentence.Groups[1].Value.ToUpperInvariant();
@@ -604,6 +644,98 @@ namespace VRPerception.Tasks
             }
 
             return false;
+        }
+
+        private static bool TryExtractEvidenceCues(object answer, out string evidenceCues)
+        {
+            evidenceCues = null;
+            if (answer == null) return false;
+
+            try
+            {
+                var t = answer.GetType();
+                var prop = t.GetProperty("evidence_cues", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+                if (prop != null && TryNormalizeEvidenceCues(prop.GetValue(answer), out evidenceCues)) return true;
+
+                prop = t.GetProperty("evidenceCues", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+                if (prop != null && TryNormalizeEvidenceCues(prop.GetValue(answer), out evidenceCues)) return true;
+
+                var field = t.GetField("evidence_cues", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+                if (field != null && TryNormalizeEvidenceCues(field.GetValue(answer), out evidenceCues)) return true;
+
+                field = t.GetField("evidenceCues", BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+                if (field != null && TryNormalizeEvidenceCues(field.GetValue(answer), out evidenceCues)) return true;
+
+                if (TryGetMemberValue(answer, "response", out var nestedResponse) &&
+                    !ReferenceEquals(nestedResponse, answer) &&
+                    TryExtractEvidenceCues(nestedResponse, out evidenceCues))
+                {
+                    return true;
+                }
+
+                var json = JsonUtility.ToJson(answer);
+                if (!string.IsNullOrEmpty(json))
+                {
+                    var parsed = JsonUtility.FromJson<WeightAnswer>(json);
+                    if (parsed != null && TryNormalizeEvidenceCues(parsed.evidence_cues, out evidenceCues)) return true;
+                    if (TryExtractEvidenceCuesFromString(json, out evidenceCues)) return true;
+                }
+            }
+            catch { /* ignore */ }
+
+            try { return TryExtractEvidenceCuesFromString(answer.ToString(), out evidenceCues); }
+            catch { return false; }
+        }
+
+        private static bool TryExtractEvidenceCuesFromString(string text, out string evidenceCues)
+        {
+            evidenceCues = null;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+
+            var matches = Regex.Matches(text, @"\b(material|size|lightness)\b", RegexOptions.IgnoreCase);
+            if (matches.Count == 0) return false;
+
+            var cues = new List<string>(3);
+            foreach (Match match in matches)
+            {
+                var cue = match.Groups[1].Value.ToLowerInvariant();
+                if (!cues.Contains(cue)) cues.Add(cue);
+            }
+
+            evidenceCues = string.Join("|", cues);
+            return !string.IsNullOrEmpty(evidenceCues);
+        }
+
+        private static bool TryNormalizeEvidenceCues(object raw, out string evidenceCues)
+        {
+            evidenceCues = null;
+            if (raw == null) return false;
+
+            var cues = new List<string>(3);
+
+            if (raw is string[] array)
+            {
+                foreach (var item in array) AddEvidenceCue(cues, item);
+            }
+            else if (raw is IEnumerable<string> enumerable)
+            {
+                foreach (var item in enumerable) AddEvidenceCue(cues, item);
+            }
+            else
+            {
+                return TryExtractEvidenceCuesFromString(raw.ToString(), out evidenceCues);
+            }
+
+            evidenceCues = string.Join("|", cues);
+            return cues.Count > 0;
+        }
+
+        private static void AddEvidenceCue(List<string> cues, string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return;
+            var cue = raw.Trim().Trim('"').ToLowerInvariant();
+            if (cue != "material" && cue != "size" && cue != "lightness") return;
+            if (!cues.Contains(cue)) cues.Add(cue);
         }
 
         // ════════════════════════════════════════════
@@ -743,6 +875,7 @@ namespace VRPerception.Tasks
         private class WeightAnswer
         {
             public string heavier;
+            public string[] evidence_cues;
             public float confidence;
         }
 
@@ -757,6 +890,7 @@ namespace VRPerception.Tasks
             public float scaleB;
             public string trialType;
             public string cueFollowed;
+            public string evidenceCues;
         }
     }
 }

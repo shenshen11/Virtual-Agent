@@ -236,7 +236,8 @@ namespace VRPerception.Tasks
         public bool isLetterCorrect;              // 是否识别正确
 
         // Visual Weight Judgment 指标
-        public string predictedHeavierSide;       // "A"|"B"
+        public string predictedHeavierSide;       // "A"|"B"|"C"
+        public string visualWeightEvidenceCues;
         public string weightTrialType;            // conflict_*/congruent/size_only/material_only/lightness_only
         public string cueFollowed;                // 冲突题中跟随的线索组合
 

@@ -201,7 +201,7 @@ namespace VRPerception.Perception
         {
             return "You are a participant in a controlled VR visual weight judgment experiment. " +
                    "Answer ONLY using information visible in the provided image(s). Do not use outside knowledge or assume real physical masses. " +
-                   "Judge which visible cube, A on the left or B on the right, looks heavier from appearance cues such as size, surface material appearance, and lightness. " +
+                   "Judge which visible cube, A on the left or B on the right, looks heavier from appearance cues such as size, surface material appearance, and lightness. Use C only if the two cubes look equally heavy or there is no clear heavier side. " +
                    "Judge only the immediate visual impression of heaviness; do not infer real-world density or actual mass from object categories. " +
                    "You may receive one or more snapshots captured within the same trial from slightly different viewpoints. Use all provided snapshots jointly as evidence. Do NOT output any action_plan or tool calls. " +
                    "Output must be STRICT JSON and must match the exact schema given in the user message. " +
@@ -307,10 +307,10 @@ namespace VRPerception.Perception
             var id = trialId.ToString(CultureInfo.InvariantCulture);
             return
                 $"Trial metadata: {{\"task\":\"visual_weight_judgment\",\"trial_id\":\"{id}\",\"phase\":\"main\"}}\n" +
-                "Two cubes are shown at the same time. Object A is on the left and object B is on the right. Decide which cube looks heavier based only on visible surface appearance.\n" +
+                "Two cubes are shown at the same time. Object A is on the left and object B is on the right. Decide which cube looks heavier based only on visible surface appearance. Use C if they look equally heavy or there is no clear heavier cube.\n" +
                 "If multiple snapshots are provided, treat them as complementary views of the same trial and return one final judgment.\n" +
-                $"Output STRICT JSON exactly in this schema: {{\"task\":\"visual_weight_judgment\",\"trial_id\":\"{id}\",\"response\":{{\"heavier\":\"<A_or_B>\"}},\"confidence\":<0.0-1.0>,\"valid\":true}}. " +
-                "Set response.heavier to exactly \"A\" or \"B\". Do not output \"|\" or placeholder text.";
+                $"Output STRICT JSON exactly in this schema: {{\"task\":\"visual_weight_judgment\",\"trial_id\":\"{id}\",\"response\":{{\"heavier\":\"<A_or_B_or_C>\",\"evidence_cues\":[\"<material_or_size_or_lightness>\"]}},\"confidence\":<0.0-1.0>,\"valid\":true}}. " +
+                "Set response.heavier to exactly \"A\", \"B\", or \"C\". response.evidence_cues must be a non-empty array using only \"material\", \"size\", and \"lightness\". Do not output \"|\" or placeholder text.";
         }
 
         public static string BuildChangeDetectionPrompt(int trialId)

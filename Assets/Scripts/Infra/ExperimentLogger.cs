@@ -446,11 +446,12 @@ namespace VRPerception.Infra
                         // - materialVariantA/materialVariantB: A/B 的具体材质变体（Metal/Stone/Wood/Fabric × Dark/Light）
                         // - scaleA/scaleB: A/B 的统一缩放
                         // - trialType: conflict_*/congruent/size_only/material_only/lightness_only
-                        // - predictedHeavierSide: 模型/人类判断更重的一侧（A/B）
+                        // - predictedHeavierSide: 模型/人类判断更重的一侧（A/B/C）
+                        // - evidenceCues: 判断依据（material|size|lightness，可多选）
                         // - cueFollowed: 冲突题中跟随的线索组合；非冲突题通常为空
                         // - isCorrect: 一致题/控制题正确性；冲突题无客观正确，默认为 0
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,environment,fovDeg,descA,descB,materialVariantA,materialVariantB,scaleA,scaleB,trialType,predictedHeavierSide,cueFollowed,isCorrect,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,environment,fovDeg,descA,descB,materialVariantA,materialVariantB,scaleA,scaleB,trialType,predictedHeavierSide,evidenceCues,cueFollowed,isCorrect,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -471,6 +472,7 @@ namespace VRPerception.Infra
                                 t.scaleB.ToString("F3"),
                                 Escape(t.weightTrialType),
                                 Escape(e.predictedHeavierSide),
+                                Escape(e.visualWeightEvidenceCues),
                                 Escape(e.cueFollowed),
                                 e.isCorrect ? "1" : "0",
                                 e.confidence.ToString("F3"),

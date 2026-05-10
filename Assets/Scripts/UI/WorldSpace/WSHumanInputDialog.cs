@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.XR.Interaction.Toolkit.UI;
@@ -55,6 +56,16 @@ namespace VRPerception.UI
         [SerializeField] private Toggle optionAToggle;
         [SerializeField] private Toggle optionBToggle;
         [SerializeField] private ToggleGroup sizeToggleGroup;
+
+        [Header("Visual Weight Judgment")]
+        [SerializeField] private GameObject visualWeightGroup;
+        [SerializeField] private Toggle visualWeightAToggle;
+        [SerializeField] private Toggle visualWeightBToggle;
+        [SerializeField] private Toggle visualWeightCToggle;
+        [SerializeField] private ToggleGroup visualWeightToggleGroup;
+        [SerializeField] private Toggle visualWeightMaterialToggle;
+        [SerializeField] private Toggle visualWeightSizeToggle;
+        [SerializeField] private Toggle visualWeightLightnessToggle;
 
         [Header("Depth JND")]
         [SerializeField] private GameObject depthJndGroup;
@@ -268,6 +279,7 @@ namespace VRPerception.UI
             bool isColor = string.Equals(taskId, "color_constancy_adjustment", StringComparison.OrdinalIgnoreCase);
             bool isNumerosity = string.Equals(taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase);
             bool isDepthJnd = string.Equals(taskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase);
+            bool isVisualWeight = string.Equals(taskId, "visual_weight_judgment", StringComparison.OrdinalIgnoreCase);
 
             if (taskLabel != null) taskLabel.text = $"任务: {taskId}";
             if (trialLabel != null) trialLabel.text = $"试次: {_trialId}";
@@ -288,6 +300,10 @@ namespace VRPerception.UI
                 else if (isDepthJnd)
                 {
                     taskPromptText.text = "请选择看起来更近的物体，并设置您的置信度。";
+                }
+                else if (isVisualWeight)
+                {
+                    taskPromptText.text = string.Empty;
                 }
                 else if (!string.IsNullOrWhiteSpace(customPrompt))
                 {
@@ -327,6 +343,7 @@ namespace VRPerception.UI
 
             if (distanceGroup != null) distanceGroup.SetActive(isDistance && !_isDistanceAnchorTrial);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(isSizeBias);
+            if (visualWeightGroup != null) visualWeightGroup.SetActive(isVisualWeight);
             if (depthJndGroup != null) depthJndGroup.SetActive(isDepthJnd);
             if (roughnessGroup != null) roughnessGroup.SetActive(isRoughness);
             if (isColor)
@@ -385,6 +402,18 @@ namespace VRPerception.UI
                     if (optionBToggle != null) optionBToggle.isOn = false;
                 }
             }
+            else if (isVisualWeight && visualWeightToggleGroup != null)
+            {
+                if (visualWeightAToggle != null)
+                {
+                    visualWeightAToggle.isOn = true;
+                    if (visualWeightBToggle != null) visualWeightBToggle.isOn = false;
+                    if (visualWeightCToggle != null) visualWeightCToggle.isOn = false;
+                }
+                if (visualWeightMaterialToggle != null) visualWeightMaterialToggle.isOn = false;
+                if (visualWeightSizeToggle != null) visualWeightSizeToggle.isOn = false;
+                if (visualWeightLightnessToggle != null) visualWeightLightnessToggle.isOn = false;
+            }
             else if (isNumerosity && sizeToggleGroup != null)
             {
                 // 复用 A/B 两个选项作为 Left/Right
@@ -424,6 +453,10 @@ namespace VRPerception.UI
                 else if (sizeBiasGroup != null && sizeBiasGroup.activeSelf && optionAToggle != null)
                 {
                     optionAToggle.Select();
+                }
+                else if (visualWeightGroup != null && visualWeightGroup.activeSelf && visualWeightAToggle != null)
+                {
+                    visualWeightAToggle.Select();
                 }
                 else if (depthJndGroup != null && depthJndGroup.activeSelf && depthJndLeftToggle != null)
                 {
@@ -898,6 +931,17 @@ namespace VRPerception.UI
                     PublishSize(larger, confidence, reactionMs);
                 }
             }
+            else if (visualWeightGroup != null && visualWeightGroup.activeSelf)
+            {
+                string[] evidenceCues = GetVisualWeightEvidenceCues();
+                if (evidenceCues.Length == 0)
+                {
+                    if (errorHint != null) errorHint.text = "请至少选择一个判断依据。";
+                    return;
+                }
+
+                PublishVisualWeight(GetVisualWeightChoice(), evidenceCues, confidence, reactionMs);
+            }
             else if (depthJndGroup != null && depthJndGroup.activeSelf)
             {
                 string closer = depthJndLeftToggle != null && depthJndLeftToggle.isOn ? "A" : "B";
@@ -1015,6 +1059,38 @@ namespace VRPerception.UI
                 confidence = confidence,
                 latencyMs = reactionMs,
                 answer = new SizeAnswer { larger = larger, confidence = confidence }
+            };
+
+            PublishResponse(response);
+        }
+
+        private string GetVisualWeightChoice()
+        {
+            if (visualWeightBToggle != null && visualWeightBToggle.isOn) return "B";
+            if (visualWeightCToggle != null && visualWeightCToggle.isOn) return "C";
+            return "A";
+        }
+
+        private string[] GetVisualWeightEvidenceCues()
+        {
+            var cues = new List<string>(3);
+            if (visualWeightMaterialToggle != null && visualWeightMaterialToggle.isOn) cues.Add("material");
+            if (visualWeightSizeToggle != null && visualWeightSizeToggle.isOn) cues.Add("size");
+            if (visualWeightLightnessToggle != null && visualWeightLightnessToggle.isOn) cues.Add("lightness");
+            return cues.ToArray();
+        }
+
+        private void PublishVisualWeight(string heavier, string[] evidenceCues, float confidence, long reactionMs)
+        {
+            var response = new LLMResponse
+            {
+                type = "inference",
+                taskId = _taskId,
+                trialId = _trialId,
+                providerId = "human",
+                confidence = confidence,
+                latencyMs = reactionMs,
+                answer = new VisualWeightAnswer { heavier = heavier, evidence_cues = evidenceCues, confidence = confidence }
             };
 
             PublishResponse(response);
@@ -1155,6 +1231,14 @@ namespace VRPerception.UI
         private class SizeAnswer
         {
             public string larger;
+            public float confidence;
+        }
+
+        [Serializable]
+        private class VisualWeightAnswer
+        {
+            public string heavier;
+            public string[] evidence_cues;
             public float confidence;
         }
 
