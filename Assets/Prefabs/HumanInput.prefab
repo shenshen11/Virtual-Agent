@@ -562,7 +562,7 @@ GameObject:
   - component: {fileID: 8106983905166341677}
   - component: {fileID: 4875149162066501794}
   m_Layer: 5
-  m_Name: InputField (TMP)
+  m_Name: DistanceMetersInput
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1788,7 +1788,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Enter text...
+  m_text: "\u8F93\u5165\u8DDD\u79BB\uFF08\u7C73\uFF09"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: b17077d477ed47a4dbcb474f0798ae90, type: 2}
   m_sharedMaterial: {fileID: 7772457649113381259, guid: b17077d477ed47a4dbcb474f0798ae90, type: 2}
@@ -5798,7 +5798,7 @@ GameObject:
   - component: {fileID: 5043792959248483528}
   - component: {fileID: 6351964279553824177}
   m_Layer: 5
-  m_Name: Distance
+  m_Name: DistanceEstimationGroup
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

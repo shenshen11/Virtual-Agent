@@ -46,7 +46,7 @@ namespace VRPerception.UI
         [SerializeField] private Button submitButton;
         [SerializeField] private Button skipButton;
 
-        [Header("Distance Compression")]
+        [Header("Distance Estimation")]
         [SerializeField] private GameObject distanceGroup;
         [SerializeField] private TMP_InputField distanceInput;
 
@@ -236,7 +236,7 @@ namespace VRPerception.UI
                 if (data.trialConfig is TrialSpec ts)
                 {
                     _requireHeadMotion = ts.requireHeadMotion;
-                    _isDistanceAnchorTrial = string.Equals(data.taskId, "distance_compression", StringComparison.OrdinalIgnoreCase) && ts.isAnchor;
+                    _isDistanceAnchorTrial = IsDistanceEstimationTask(data.taskId) && ts.isAnchor;
                     _currentTrueDistanceM = ts.trueDistanceM;
                 }
 
@@ -253,9 +253,16 @@ namespace VRPerception.UI
             }
         }
 
+        private static bool IsDistanceEstimationTask(string taskId)
+        {
+            return string.Equals(taskId, "distance_compression", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(taskId, "horizon_cue_integration", StringComparison.OrdinalIgnoreCase);
+        }
+
         private void PrepareDialogForTask(string taskId, string customPrompt = null)
         {
-            bool isDistance = string.Equals(taskId, "distance_compression", StringComparison.OrdinalIgnoreCase);
+            bool isDistance = IsDistanceEstimationTask(taskId);
+            bool isHorizonCue = string.Equals(taskId, "horizon_cue_integration", StringComparison.OrdinalIgnoreCase);
             bool isSizeBias = string.Equals(taskId, "semantic_size_bias", StringComparison.OrdinalIgnoreCase);
             bool isRoughness = !string.IsNullOrWhiteSpace(taskId) && taskId.StartsWith("material_roughness", StringComparison.OrdinalIgnoreCase);
             bool isColor = string.Equals(taskId, "color_constancy_adjustment", StringComparison.OrdinalIgnoreCase);
@@ -274,7 +281,9 @@ namespace VRPerception.UI
             {
                 if (isDistance && _isDistanceAnchorTrial)
                 {
-                    taskPromptText.text = $"校准试次：当前目标物体的真实距离为 {_currentTrueDistanceM:0.##} 米。\n请观察并记住该距离感，然后点击继续。";
+                    taskPromptText.text = isHorizonCue
+                        ? $"校准试次：当前红色球体的真实距离为 {_currentTrueDistanceM:0.##} 米。\n请观察并记住该距离感，然后点击继续。"
+                        : $"校准试次：当前目标物体的真实距离为 {_currentTrueDistanceM:0.##} 米。\n请观察并记住该距离感，然后点击继续。";
                 }
                 else if (isDepthJnd)
                 {
@@ -286,7 +295,9 @@ namespace VRPerception.UI
                 }
                 else if (isDistance)
                 {
-                    taskPromptText.text = "请估计您与目标物体之间的距离（单位：米），并设置您的置信度。";
+                    taskPromptText.text = isHorizonCue
+                        ? "请估计正前方红色球体与您的距离（单位：米），并设置您的置信度。"
+                        : "请估计您与目标物体之间的距离（单位：米），并设置您的置信度。";
                 }
                 else if (isSizeBias)
                 {
