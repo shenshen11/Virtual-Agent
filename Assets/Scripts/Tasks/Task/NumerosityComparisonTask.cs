@@ -162,6 +162,7 @@ namespace VRPerception.Tasks
         public async Task OnBeforeTrialAsync(TrialSpec trial, CancellationToken ct)
         {
             HideTrialBlackoutOverlay();
+
             await Task.Yield();
             ct.ThrowIfCancellationRequested();
 
@@ -175,13 +176,25 @@ namespace VRPerception.Tasks
             await Task.Yield();
         }
 
+        public async Task RunFixedExposureHumanPresentationAsync(TrialSpec trial, CancellationToken ct)
+        {
+            int exposureMs = Mathf.Clamp(Mathf.RoundToInt(trial != null && trial.exposureDurationMs > 0 ? trial.exposureDurationMs : 1000f), 0, 60000);
+            if (exposureMs > 0)
+            {
+                await Task.Delay(exposureMs, ct);
+            }
+
+            ct.ThrowIfCancellationRequested();
+            HideStimuli();
+            HideTrialBlackoutOverlay();
+            await Task.Yield();
+        }
+
         public Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
         {
             _snapshotObjectCounts.Clear();
             _activeTrialId = -1;
-            ClearParticles(_leftPs);
-            ClearParticles(_rightPs);
-            if (_divider != null) _divider.SetActive(false);
+            HideStimuli();
             return Task.CompletedTask;
         }
 
@@ -438,7 +451,7 @@ namespace VRPerception.Tasks
                 }
 
                 if (overlay == null) return;
-                overlay.Hide();
+                overlay.ResetBlackout();
             }
             catch { }
         }
@@ -612,6 +625,13 @@ namespace VRPerception.Tasks
             if (ps == null) return;
             ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             ps.Clear(true);
+        }
+
+        private void HideStimuli()
+        {
+            ClearParticles(_leftPs);
+            ClearParticles(_rightPs);
+            if (_divider != null) _divider.SetActive(false);
         }
 
         private static bool TryExtractMoreSide(object answer, out string moreSide)

@@ -344,20 +344,9 @@ namespace VRPerception.Tasks
                             {
                                 await temporalTask.RunTemporalHumanPresentationAsync(trial, _runCts.Token);
                             }
-                            else if (string.Equals(trial.taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
+                            else if (_task is NumerosityComparisonTask numerosityTask)
                             {
-                                // Numerosity: 先短时展示刺激，再进入“黑屏后作答”阶段
-                                int exposureMs = Mathf.Clamp(Mathf.RoundToInt(trial.exposureDurationMs > 0 ? trial.exposureDurationMs : 500f), 0, 60000);
-                                bool maskArmed = TryArmTrialBlackoutOverlay(exposureMs);
-                                if (exposureMs > 0)
-                                {
-                                    await Task.Delay(exposureMs, _runCts.Token);
-                                }
-
-                                if (!maskArmed)
-                                {
-                                    Debug.LogWarning("[TaskRunner] TrialBlackoutOverlay not found/disabled; human numerosity trial will not be masked.");
-                                }
+                                await numerosityTask.RunFixedExposureHumanPresentationAsync(trial, _runCts.Token);
                             }
 
                             PublishTrialState(trial, TrialLifecycleState.WaitingForInput, trialConfig: trial, error: "Waiting for input");

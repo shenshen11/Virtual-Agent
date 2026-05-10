@@ -374,6 +374,11 @@ namespace VRPerception.UI
                 };
             }
 
+            if (string.Equals(taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
             if (!allowGenericAnswer)
             {
                 return null;

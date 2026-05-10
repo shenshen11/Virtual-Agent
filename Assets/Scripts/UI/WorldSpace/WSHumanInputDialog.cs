@@ -113,8 +113,8 @@ namespace VRPerception.UI
         private int _trialId = -1;
         private float _awaitingInputSinceRealtime;
         private Coroutine _ensureSubscribeRoutine;
-        private const int DefaultConfidenceRating = 3;
-        private int _confidenceRating = DefaultConfidenceRating;
+        private const int NoConfidenceRating = 0;
+        private int _confidenceRating = NoConfidenceRating;
         private bool _syncingConfidenceToggles;
         private bool _isDistanceAnchorTrial;
         private float _currentTrueDistanceM;
@@ -164,7 +164,7 @@ namespace VRPerception.UI
                 eventBus = EventBusManager.Instance;
 
             HideDialog();
-            SetConfidenceRating(DefaultConfidenceRating);
+            ClearConfidenceRating();
             HookUIEvents(true);
         }
 
@@ -333,7 +333,7 @@ namespace VRPerception.UI
                 }
                 else if (isNumerosity)
                 {
-                    taskPromptText.text = "请在黑屏后判断哪一侧点更多，并设置置信度（A=Left，B=Right）。";
+                    taskPromptText.text = "请选择哪一侧点更多，并设置置信度（A=左侧 Left，B=右侧 Right）。";
                 }
                 else
                 {
@@ -363,7 +363,7 @@ namespace VRPerception.UI
 
             if (confidenceSlider != null) confidenceSlider.gameObject.SetActive(false);
             if (confidenceRatingGroup != null) confidenceRatingGroup.SetActive(!_isDistanceAnchorTrial);
-            SetConfidenceRating(DefaultConfidenceRating);
+            ClearConfidenceRating();
 
             if (isRoughness)
             {
@@ -393,14 +393,9 @@ namespace VRPerception.UI
                 UpdateColorPreviewAndTarget();
             }
 
-            if (isSizeBias && sizeToggleGroup != null)
+            if (isSizeBias)
             {
-                // 默认选中 A
-                if (optionAToggle != null)
-                {
-                    optionAToggle.isOn = true;
-                    if (optionBToggle != null) optionBToggle.isOn = false;
-                }
+                ConfigureSizeChoiceToggles(true);
             }
             else if (isVisualWeight && visualWeightToggleGroup != null)
             {
@@ -414,14 +409,9 @@ namespace VRPerception.UI
                 if (visualWeightSizeToggle != null) visualWeightSizeToggle.isOn = false;
                 if (visualWeightLightnessToggle != null) visualWeightLightnessToggle.isOn = false;
             }
-            else if (isNumerosity && sizeToggleGroup != null)
+            else if (isNumerosity)
             {
-                // 复用 A/B 两个选项作为 Left/Right
-                if (optionAToggle != null)
-                {
-                    optionAToggle.isOn = true;
-                    if (optionBToggle != null) optionBToggle.isOn = false;
-                }
+                ConfigureSizeChoiceToggles(false);
             }
             else if (isDepthJnd && depthJndToggleGroup != null)
             {
@@ -431,6 +421,28 @@ namespace VRPerception.UI
                     if (depthJndRightToggle != null) depthJndRightToggle.isOn = false;
                 }
             }
+        }
+
+        private void ConfigureSizeChoiceToggles(bool selectDefault)
+        {
+            if (sizeToggleGroup == null && sizeBiasGroup != null)
+            {
+                sizeToggleGroup = sizeBiasGroup.GetComponentInChildren<ToggleGroup>(true);
+                if (sizeToggleGroup == null)
+                {
+                    sizeToggleGroup = sizeBiasGroup.AddComponent<ToggleGroup>();
+                }
+            }
+
+            if (sizeToggleGroup != null)
+            {
+                sizeToggleGroup.allowSwitchOff = !selectDefault;
+                if (optionAToggle != null) optionAToggle.group = sizeToggleGroup;
+                if (optionBToggle != null) optionBToggle.group = sizeToggleGroup;
+            }
+
+            if (optionAToggle != null) optionAToggle.SetIsOnWithoutNotify(selectDefault);
+            if (optionBToggle != null) optionBToggle.SetIsOnWithoutNotify(false);
         }
 
         private void ShowDialog()
@@ -662,15 +674,23 @@ namespace VRPerception.UI
             UpdateConfidenceLabel();
         }
 
+        private void ClearConfidenceRating()
+        {
+            _confidenceRating = NoConfidenceRating;
+            SyncConfidenceToggles();
+            UpdateConfidenceLabel();
+        }
+
         private float GetConfidenceValue()
         {
+            if (_confidenceRating <= NoConfidenceRating) return 0f;
             return Mathf.Clamp01(_confidenceRating / 5f);
         }
 
         private void UpdateConfidenceLabel()
         {
             if (confidenceValueText != null)
-                confidenceValueText.text = $"置信度: {_confidenceRating}/5";
+                confidenceValueText.text = _confidenceRating <= NoConfidenceRating ? "置信度: 未选择" : $"置信度: {_confidenceRating}/5";
         }
 
         private void SyncConfidenceToggles()
@@ -679,6 +699,7 @@ namespace VRPerception.UI
 
             if (confidenceToggleGroup != null)
             {
+                confidenceToggleGroup.allowSwitchOff = true;
                 if (confidence1Toggle != null) confidence1Toggle.group = confidenceToggleGroup;
                 if (confidence2Toggle != null) confidence2Toggle.group = confidenceToggleGroup;
                 if (confidence3Toggle != null) confidence3Toggle.group = confidenceToggleGroup;
@@ -686,11 +707,11 @@ namespace VRPerception.UI
                 if (confidence5Toggle != null) confidence5Toggle.group = confidenceToggleGroup;
             }
 
-            if (confidence1Toggle != null) confidence1Toggle.isOn = _confidenceRating == 1;
-            if (confidence2Toggle != null) confidence2Toggle.isOn = _confidenceRating == 2;
-            if (confidence3Toggle != null) confidence3Toggle.isOn = _confidenceRating == 3;
-            if (confidence4Toggle != null) confidence4Toggle.isOn = _confidenceRating == 4;
-            if (confidence5Toggle != null) confidence5Toggle.isOn = _confidenceRating == 5;
+            if (confidence1Toggle != null) confidence1Toggle.SetIsOnWithoutNotify(_confidenceRating == 1);
+            if (confidence2Toggle != null) confidence2Toggle.SetIsOnWithoutNotify(_confidenceRating == 2);
+            if (confidence3Toggle != null) confidence3Toggle.SetIsOnWithoutNotify(_confidenceRating == 3);
+            if (confidence4Toggle != null) confidence4Toggle.SetIsOnWithoutNotify(_confidenceRating == 4);
+            if (confidence5Toggle != null) confidence5Toggle.SetIsOnWithoutNotify(_confidenceRating == 5);
 
             _syncingConfidenceToggles = false;
         }
@@ -922,7 +943,9 @@ namespace VRPerception.UI
             {
                 if (string.Equals(_taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase))
                 {
-                    string moreSide = optionAToggle != null && optionAToggle.isOn ? "left" : "right";
+                    string moreSide = string.Empty;
+                    if (optionAToggle != null && optionAToggle.isOn) moreSide = "left";
+                    else if (optionBToggle != null && optionBToggle.isOn) moreSide = "right";
                     PublishNumerosity(moreSide, confidence, reactionMs);
                 }
                 else
