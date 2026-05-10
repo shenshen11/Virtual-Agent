@@ -460,6 +460,11 @@ namespace VRPerception.Tasks
             _runCts?.Cancel();
         }
 
+        public void SetHumanTelemetryTrialSubphase(string subphase)
+        {
+            humanTelemetryRecorder?.SetTrialSubphase(subphase);
+        }
+
         private CaptureMode ResolveCaptureMode()
         {
             return mllmCaptureMode switch

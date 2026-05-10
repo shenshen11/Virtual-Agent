@@ -208,6 +208,13 @@ namespace VRPerception.Tasks
             _activeSubphase = string.IsNullOrWhiteSpace(subphase) ? "reference_frame_calibration" : subphase.Trim();
         }
 
+        public void SetTrialSubphase(string subphase)
+        {
+            if (!_isRecording) return;
+            if (!string.Equals(_activePhase, "trial", StringComparison.OrdinalIgnoreCase)) return;
+            _activeSubphase = string.IsNullOrWhiteSpace(subphase) ? "stimulus" : subphase.Trim();
+        }
+
         private void StartRecording(string taskId, int trialId, string phase, string subphase = null)
         {
             if (_isRecording &&

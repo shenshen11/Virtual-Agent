@@ -391,6 +391,7 @@ namespace VRPerception.Tasks
             TryBindHelpers();
             PrepareSceneAnchor();
             HideBlackout();
+            _ctx?.runner?.SetHumanTelemetryTrialSubphase("scene_a");
 
             await WaitForRenderingComplete(ct);
 
@@ -400,6 +401,7 @@ namespace VRPerception.Tasks
             }
 
             ClearChangeScene();
+            _ctx?.runner?.SetHumanTelemetryTrialSubphase("blank");
             await WaitForRenderingComplete(ct);
 
             if (MaskDurationMs > 0)
@@ -408,6 +410,7 @@ namespace VRPerception.Tasks
             }
 
             ApplySceneB(trial);
+            _ctx?.runner?.SetHumanTelemetryTrialSubphase("scene_b");
             RecordTrialObjects(trial, "after");
             await WaitForRenderingComplete(ct);
 
@@ -417,6 +420,7 @@ namespace VRPerception.Tasks
             }
 
             ClearChangeScene();
+            _ctx?.runner?.SetHumanTelemetryTrialSubphase("post_scene_b_blank");
             await WaitForRenderingComplete(ct);
         }
 
