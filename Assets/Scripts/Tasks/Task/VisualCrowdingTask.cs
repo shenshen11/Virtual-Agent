@@ -46,10 +46,17 @@ namespace VRPerception.Tasks
 
         // 字母消除延迟（秒），注视点保留
         private const float LetterHideDelaySec = 3f;
+        private const float FixationPreparationDelaySec = 2f;
         private bool _referenceFrameInitialized;
         private Vector3 _referenceOrigin;
         private Vector3 _referenceForward;
         private float _referenceEyeY;
+        private bool _trialPlacementReady;
+        private Vector3 _trialOrigin;
+        private Vector3 _trialForward;
+        private Vector3 _trialRight;
+        private float _trialEyeY;
+        private float _trialDisplayDistance;
 
         public VisualCrowdingTask(TaskRunnerContext ctx)
         {
@@ -243,17 +250,48 @@ namespace VRPerception.Tasks
 
             // 注视点和字母位于同一显示平面，所有关键尺寸由视觉角换算。
             var displayDistance = trial.displayDistanceM > 0f ? trial.displayDistanceM : DisplayDistanceM;
+            _trialOrigin = origin;
+            _trialForward = forward;
+            _trialRight = right;
+            _trialEyeY = eyeY;
+            _trialDisplayDistance = displayDistance;
+            _trialPlacementReady = true;
 
             PlaceFixation(origin, forward, eyeY, displayDistance);
-            PlaceLetters(origin, forward, right, eyeY, displayDistance, trial);
+            if (!IsHumanMode())
+            {
+                PlaceLetters(origin, forward, right, eyeY, displayDistance, trial);
+            }
 
-            // Human 模式：等待 3s 后隐藏字母，注视点保留；
-            // OnBeforeTrialAsync 返回后 TaskRunner 才发布 WaitingForInput，保证字母消失在前
-            if (IsHumanMode())
+            await Task.Yield();
+        }
+
+        public async Task RunFixedExposureHumanPresentationAsync(TrialSpec trial, CancellationToken ct)
+        {
+            _ctx?.runner?.SetHumanTelemetryTrialSubphase("fixation_preparation");
+
+            if (FixationPreparationDelaySec > 0f)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(FixationPreparationDelaySec), ct);
+            }
+
+            ct.ThrowIfCancellationRequested();
+
+            if (_trialPlacementReady)
+            {
+                PlaceLetters(_trialOrigin, _trialForward, _trialRight, _trialEyeY, _trialDisplayDistance, trial);
+            }
+
+            _ctx?.runner?.SetHumanTelemetryTrialSubphase("letter_exposure");
+
+            if (LetterHideDelaySec > 0f)
             {
                 await Task.Delay(TimeSpan.FromSeconds(LetterHideDelaySec), ct);
-                HideLetters();
             }
+
+            ct.ThrowIfCancellationRequested();
+            HideLetters();
+            await Task.Yield();
         }
 
         /// <summary>
@@ -621,6 +659,7 @@ namespace VRPerception.Tasks
             _fixationRoot = null;
             _snapshotObjectCounts.Clear();
             _activeTrialId = -1;
+            _trialPlacementReady = false;
         }
 
         private void AttachSnapshotMarker(GameObject go, string kind, string role)

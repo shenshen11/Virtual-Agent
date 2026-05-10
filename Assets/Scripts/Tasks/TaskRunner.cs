@@ -348,6 +348,10 @@ namespace VRPerception.Tasks
                             {
                                 await numerosityTask.RunFixedExposureHumanPresentationAsync(trial, _runCts.Token);
                             }
+                            else if (_task is VisualCrowdingTask visualCrowdingTask)
+                            {
+                                await visualCrowdingTask.RunFixedExposureHumanPresentationAsync(trial, _runCts.Token);
+                            }
                             else if (RequiresManualHumanAnswerPhase(_task.TaskId))
                             {
                                 await WaitForHumanAnswerPhaseConfirmationAsync(trial, _runCts.Token);
