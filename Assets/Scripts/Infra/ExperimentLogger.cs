@@ -360,6 +360,7 @@ namespace VRPerception.Infra
                             if (r.taskId != "distance_compression") continue;
                             var t = r.trial;
                             var e = r.evaluation;
+                            var hasPrediction = e.success;
 
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
@@ -369,9 +370,9 @@ namespace VRPerception.Infra
                                 Escape(t.targetKind),
                                 t.isAnchor ? "true" : "false",
                                 t.trueDistanceM.ToString("F3"),
-                                e.predictedDistanceM.ToString("F3"),
-                                e.absError.ToString("F3"),
-                                e.relError.ToString("F3"),
+                                hasPrediction ? e.predictedDistanceM.ToString("F3") : "",
+                                hasPrediction ? e.absError.ToString("F3") : "",
+                                hasPrediction ? e.relError.ToString("F3") : "",
                                 e.confidence.ToString("F3"),
                                 Escape(e.providerId),
                                 e.latencyMs
@@ -404,6 +405,7 @@ namespace VRPerception.Infra
                             if (r.taskId != "visual_crowding") continue;
                             var t = r.trial;
                             var e = r.evaluation;
+                            var hasPrediction = e.success;
 
                             var flankers = t.flankerLetters != null && t.flankerLetters.Length > 0
                                 ? string.Join(" ", t.flankerLetters)
@@ -416,8 +418,8 @@ namespace VRPerception.Infra
                                 t.spacingDeg.ToString("F3"),
                                 Escape(t.targetLetter),
                                 Escape(flankers),
-                                Escape(e.predictedLetter),
-                                e.isLetterCorrect ? "1" : "0",
+                                hasPrediction ? Escape(e.predictedLetter) : "",
+                                hasPrediction ? (e.isLetterCorrect ? "1" : "0") : "",
                                 e.confidence.ToString("F3"),
                                 Escape(e.providerId),
                                 e.latencyMs,
@@ -458,6 +460,7 @@ namespace VRPerception.Infra
                             if (r.taskId != "visual_weight_judgment") continue;
                             var t = r.trial;
                             var e = r.evaluation;
+                            var hasPrediction = e.success;
 
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
@@ -471,10 +474,10 @@ namespace VRPerception.Infra
                                 t.scaleA.ToString("F3"),
                                 t.scaleB.ToString("F3"),
                                 Escape(t.weightTrialType),
-                                Escape(e.predictedHeavierSide),
-                                Escape(e.visualWeightEvidenceCues),
-                                Escape(e.cueFollowed),
-                                e.isCorrect ? "1" : "0",
+                                hasPrediction ? Escape(e.predictedHeavierSide) : "",
+                                hasPrediction ? Escape(e.visualWeightEvidenceCues) : "",
+                                hasPrediction ? Escape(e.cueFollowed) : "",
+                                hasPrediction ? (e.isCorrect ? "1" : "0") : "",
                                 e.confidence.ToString("F3"),
                                 Escape(e.providerId),
                                 e.latencyMs
@@ -513,6 +516,7 @@ namespace VRPerception.Infra
                             if (r.taskId != "depth_jnd_staircase") continue;
                             var t = r.trial;
                             var e = r.evaluation;
+                            var hasPrediction = e.success;
 
                             float depthA = t.depthA;
                             float depthB = t.depthB;
@@ -531,8 +535,8 @@ namespace VRPerception.Infra
                                 deltaM.ToString("F3"),
                                 baseDistanceM.ToString("F3"),
                                 Escape(e.trueCloser),
-                                Escape(e.predictedCloser),
-                                e.isCorrect ? "1" : "0",
+                                hasPrediction ? Escape(e.predictedCloser) : "",
+                                hasPrediction ? (e.isCorrect ? "1" : "0") : "",
                                 e.confidence.ToString("F3"),
                                 Escape(e.providerId),
                                 e.latencyMs,
@@ -571,6 +575,7 @@ namespace VRPerception.Infra
                             if (r.taskId != "horizon_cue_integration") continue;
                             var t = r.trial;
                             var e = r.evaluation;
+                            var hasPrediction = e.success;
 
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
@@ -580,9 +585,9 @@ namespace VRPerception.Infra
                                 t.horizonAngleDeg.ToString("F3"),
                                 t.repetitionIndex,
                                 t.sphereScreenY01.ToString("F3"),
-                                e.predictedDistanceM.ToString("F3"),
-                                e.absError.ToString("F3"),
-                                e.relError.ToString("F3"),
+                                hasPrediction ? e.predictedDistanceM.ToString("F3") : "",
+                                hasPrediction ? e.absError.ToString("F3") : "",
+                                hasPrediction ? e.relError.ToString("F3") : "",
                                 e.confidence.ToString("F3"),
                                 Escape(e.providerId),
                                 e.latencyMs
@@ -613,6 +618,7 @@ namespace VRPerception.Infra
                             if (r.taskId != "numerosity_comparison") continue;
                             var t = r.trial;
                             var e = r.evaluation;
+                            var hasPrediction = e.success;
 
                             // 兼容：部分 trial 可能复用 trueCount/targetCount 存左右数量
                             int left = t.leftCount > 0 ? t.leftCount : t.trueCount;
@@ -626,8 +632,8 @@ namespace VRPerception.Infra
                                 left,
                                 right,
                                  Escape(string.IsNullOrEmpty(e.trueMoreSide) ? t.trueMoreSide : e.trueMoreSide),
-                                 Escape(e.predictedMoreSide),
-                                 e.isMoreSideCorrect ? "1" : (e.isCorrect ? "1" : "0"),
+                                 hasPrediction ? Escape(e.predictedMoreSide) : "",
+                                 hasPrediction ? (e.isMoreSideCorrect ? "1" : (e.isCorrect ? "1" : "0")) : "",
                                  t.exposureDurationMs.ToString("F0"),
                                  t.dotRadius.ToString("F3"),
                                  e.confidence.ToString("F3"),
@@ -661,6 +667,7 @@ namespace VRPerception.Infra
                             var e = r.evaluation;
 
                             var trueChanged = e.trueChanged;
+                            var hasPrediction = e.success;
 
                             var trueCat = string.IsNullOrEmpty(e.trueChangeCategory) ? (t.changeCategory ?? "none") : e.trueChangeCategory;
 
@@ -671,9 +678,9 @@ namespace VRPerception.Infra
                                 t.fovDeg.ToString("F0"),
                                 trueChanged ? "1" : "0",
                                 Escape(trueCat),
-                                e.predictedChanged ? "1" : "0",
-                                Escape(string.IsNullOrEmpty(e.predictedChangeCategory) ? "none" : e.predictedChangeCategory),
-                                e.isCorrect ? "1" : "0",
+                                hasPrediction ? (e.predictedChanged ? "1" : "0") : "",
+                                hasPrediction ? Escape(string.IsNullOrEmpty(e.predictedChangeCategory) ? "none" : e.predictedChangeCategory) : "",
+                                hasPrediction ? (e.isCorrect ? "1" : "0") : "",
                                 e.confidence.ToString("F3"),
                                 Escape(e.providerId),
                                 e.latencyMs
@@ -706,6 +713,7 @@ namespace VRPerception.Infra
                             if (r.taskId == null || !r.taskId.StartsWith("material_roughness", StringComparison.OrdinalIgnoreCase)) continue;
                             var t = r.trial;
                             var e = r.evaluation;
+                            var hasPrediction = e.success;
 
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
@@ -714,9 +722,9 @@ namespace VRPerception.Infra
                                 t.fovDeg.ToString("F0"),
                                 t.roughness.ToString("F3"),
                                 t.requireHeadMotion ? "1" : "0",
-                                e.predictedRoughness.ToString("F3"),
-                                e.roughnessAbsError.ToString("F3"),
-                                e.roughnessSignedError.ToString("F3"),
+                                hasPrediction ? e.predictedRoughness.ToString("F3") : "",
+                                hasPrediction ? e.roughnessAbsError.ToString("F3") : "",
+                                hasPrediction ? e.roughnessSignedError.ToString("F3") : "",
                                 e.confidence.ToString("F3"),
                                 Escape(e.providerId),
                                 e.latencyMs
@@ -747,6 +755,7 @@ namespace VRPerception.Infra
                             if (r.taskId != "color_constancy_adjustment") continue;
                             var t = r.trial;
                             var e = r.evaluation;
+                            var hasPrediction = e.success;
 
                             // 从 extraJson 解析数据
                             string phase = "unknown";
@@ -782,10 +791,10 @@ namespace VRPerception.Infra
                                 t.trueR,
                                 t.trueG,
                                 t.trueB,
-                                Escape(predictedChoice),
-                                submittedR,
-                                submittedG,
-                                submittedB,
+                                hasPrediction ? Escape(predictedChoice) : "",
+                                hasPrediction && submittedR >= 0 ? submittedR.ToString() : "",
+                                hasPrediction && submittedG >= 0 ? submittedG.ToString() : "",
+                                hasPrediction && submittedB >= 0 ? submittedB.ToString() : "",
                                 e.confidence.ToString("F3"),
                                 Escape(e.providerId),
                                 e.latencyMs

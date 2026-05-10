@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 using UnityEngine.XR.Interaction.Toolkit.UI;
 using TMPro;
@@ -50,6 +51,8 @@ namespace VRPerception.UI
         [Header("Distance Estimation")]
         [SerializeField] private GameObject distanceGroup;
         [SerializeField] private TMP_InputField distanceInput;
+        [SerializeField] private GameObject distanceKeypadGroup;
+        [SerializeField] private Button[] distanceKeypadButtons;
 
         [Header("Semantic Size Bias")]
         [SerializeField] private GameObject sizeBiasGroup;
@@ -69,7 +72,8 @@ namespace VRPerception.UI
 
         [Header("Visual Crowding")]
         [SerializeField] private GameObject visualCrowdingGroup;
-        [SerializeField] private TMP_InputField visualCrowdingLetterInput;
+        [SerializeField] private ToggleGroup visualCrowdingLetterToggleGroup;
+        [SerializeField] private Toggle[] visualCrowdingLetterToggles;
 
         [Header("Change Detection")]
         [SerializeField] private GameObject changeDetectionGroup;
@@ -137,6 +141,7 @@ namespace VRPerception.UI
         private TMP_Text _submitButtonText;
         private string _submitButtonDefaultText;
         private bool _submitButtonDefaultTextCaptured;
+        private readonly Dictionary<Button, UnityAction> _distanceKeypadHandlers = new Dictionary<Button, UnityAction>();
 
         private Canvas _canvas;
 
@@ -324,7 +329,7 @@ namespace VRPerception.UI
                 {
                     taskPromptText.text = !string.IsNullOrWhiteSpace(customPrompt)
                         ? customPrompt
-                        : "字母已隐藏。请回忆右侧外周显示的字母；若为 5 字母串，请输入中间目标字母，并设置置信度。";
+                        : "字母已隐藏。请回忆右侧外周显示的字母；若为 5 字母串，请选择中间目标字母，并设置置信度。";
                 }
                 else if (isChangeDetection)
                 {
@@ -369,6 +374,7 @@ namespace VRPerception.UI
             }
 
             if (distanceGroup != null) distanceGroup.SetActive(isDistance && !_isDistanceAnchorTrial);
+            if (distanceKeypadGroup != null) distanceKeypadGroup.SetActive(isDistance && !_isDistanceAnchorTrial);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(isSizeBias);
             if (visualWeightGroup != null) visualWeightGroup.SetActive(isVisualWeight);
             if (visualCrowdingGroup != null) visualCrowdingGroup.SetActive(isVisualCrowding);
@@ -384,19 +390,16 @@ namespace VRPerception.UI
 
             if (isDistance && !_isDistanceAnchorTrial && distanceInput != null)
             {
-                distanceInput.text = "10.0";
+                distanceInput.text = string.Empty;
                 distanceInput.contentType = TMP_InputField.ContentType.DecimalNumber;
                 distanceInput.keyboardType = TouchScreenKeyboardType.DecimalPad;
                 distanceInput.lineType = TMP_InputField.LineType.SingleLine;
+                distanceInput.readOnly = IsDistanceKeypadActive();
             }
 
-            if (isVisualCrowding && visualCrowdingLetterInput != null)
+            if (isVisualCrowding)
             {
-                visualCrowdingLetterInput.text = string.Empty;
-                visualCrowdingLetterInput.characterLimit = 1;
-                visualCrowdingLetterInput.contentType = TMP_InputField.ContentType.Alphanumeric;
-                visualCrowdingLetterInput.keyboardType = TouchScreenKeyboardType.Default;
-                visualCrowdingLetterInput.lineType = TMP_InputField.LineType.SingleLine;
+                ConfigureVisualCrowdingLetterToggles();
             }
 
             if (confidenceSlider != null) confidenceSlider.gameObject.SetActive(false);
@@ -487,6 +490,80 @@ namespace VRPerception.UI
             if (optionBToggle != null) optionBToggle.SetIsOnWithoutNotify(false);
         }
 
+        private void ConfigureVisualCrowdingLetterToggles()
+        {
+            if (visualCrowdingLetterToggleGroup == null && visualCrowdingGroup != null)
+            {
+                visualCrowdingLetterToggleGroup = visualCrowdingGroup.GetComponentInChildren<ToggleGroup>(true);
+                if (visualCrowdingLetterToggleGroup == null)
+                {
+                    visualCrowdingLetterToggleGroup = visualCrowdingGroup.AddComponent<ToggleGroup>();
+                }
+            }
+
+            if ((visualCrowdingLetterToggles == null || visualCrowdingLetterToggles.Length == 0) && visualCrowdingGroup != null)
+            {
+                visualCrowdingLetterToggles = visualCrowdingGroup.GetComponentsInChildren<Toggle>(true);
+            }
+
+            if (visualCrowdingLetterToggleGroup != null)
+            {
+                visualCrowdingLetterToggleGroup.allowSwitchOff = true;
+            }
+
+            if (visualCrowdingLetterToggles == null) return;
+
+            for (int i = 0; i < visualCrowdingLetterToggles.Length; i++)
+            {
+                var toggle = visualCrowdingLetterToggles[i];
+                if (toggle == null) continue;
+                if (visualCrowdingLetterToggleGroup != null) toggle.group = visualCrowdingLetterToggleGroup;
+            }
+
+            ClearVisualCrowdingLetterToggles();
+        }
+
+        private void ClearVisualCrowdingLetterToggles()
+        {
+            if ((visualCrowdingLetterToggles == null || visualCrowdingLetterToggles.Length == 0) && visualCrowdingGroup != null)
+            {
+                visualCrowdingLetterToggles = visualCrowdingGroup.GetComponentsInChildren<Toggle>(true);
+            }
+
+            if (visualCrowdingLetterToggles == null) return;
+
+            for (int i = 0; i < visualCrowdingLetterToggles.Length; i++)
+            {
+                var toggle = visualCrowdingLetterToggles[i];
+                if (toggle == null) continue;
+
+                toggle.SetIsOnWithoutNotify(false);
+                if (toggle.graphic != null)
+                {
+                    toggle.graphic.CrossFadeAlpha(0f, 0f, true);
+                    toggle.graphic.canvasRenderer.SetAlpha(0f);
+                }
+            }
+        }
+
+        private Toggle GetFirstVisualCrowdingLetterToggle()
+        {
+            if ((visualCrowdingLetterToggles == null || visualCrowdingLetterToggles.Length == 0) && visualCrowdingGroup != null)
+            {
+                visualCrowdingLetterToggles = visualCrowdingGroup.GetComponentsInChildren<Toggle>(true);
+            }
+
+            if (visualCrowdingLetterToggles == null) return null;
+
+            for (int i = 0; i < visualCrowdingLetterToggles.Length; i++)
+            {
+                if (visualCrowdingLetterToggles[i] != null)
+                    return visualCrowdingLetterToggles[i];
+            }
+
+            return null;
+        }
+
         private void ConfigureChangeDetectionToggles()
         {
             if (changeDetectionToggleGroup == null && changeDetectionGroup != null)
@@ -530,7 +607,14 @@ namespace VRPerception.UI
             {
                 if (distanceGroup != null && distanceGroup.activeSelf && distanceInput != null)
                 {
-                    OpenSoftKeyboardForInput(distanceInput, TouchScreenKeyboardType.DecimalPad);
+                    if (IsDistanceKeypadActive())
+                    {
+                        distanceInput.Select();
+                    }
+                    else
+                    {
+                        OpenSoftKeyboardForInput(distanceInput, TouchScreenKeyboardType.DecimalPad);
+                    }
                 }
                 else if (sizeBiasGroup != null && sizeBiasGroup.activeSelf && optionAToggle != null)
                 {
@@ -540,9 +624,13 @@ namespace VRPerception.UI
                 {
                     visualWeightAToggle.Select();
                 }
-                else if (visualCrowdingGroup != null && visualCrowdingGroup.activeSelf && visualCrowdingLetterInput != null)
+                else if (visualCrowdingGroup != null && visualCrowdingGroup.activeSelf)
                 {
-                    OpenSoftKeyboardForInput(visualCrowdingLetterInput, TouchScreenKeyboardType.Default);
+                    var firstLetterToggle = GetFirstVisualCrowdingLetterToggle();
+                    if (firstLetterToggle != null)
+                    {
+                        firstLetterToggle.Select();
+                    }
                 }
                 else if (changeDetectionGroup != null && changeDetectionGroup.activeSelf && changeNoToggle != null)
                 {
@@ -613,12 +701,14 @@ namespace VRPerception.UI
         private void HideDialog()
         {
             CloseSoftKeyboard();
+            ClearVisualCrowdingLetterToggles();
 
             if (dialogRoot != null) dialogRoot.SetActive(false);
             if (backdrop != null) backdrop.SetActive(false);
 
             // 显式隐藏任务特定的 Group，确保它们不会残留
             if (distanceGroup != null) distanceGroup.SetActive(false);
+            if (distanceKeypadGroup != null) distanceKeypadGroup.SetActive(false);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(false);
             if (visualCrowdingGroup != null) visualCrowdingGroup.SetActive(false);
             if (changeDetectionGroup != null) changeDetectionGroup.SetActive(false);
@@ -627,6 +717,7 @@ namespace VRPerception.UI
             if (colorGroup != null) colorGroup.SetActive(false);
             if (skipButton != null) skipButton.gameObject.SetActive(true);
             if (confidenceRatingGroup != null) confidenceRatingGroup.SetActive(true);
+            if (distanceInput != null) distanceInput.readOnly = false;
             SetSubmitButtonText(null);
         }
 
@@ -644,12 +735,13 @@ namespace VRPerception.UI
                 if (colorGSlider != null) colorGSlider.onValueChanged.AddListener(OnColorSliderChanged);
                 if (colorBSlider != null) colorBSlider.onValueChanged.AddListener(OnColorSliderChanged);
                 if (distanceInput != null) distanceInput.onSelect.AddListener(OnDistanceInputSelected);
-                if (visualCrowdingLetterInput != null) visualCrowdingLetterInput.onSelect.AddListener(OnVisualCrowdingLetterInputSelected);
                 if (submitButton != null) submitButton.onClick.AddListener(SubmitCurrent);
                 if (skipButton != null) skipButton.onClick.AddListener(SkipCurrent);
+                HookDistanceKeypadButtons(true);
             }
             else
             {
+                HookDistanceKeypadButtons(false);
                 if (confidence1Toggle != null) confidence1Toggle.onValueChanged.RemoveListener(OnConfidence1Changed);
                 if (confidence2Toggle != null) confidence2Toggle.onValueChanged.RemoveListener(OnConfidence2Changed);
                 if (confidence3Toggle != null) confidence3Toggle.onValueChanged.RemoveListener(OnConfidence3Changed);
@@ -660,7 +752,6 @@ namespace VRPerception.UI
                 if (colorGSlider != null) colorGSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
                 if (colorBSlider != null) colorBSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
                 if (distanceInput != null) distanceInput.onSelect.RemoveListener(OnDistanceInputSelected);
-                if (visualCrowdingLetterInput != null) visualCrowdingLetterInput.onSelect.RemoveListener(OnVisualCrowdingLetterInputSelected);
                 if (submitButton != null) submitButton.onClick.RemoveListener(SubmitCurrent);
                 if (skipButton != null) skipButton.onClick.RemoveListener(SkipCurrent);
             }
@@ -675,14 +766,91 @@ namespace VRPerception.UI
         private void OnDistanceInputSelected(string _)
         {
             if (_isDistanceAnchorTrial) return;
+            if (IsDistanceKeypadActive()) return;
             if (distanceGroup != null && distanceGroup.activeSelf && distanceInput != null)
                 OpenSoftKeyboardForInput(distanceInput, TouchScreenKeyboardType.DecimalPad);
         }
 
-        private void OnVisualCrowdingLetterInputSelected(string _)
+        private bool IsDistanceKeypadActive()
         {
-            if (visualCrowdingGroup != null && visualCrowdingGroup.activeSelf && visualCrowdingLetterInput != null)
-                OpenSoftKeyboardForInput(visualCrowdingLetterInput, TouchScreenKeyboardType.Default);
+            return distanceKeypadGroup != null && distanceKeypadGroup.activeInHierarchy;
+        }
+
+        private void HookDistanceKeypadButtons(bool bind)
+        {
+            if (bind)
+            {
+                if (distanceKeypadButtons == null) return;
+
+                foreach (var button in distanceKeypadButtons)
+                {
+                    if (button == null || _distanceKeypadHandlers.ContainsKey(button)) continue;
+
+                    string label = GetDistanceKeypadButtonLabel(button);
+                    if (string.IsNullOrWhiteSpace(label)) continue;
+
+                    UnityAction action = () => OnDistanceKeypadButton(label);
+                    _distanceKeypadHandlers[button] = action;
+                    button.onClick.AddListener(action);
+                }
+
+                return;
+            }
+
+            foreach (var pair in _distanceKeypadHandlers)
+            {
+                if (pair.Key != null && pair.Value != null)
+                    pair.Key.onClick.RemoveListener(pair.Value);
+            }
+
+            _distanceKeypadHandlers.Clear();
+        }
+
+        private static string GetDistanceKeypadButtonLabel(Button button)
+        {
+            var text = button != null ? button.GetComponentInChildren<TMP_Text>(true) : null;
+            return text != null ? text.text.Trim() : string.Empty;
+        }
+
+        private void OnDistanceKeypadButton(string key)
+        {
+            if (distanceInput == null || string.IsNullOrWhiteSpace(key)) return;
+            if (errorHint != null) errorHint.text = string.Empty;
+
+            string current = distanceInput.text ?? string.Empty;
+
+            if (key == "⌫" || key == "←" || key.Equals("Backspace", StringComparison.OrdinalIgnoreCase) || key == "删除")
+            {
+                SetDistanceInputText(current.Length > 0 ? current.Substring(0, current.Length - 1) : string.Empty);
+                return;
+            }
+
+            if (key == "提交" || key.Equals("Submit", StringComparison.OrdinalIgnoreCase))
+            {
+                SubmitCurrent();
+                return;
+            }
+
+            if (key == ".")
+            {
+                if (current.Contains(".")) return;
+                SetDistanceInputText(string.IsNullOrEmpty(current) ? "0." : current + ".");
+                return;
+            }
+
+            if (key.Length == 1 && char.IsDigit(key[0]))
+            {
+                SetDistanceInputText(current + key);
+            }
+        }
+
+        private void SetDistanceInputText(string text)
+        {
+            if (distanceInput == null) return;
+
+            distanceInput.text = text ?? string.Empty;
+            distanceInput.caretPosition = distanceInput.text.Length;
+            distanceInput.stringPosition = distanceInput.text.Length;
         }
 
         private void OpenSoftKeyboardForInput(TMP_InputField input, TouchScreenKeyboardType keyboardType)
@@ -1057,7 +1225,7 @@ namespace VRPerception.UI
             {
                 if (!TryGetVisualCrowdingLetter(out var letter))
                 {
-                    if (errorHint != null) errorHint.text = "请输入一个英文字母。";
+                    if (errorHint != null) errorHint.text = "请选择一个英文字母。";
                     return;
                 }
 
@@ -1214,16 +1382,54 @@ namespace VRPerception.UI
         private bool TryGetVisualCrowdingLetter(out string letter)
         {
             letter = null;
-            if (visualCrowdingLetterInput == null) return false;
 
-            var text = visualCrowdingLetterInput.text;
-            if (string.IsNullOrWhiteSpace(text)) return false;
+            if (visualCrowdingLetterToggles != null)
+            {
+                for (int i = 0; i < visualCrowdingLetterToggles.Length; i++)
+                {
+                    var toggle = visualCrowdingLetterToggles[i];
+                    if (toggle != null && toggle.isOn && TryGetVisualCrowdingLetterFromToggle(toggle, out letter))
+                    {
+                        return true;
+                    }
+                }
+            }
 
-            text = text.Trim();
-            if (text.Length != 1 || !char.IsLetter(text[0])) return false;
+            return false;
+        }
 
-            letter = char.ToUpperInvariant(text[0]).ToString();
-            return true;
+        private bool TryGetVisualCrowdingLetterFromToggle(Toggle toggle, out string letter)
+        {
+            letter = null;
+            if (toggle == null) return false;
+
+            var text = toggle.GetComponentInChildren<TMP_Text>(true);
+            if (text != null && TryExtractVisualCrowdingLetter(text.text, out letter))
+            {
+                return true;
+            }
+
+            return TryExtractVisualCrowdingLetter(toggle.name, out letter);
+        }
+
+        private bool TryExtractVisualCrowdingLetter(string value, out string letter)
+        {
+            letter = null;
+            if (string.IsNullOrWhiteSpace(value)) return false;
+
+            value = value.Trim();
+            for (int i = value.Length - 1; i >= 0; i--)
+            {
+                char c = value[i];
+                if (c >= 'a' && c <= 'z') c = char.ToUpperInvariant(c);
+                if (c >= 'A' && c <= 'Z')
+                {
+                    letter = c.ToString();
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private bool TryGetChangeDetectionAnswer(out bool changed, out string category)
