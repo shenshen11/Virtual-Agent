@@ -333,6 +333,16 @@ namespace VRPerception.UI
             // - answer 为任务特定结构体
             float conf = Mathf.Clamp01(defaultConfidence);
 
+            if (string.Equals(taskId, "distance_compression", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(taskId, "horizon_cue_integration", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(taskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(taskId, "visual_weight_judgment", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(taskId, "visual_crowding", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(taskId, "color_constancy_adjustment", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
             if (string.Equals(taskId, "distance_compression", StringComparison.OrdinalIgnoreCase))
             {
                 var answer = new DistanceAnswer

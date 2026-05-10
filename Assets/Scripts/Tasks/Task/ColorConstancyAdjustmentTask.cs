@@ -20,7 +20,7 @@ namespace VRPerception.Tasks
         public string TaskId => "color_constancy_adjustment";
 
         private const float DefaultFovDeg = 60f;
-        private const int DefaultRepeatsPerCondition = 3;
+        private const int DefaultTrialsPerLighting = 3;
         private const int DefaultCandidateCount = 9;
         private const float DefaultAdaptSeconds = 30f;
         private const float DefaultRestSeconds = 15f;
@@ -121,11 +121,13 @@ namespace VRPerception.Tasks
             // Baseline (white neutral, no furniture)
             trials.Add(CreateTrial("baseline", hasFurniture: false, lighting: "white_neutral"));
 
+            bool redFurnitureMajority = _rand.Next(2) == 0;
+
             // Red block (adaptation + alternating furniture)
-            AddBlock(trials, "red", "adapt_red", DefaultRepeatsPerCondition);
+            AddBlock(trials, "red", "adapt_red", DefaultTrialsPerLighting, redFurnitureMajority ? 2 : 1);
 
             // Blue block (rest + adaptation + alternating furniture)
-            AddBlock(trials, "blue", "adapt_blue", DefaultRepeatsPerCondition);
+            AddBlock(trials, "blue", "adapt_blue", DefaultTrialsPerLighting, redFurnitureMajority ? 1 : 2);
 
             _plannedTrialCount = trials.Count;
             return trials.ToArray();
@@ -425,13 +427,39 @@ namespace VRPerception.Tasks
             return trial;
         }
 
-        private void AddBlock(List<TrialSpec> trials, string phase, string lighting, int repeatsPerCondition)
+        private void AddBlock(List<TrialSpec> trials, string phase, string lighting, int trialCount, int furnitureCount)
         {
-            int total = Mathf.Max(1, repeatsPerCondition) * 2;
-            for (int i = 0; i < total; i++)
+            int total = Mathf.Max(1, trialCount);
+            furnitureCount = Mathf.Clamp(furnitureCount, 0, total);
+
+            var furnitureConditions = new List<bool>(total);
+            for (int i = 0; i < furnitureCount; i++)
             {
-                bool hasFurniture = (i % 2 == 0);
-                trials.Add(CreateTrial(phase, hasFurniture, lighting));
+                furnitureConditions.Add(true);
+            }
+            for (int i = furnitureCount; i < total; i++)
+            {
+                furnitureConditions.Add(false);
+            }
+
+            Shuffle(furnitureConditions);
+
+            for (int i = 0; i < furnitureConditions.Count; i++)
+            {
+                trials.Add(CreateTrial(phase, furnitureConditions[i], lighting));
+            }
+        }
+
+        private void Shuffle<T>(IList<T> list)
+        {
+            if (list == null || list.Count <= 1) return;
+
+            for (int i = list.Count - 1; i > 0; i--)
+            {
+                int j = _rand.Next(i + 1);
+                var tmp = list[i];
+                list[i] = list[j];
+                list[j] = tmp;
             }
         }
 

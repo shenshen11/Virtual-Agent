@@ -348,6 +348,10 @@ namespace VRPerception.Tasks
                             {
                                 await numerosityTask.RunFixedExposureHumanPresentationAsync(trial, _runCts.Token);
                             }
+                            else if (RequiresManualHumanAnswerPhase(_task.TaskId))
+                            {
+                                await WaitForHumanAnswerPhaseConfirmationAsync(trial, _runCts.Token);
+                            }
 
                             PublishTrialState(trial, TrialLifecycleState.WaitingForInput, trialConfig: trial, error: "Waiting for input");
 
@@ -606,6 +610,59 @@ namespace VRPerception.Tasks
             for (int i = 0; i < rightHandDevices.Count; i++)
             {
                 var device = rightHandDevices[i];
+                if (!device.isValid) continue;
+                if (device.TryGetFeatureValue(CommonUsages.primaryButton, out bool pressed) && pressed)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool RequiresManualHumanAnswerPhase(string taskId)
+        {
+            return string.Equals(taskId, "distance_compression", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(taskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(taskId, "horizon_cue_integration", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(taskId, "visual_weight_judgment", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task WaitForHumanAnswerPhaseConfirmationAsync(TrialSpec trial, CancellationToken ct)
+        {
+            string taskId = trial != null ? trial.taskId : _task?.TaskId;
+            Debug.Log($"[TaskRunner] Waiting for left controller X / primaryButton to enter answer phase. task={taskId}, trial={trial?.trialId ?? -1}");
+
+            bool lastPressed = IsHumanAnswerPhaseConfirmationPressed();
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                bool pressed = IsHumanAnswerPhaseConfirmationPressed();
+                if (pressed && !lastPressed)
+                {
+                    break;
+                }
+
+                lastPressed = pressed;
+                await Task.Yield();
+            }
+
+            while (IsHumanAnswerPhaseConfirmationPressed())
+            {
+                ct.ThrowIfCancellationRequested();
+                await Task.Yield();
+            }
+
+            await Task.Delay(250, ct);
+        }
+
+        private static bool IsHumanAnswerPhaseConfirmationPressed()
+        {
+            var leftHandDevices = new List<InputDevice>(2);
+            InputDevices.GetDevicesAtXRNode(XRNode.LeftHand, leftHandDevices);
+            for (int i = 0; i < leftHandDevices.Count; i++)
+            {
+                var device = leftHandDevices[i];
                 if (!device.isValid) continue;
                 if (device.TryGetFeatureValue(CommonUsages.primaryButton, out bool pressed) && pressed)
                 {

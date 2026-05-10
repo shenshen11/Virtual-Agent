@@ -162,11 +162,17 @@ namespace VRPerception.Tasks
         {
             if (data == null) return;
 
-            if (data.state == TrialLifecycleState.Started || data.state == TrialLifecycleState.WaitingForInput)
+            if (data.state == TrialLifecycleState.Started)
             {
                 if (taskRunner != null && taskRunner.CurrentSubjectMode != SubjectMode.Human) return;
-                // 从 trial 开始或等待用户输入阶段就打开录制，确保首帧输入前的数据也被保留。
-                StartRecording(data.taskId, data.trialId, "trial");
+                StartRecording(data.taskId, data.trialId, "trial", "stimulus");
+                return;
+            }
+
+            if (data.state == TrialLifecycleState.WaitingForInput)
+            {
+                if (taskRunner != null && taskRunner.CurrentSubjectMode != SubjectMode.Human) return;
+                StartRecording(data.taskId, data.trialId, "trial", "response");
                 return;
             }
 
@@ -226,7 +232,9 @@ namespace VRPerception.Tasks
             _samplesSinceFlush = 0;
 
             string segmentPart = trialId >= 0 ? $"trial{trialId:D4}" : SanitizeFilePart(_activePhase);
-            string fileName = $"{SanitizeFilePart(_activeTaskId)}_{segmentPart}_{DateTime.UtcNow:yyyyMMdd_HHmmssfff}.csv";
+            string phasePart = SanitizeFilePart(_activePhase);
+            string subphasePart = SanitizeFilePart(_activeSubphase);
+            string fileName = $"{SanitizeFilePart(_activeTaskId)}_{segmentPart}_{phasePart}_{subphasePart}_{DateTime.UtcNow:yyyyMMdd_HHmmssfff}.csv";
             string path = Path.Combine(_telemetryDir, fileName);
             _writer = new StreamWriter(path, append: false, new UTF8Encoding(false));
             _writer.WriteLine(
