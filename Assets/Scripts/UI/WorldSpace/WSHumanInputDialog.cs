@@ -67,6 +67,10 @@ namespace VRPerception.UI
         [SerializeField] private Toggle visualWeightSizeToggle;
         [SerializeField] private Toggle visualWeightLightnessToggle;
 
+        [Header("Visual Crowding")]
+        [SerializeField] private GameObject visualCrowdingGroup;
+        [SerializeField] private TMP_InputField visualCrowdingLetterInput;
+
         [Header("Depth JND")]
         [SerializeField] private GameObject depthJndGroup;
         [SerializeField] private Toggle depthJndLeftToggle;
@@ -280,6 +284,7 @@ namespace VRPerception.UI
             bool isNumerosity = string.Equals(taskId, "numerosity_comparison", StringComparison.OrdinalIgnoreCase);
             bool isDepthJnd = string.Equals(taskId, "depth_jnd_staircase", StringComparison.OrdinalIgnoreCase);
             bool isVisualWeight = string.Equals(taskId, "visual_weight_judgment", StringComparison.OrdinalIgnoreCase);
+            bool isVisualCrowding = string.Equals(taskId, "visual_crowding", StringComparison.OrdinalIgnoreCase);
 
             if (taskLabel != null) taskLabel.text = $"任务: {taskId}";
             if (trialLabel != null) trialLabel.text = $"试次: {_trialId}";
@@ -304,6 +309,12 @@ namespace VRPerception.UI
                 else if (isVisualWeight)
                 {
                     taskPromptText.text = string.Empty;
+                }
+                else if (isVisualCrowding)
+                {
+                    taskPromptText.text = !string.IsNullOrWhiteSpace(customPrompt)
+                        ? customPrompt
+                        : "字母已隐藏。请回忆右侧外周显示的字母；若为 5 字母串，请输入中间目标字母，并设置置信度。";
                 }
                 else if (!string.IsNullOrWhiteSpace(customPrompt))
                 {
@@ -344,6 +355,7 @@ namespace VRPerception.UI
             if (distanceGroup != null) distanceGroup.SetActive(isDistance && !_isDistanceAnchorTrial);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(isSizeBias);
             if (visualWeightGroup != null) visualWeightGroup.SetActive(isVisualWeight);
+            if (visualCrowdingGroup != null) visualCrowdingGroup.SetActive(isVisualCrowding);
             if (depthJndGroup != null) depthJndGroup.SetActive(isDepthJnd);
             if (roughnessGroup != null) roughnessGroup.SetActive(isRoughness);
             if (isColor)
@@ -359,6 +371,15 @@ namespace VRPerception.UI
                 distanceInput.contentType = TMP_InputField.ContentType.DecimalNumber;
                 distanceInput.keyboardType = TouchScreenKeyboardType.DecimalPad;
                 distanceInput.lineType = TMP_InputField.LineType.SingleLine;
+            }
+
+            if (isVisualCrowding && visualCrowdingLetterInput != null)
+            {
+                visualCrowdingLetterInput.text = string.Empty;
+                visualCrowdingLetterInput.characterLimit = 1;
+                visualCrowdingLetterInput.contentType = TMP_InputField.ContentType.Alphanumeric;
+                visualCrowdingLetterInput.keyboardType = TouchScreenKeyboardType.Default;
+                visualCrowdingLetterInput.lineType = TMP_InputField.LineType.SingleLine;
             }
 
             if (confidenceSlider != null) confidenceSlider.gameObject.SetActive(false);
@@ -470,6 +491,10 @@ namespace VRPerception.UI
                 {
                     visualWeightAToggle.Select();
                 }
+                else if (visualCrowdingGroup != null && visualCrowdingGroup.activeSelf && visualCrowdingLetterInput != null)
+                {
+                    OpenSoftKeyboardForInput(visualCrowdingLetterInput, TouchScreenKeyboardType.Default);
+                }
                 else if (depthJndGroup != null && depthJndGroup.activeSelf && depthJndLeftToggle != null)
                 {
                     depthJndLeftToggle.Select();
@@ -542,6 +567,7 @@ namespace VRPerception.UI
             // 显式隐藏任务特定的 Group，确保它们不会残留
             if (distanceGroup != null) distanceGroup.SetActive(false);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(false);
+            if (visualCrowdingGroup != null) visualCrowdingGroup.SetActive(false);
             if (depthJndGroup != null) depthJndGroup.SetActive(false);
             if (roughnessGroup != null) roughnessGroup.SetActive(false);
             if (colorGroup != null) colorGroup.SetActive(false);
@@ -564,6 +590,7 @@ namespace VRPerception.UI
                 if (colorGSlider != null) colorGSlider.onValueChanged.AddListener(OnColorSliderChanged);
                 if (colorBSlider != null) colorBSlider.onValueChanged.AddListener(OnColorSliderChanged);
                 if (distanceInput != null) distanceInput.onSelect.AddListener(OnDistanceInputSelected);
+                if (visualCrowdingLetterInput != null) visualCrowdingLetterInput.onSelect.AddListener(OnVisualCrowdingLetterInputSelected);
                 if (submitButton != null) submitButton.onClick.AddListener(SubmitCurrent);
                 if (skipButton != null) skipButton.onClick.AddListener(SkipCurrent);
             }
@@ -579,6 +606,7 @@ namespace VRPerception.UI
                 if (colorGSlider != null) colorGSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
                 if (colorBSlider != null) colorBSlider.onValueChanged.RemoveListener(OnColorSliderChanged);
                 if (distanceInput != null) distanceInput.onSelect.RemoveListener(OnDistanceInputSelected);
+                if (visualCrowdingLetterInput != null) visualCrowdingLetterInput.onSelect.RemoveListener(OnVisualCrowdingLetterInputSelected);
                 if (submitButton != null) submitButton.onClick.RemoveListener(SubmitCurrent);
                 if (skipButton != null) skipButton.onClick.RemoveListener(SkipCurrent);
             }
@@ -595,6 +623,12 @@ namespace VRPerception.UI
             if (_isDistanceAnchorTrial) return;
             if (distanceGroup != null && distanceGroup.activeSelf && distanceInput != null)
                 OpenSoftKeyboardForInput(distanceInput, TouchScreenKeyboardType.DecimalPad);
+        }
+
+        private void OnVisualCrowdingLetterInputSelected(string _)
+        {
+            if (visualCrowdingGroup != null && visualCrowdingGroup.activeSelf && visualCrowdingLetterInput != null)
+                OpenSoftKeyboardForInput(visualCrowdingLetterInput, TouchScreenKeyboardType.Default);
         }
 
         private void OpenSoftKeyboardForInput(TMP_InputField input, TouchScreenKeyboardType keyboardType)
@@ -965,6 +999,16 @@ namespace VRPerception.UI
 
                 PublishVisualWeight(GetVisualWeightChoice(), evidenceCues, confidence, reactionMs);
             }
+            else if (visualCrowdingGroup != null && visualCrowdingGroup.activeSelf)
+            {
+                if (!TryGetVisualCrowdingLetter(out var letter))
+                {
+                    if (errorHint != null) errorHint.text = "请输入一个英文字母。";
+                    return;
+                }
+
+                PublishVisualCrowding(letter, confidence, reactionMs);
+            }
             else if (depthJndGroup != null && depthJndGroup.activeSelf)
             {
                 string closer = depthJndLeftToggle != null && depthJndLeftToggle.isOn ? "A" : "B";
@@ -1103,6 +1147,21 @@ namespace VRPerception.UI
             return cues.ToArray();
         }
 
+        private bool TryGetVisualCrowdingLetter(out string letter)
+        {
+            letter = null;
+            if (visualCrowdingLetterInput == null) return false;
+
+            var text = visualCrowdingLetterInput.text;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+
+            text = text.Trim();
+            if (text.Length != 1 || !char.IsLetter(text[0])) return false;
+
+            letter = char.ToUpperInvariant(text[0]).ToString();
+            return true;
+        }
+
         private void PublishVisualWeight(string heavier, string[] evidenceCues, float confidence, long reactionMs)
         {
             var response = new LLMResponse
@@ -1114,6 +1173,22 @@ namespace VRPerception.UI
                 confidence = confidence,
                 latencyMs = reactionMs,
                 answer = new VisualWeightAnswer { heavier = heavier, evidence_cues = evidenceCues, confidence = confidence }
+            };
+
+            PublishResponse(response);
+        }
+
+        private void PublishVisualCrowding(string letter, float confidence, long reactionMs)
+        {
+            var response = new LLMResponse
+            {
+                type = "inference",
+                taskId = _taskId,
+                trialId = _trialId,
+                providerId = "human",
+                confidence = confidence,
+                latencyMs = reactionMs,
+                answer = new VisualCrowdingAnswer { letter = letter, confidence = confidence }
             };
 
             PublishResponse(response);
@@ -1262,6 +1337,13 @@ namespace VRPerception.UI
         {
             public string heavier;
             public string[] evidence_cues;
+            public float confidence;
+        }
+
+        [Serializable]
+        private class VisualCrowdingAnswer
+        {
+            public string letter;
             public float confidence;
         }
 
