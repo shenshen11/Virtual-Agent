@@ -34,6 +34,7 @@ namespace VRPerception.Infra
         private string _sessionDir;
         private string _imagesDir;
         private string _jsonlPath;
+        private bool _initialized;
 
         private readonly List<string> _jsonlBuffer = new List<string>(128);
 
@@ -44,15 +45,6 @@ namespace VRPerception.Infra
         private void Awake()
         {
             if (eventBus == null) eventBus = EventBusManager.Instance;
-
-            var session = LogSessionPaths.GetOrCreateSessionId(rootFolderName);
-            _sessionDir = LogSessionPaths.GetOrCreateSessionDirectory(rootFolderName);
-            _imagesDir = Path.Combine(_sessionDir, "images");
-            Directory.CreateDirectory(_sessionDir);
-
-            _jsonlPath = Path.Combine(_sessionDir, jsonlFileName);
-
-            SafeAppendLine(_jsonlPath, "# VR Perception Logger Session " + session);
         }
 
         private void OnEnable()
@@ -234,6 +226,7 @@ namespace VRPerception.Infra
 
             try
             {
+                EnsureInitialized();
                 if (string.IsNullOrEmpty(data.imageBase64)) return;
                 var bytes = Convert.FromBase64String(data.imageBase64);
                 Directory.CreateDirectory(_imagesDir);
@@ -306,6 +299,7 @@ namespace VRPerception.Infra
 
             try
             {
+                EnsureInitialized();
                 using (var sw = new StreamWriter(_jsonlPath, append: true, Encoding.UTF8))
                 {
                     foreach (var l in lines) sw.WriteLine(l);
@@ -328,8 +322,11 @@ namespace VRPerception.Infra
 
         private void WriteCsvSummary()
         {
+            if (_completed.Count == 0) return;
+
             try
             {
+                EnsureInitialized();
                 // 仅对本次会话中“实际跑过的任务”输出对应 CSV（避免固定写出多个文件）
                 var savedCsvPaths = new List<string>();
 
@@ -849,6 +846,41 @@ namespace VRPerception.Infra
                 return "\"" + s.Replace("\"", "\"\"") + "\"";
             }
             return s;
+        }
+
+        private void EnsureInitialized()
+        {
+            if (_initialized) return;
+
+            var identity = LogSessionPaths.GetSessionIdentity(rootFolderName);
+            _sessionDir = LogSessionPaths.GetOrCreateSessionDirectory(rootFolderName);
+            _imagesDir = Path.Combine(_sessionDir, "images");
+            Directory.CreateDirectory(_sessionDir);
+
+            _jsonlPath = Path.Combine(_sessionDir, string.IsNullOrWhiteSpace(jsonlFileName) ? "events.jsonl" : jsonlFileName.Trim());
+            SafeAppendLine(_jsonlPath, "# VR Perception Logger Session " + identity.sessionId);
+            WriteSessionMetadata(identity);
+            _initialized = true;
+        }
+
+        private void WriteSessionMetadata(LogSessionPaths.SessionIdentity identity)
+        {
+            if (identity == null) return;
+
+            var path = Path.Combine(_sessionDir, "session_metadata.csv");
+            using (var sw = new StreamWriter(path, false, Encoding.UTF8))
+            {
+                sw.WriteLine("sessionId,experimentId,participantId,isHumanSession,startTimeUtc,deviceModel,deviceId");
+                sw.WriteLine(string.Join(",",
+                    Escape(identity.sessionId),
+                    Escape(identity.experimentId),
+                    Escape(identity.participantId),
+                    identity.isHumanSession ? "1" : "0",
+                    Escape(identity.createdUtc.ToString("o")),
+                    Escape(SystemInfo.deviceModel),
+                    Escape(SystemInfo.deviceUniqueIdentifier)
+                ));
+            }
         }
 
         private string Relativize(string absPath)

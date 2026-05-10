@@ -33,16 +33,6 @@ namespace VRPerception.Tasks
         private string _outputPath;
         private StreamWriter _writer;
 
-        private void Awake()
-        {
-            EnsureWriter();
-        }
-
-        private void OnEnable()
-        {
-            EnsureWriter();
-        }
-
         private void OnDisable()
         {
             CloseWriter();

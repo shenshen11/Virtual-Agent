@@ -32,7 +32,9 @@ namespace VRPerception.Infra
 
         private string _sessionDir;
         private string _tracePath;
+        private bool _initialized;
         private readonly object _lock = new object();
+
         private readonly Dictionary<string, RequestInfo> _requests = new Dictionary<string, RequestInfo>();
 
         // 每个 requestId 的聚合信息，用于生成 Markdown 小节头
@@ -47,18 +49,6 @@ namespace VRPerception.Infra
         {
             if (eventBus == null) eventBus = EventBusManager.Instance;
             if (providerRouter == null) providerRouter = FindObjectOfType<ProviderRouter>();
-
-            // 每次会话独立目录，避免不同运行混杂
-            var session = LogSessionPaths.GetOrCreateSessionId(rootFolderName);
-            _sessionDir = LogSessionPaths.GetOrCreateSessionDirectory(rootFolderName);
-
-            _tracePath = Path.Combine(_sessionDir, fileName);
-            AppendLines(
-                "# MLLM Trace",
-                $"- session: {session}",
-                $"- startedUtc: {DateTime.UtcNow:O}",
-                string.Empty
-            );
         }
 
         private void OnEnable()
@@ -232,6 +222,7 @@ namespace VRPerception.Infra
         {
             lock (_lock)
             {
+                EnsureInitialized();
                 using (var sw = new StreamWriter(_tracePath, append: true, Encoding.UTF8))
                 {
                     foreach (var line in lines)
@@ -240,6 +231,24 @@ namespace VRPerception.Infra
                         sw.WriteLine(line);
                     }
                 }
+            }
+        }
+
+        private void EnsureInitialized()
+        {
+            if (_initialized) return;
+
+            var session = LogSessionPaths.GetOrCreateSessionId(rootFolderName);
+            _sessionDir = LogSessionPaths.GetOrCreateSessionDirectory(rootFolderName);
+            _tracePath = Path.Combine(_sessionDir, string.IsNullOrWhiteSpace(fileName) ? "mllm_trace.md" : fileName.Trim());
+            _initialized = true;
+
+            using (var sw = new StreamWriter(_tracePath, append: true, Encoding.UTF8))
+            {
+                sw.WriteLine("# MLLM Trace");
+                sw.WriteLine($"- session: {session}");
+                sw.WriteLine($"- startedUtc: {DateTime.UtcNow:O}");
+                sw.WriteLine();
             }
         }
 

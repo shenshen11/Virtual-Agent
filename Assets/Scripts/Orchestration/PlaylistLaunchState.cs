@@ -6,6 +6,8 @@ namespace VRPerception.Orchestration
     public static class PlaylistLaunchState
     {
         private static TaskPlaylist _selectedPlaylist;
+        private static string _experimentId;
+        private static string _participantId;
 
         /// <summary>
         /// Current selected playlist (may be null).
@@ -20,6 +22,12 @@ namespace VRPerception.Orchestration
             _selectedPlaylist = playlist;
         }
 
+        public static void SetSessionIdentity(string experimentId, string participantId)
+        {
+            _experimentId = experimentId;
+            _participantId = participantId;
+        }
+
         /// <summary>
         /// Fetch and clear the stored playlist.
         /// </summary>
@@ -30,12 +38,22 @@ namespace VRPerception.Orchestration
             return playlist;
         }
 
+        public static void ConsumeSessionIdentity(out string experimentId, out string participantId)
+        {
+            experimentId = _experimentId;
+            participantId = _participantId;
+            _experimentId = null;
+            _participantId = null;
+        }
+
         /// <summary>
         /// Clear stored playlist.
         /// </summary>
         public static void Clear()
         {
             _selectedPlaylist = null;
+            _experimentId = null;
+            _participantId = null;
         }
     }
 }

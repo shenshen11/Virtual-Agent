@@ -4728,7 +4728,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 4.17}
+  m_AnchoredPosition: {x: 0, y: 3}
   m_SizeDelta: {x: 100, y: 70}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1025665455
@@ -5699,7 +5699,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1119791763}
   - component: {fileID: 1119791762}
-  - component: {fileID: 1119791765}
   - component: {fileID: 1119791766}
   - component: {fileID: 1119791767}
   - component: {fileID: 1119791769}
@@ -5751,28 +5750,6 @@ RectTransform:
   m_AnchoredPosition: {x: 19.909239, y: 17.117073}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &1119791765
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1119791761}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7ac190d9b2050e84daa5357c4052f189, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  eventBus: {fileID: 719105663}
-  autoFindEventBus: 1
-  enabledForTask: 1
-  verboseLog: 1
-  minTriggerIntervalSeconds: 1
-  useLeftControllerButtons: 1
-  allowKeyboardInEditor: 1
-  editorChooseAKey: 49
-  editorChooseBKey: 50
-  defaultConfidence: 0
 --- !u!114 &1119791766
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8527,7 +8504,7 @@ MonoBehaviour:
   mllmVideoDurationMs: 1500
   subjectMode: 1
   showHumanPreFixationPrompt: 1
-  humanPreFixationPromptSeconds: 5
+  humanPreFixationPromptSeconds: 6
   humanPreFixationTitle: "\u6CE8\u89C6\u6807\u5B9A\u51C6\u5907"
   humanPreFixationMessage: "\u8BF7\u770B\u5411\u5373\u5C06\u51FA\u73B0\u7684\u7EA2\u8272\n\u6CE8\u89C6\u70B9\uFF0C\u5E76\u4FDD\u6301\u5934\u90E8\u7A33\u5B9A\u3002"
   waitForHumanStartConfirmationAfterFixation: 1
@@ -10322,9 +10299,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   humanInputPrefab: {fileID: 5154786369996114306, guid: 0a98043949bcca34bb91265198ab6b72, type: 3}
   parentOverride: {fileID: 1025665454}
-  localPosition: {x: 0, y: -24.9, z: -135.7}
-  localEulerAngles: {x: 0, y: 0, z: 0}
-  localScale: {x: 0.1, y: 0.1, z: 0.1}
+  localPosition: {x: 0, y: -22.3, z: -159.9}
+  localEulerAngles: {x: 28, y: 0, z: 0}
+  localScale: {x: 0.05, y: 0.05, z: 0.05}
   activateOnSpawn: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

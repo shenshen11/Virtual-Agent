@@ -1,7 +1,9 @@
 using System.Collections;
+using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using VRPerception.Orchestration;
+using VRPerception.Tasks;
 
 namespace VRPerception.UI
 {
@@ -15,6 +17,11 @@ namespace VRPerception.UI
 
         [Header("Playlist")]
         [SerializeField] private PlaylistSelector playlistSelector;
+
+        [Header("Human Session Identity")]
+        [SerializeField] private TMP_InputField experimentIdInput;
+        [SerializeField] private TMP_InputField participantIdInput;
+        [SerializeField] private TMP_Text validationMessageText;
 
         [Header("PXR Video Seethrough")]
         [SerializeField] private PXRVideoSeethroughToggle videoSeethroughToggle;
@@ -48,7 +55,19 @@ namespace VRPerception.UI
         public void StartExperiment()
         {
             var playlist = playlistSelector != null ? playlistSelector.GetSelectedPlaylist() : null;
+            bool isHumanPlaylist = IsHumanPlaylist(playlist);
+            string experimentId = experimentIdInput != null ? experimentIdInput.text : null;
+            string participantId = participantIdInput != null ? participantIdInput.text : null;
+
+            if (isHumanPlaylist && string.IsNullOrWhiteSpace(participantId))
+            {
+                SetValidationMessage("请填写学号/被试编号。");
+                return;
+            }
+
+            SetValidationMessage(string.Empty);
             PlaylistLaunchState.SetSelectedPlaylist(playlist);
+            PlaylistLaunchState.SetSessionIdentity(experimentId, participantId);
 
             if (_seethroughRoutine != null)
             {
@@ -68,6 +87,32 @@ namespace VRPerception.UI
             }
 
             SceneManager.LoadScene(taskSceneName);
+        }
+
+        private static bool IsHumanPlaylist(TaskPlaylist playlist)
+        {
+            if (playlist == null) return false;
+            var entries = playlist.Entries;
+            if (entries == null) return false;
+
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var entry = entries[i];
+                if (entry == null) continue;
+                if (entry.subjectMode == SubjectMode.Human || entry.requireHumanInput)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void SetValidationMessage(string message)
+        {
+            if (validationMessageText == null) return;
+            validationMessageText.text = message ?? string.Empty;
+            validationMessageText.gameObject.SetActive(!string.IsNullOrWhiteSpace(message));
         }
 
         private void RestartSeethroughRoutine()

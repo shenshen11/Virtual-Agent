@@ -59,7 +59,6 @@ namespace VRPerception.Tasks
         private void Awake()
         {
             ResolveDependencies();
-            EnsureTelemetryDirectory();
         }
 
         private void OnEnable()
