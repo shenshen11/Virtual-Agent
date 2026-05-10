@@ -38,6 +38,8 @@ namespace VRPerception.Tasks
             public int? humanInputTimeoutMs;
             public string preTaskMessage;
             public string humanInputPrompt;
+            // 跨被试均匀采样：被试 ID（用于 TrialBalancer 派生 participantIndex）
+            public string participantId;
         }
 
         [Header("References")]
@@ -103,6 +105,8 @@ namespace VRPerception.Tasks
         private string _preTaskMessage;
         private string _humanInputPrompt;
         private string _runId;
+        // 跨被试均匀采样：当前被试 ID（由 ApplyRunConfig 注入；为空时回退到设备 ID）
+        private string _participantId;
  
         public TaskRunnerContext Context { get; private set; } = new TaskRunnerContext();
 
@@ -234,9 +238,55 @@ namespace VRPerception.Tasks
             _runId = LogSessionPaths.GetOrCreateSessionId("VRP_Logs");
 
             var trials = _task.BuildTrials(randomSeed) ?? Array.Empty<TrialSpec>();
+            // 跨被试均匀采样：仅当显式给出 maxTrials > 0 且 trials 多于目标数时启用，
+            // 否则保持原行为（全量执行 BuildTrials 返回的全部 trials）。
             if (maxTrials > 0 && trials.Length > maxTrials)
             {
-                Array.Resize(ref trials, maxTrials);
+                string effectiveParticipantId = !string.IsNullOrWhiteSpace(_participantId)
+                    ? _participantId
+                    : SystemInfo.deviceUniqueIdentifier;
+                int participantIndex = TrialBalancer.ResolveParticipantIndex(effectiveParticipantId);
+
+                Func<TrialSpec, string> stratumKeyFn;
+                string taskSalt;
+                if (_task is IStratifiableTask stratifiable)
+                {
+                    stratumKeyFn = stratifiable.GetStratumKey;
+                    taskSalt = stratifiable.GetTaskBalancerSalt() ?? _task.TaskId ?? "default";
+                }
+                else
+                {
+                    // 未实现分层接口的任务回退为单层均匀采样
+                    stratumKeyFn = _ => "_default";
+                    taskSalt = _task.TaskId ?? "default";
+                }
+
+                int orderSeed = unchecked(randomSeed
+                    ^ TrialBalancer.StableHash(effectiveParticipantId ?? "")
+                    ^ TrialBalancer.StableHash(taskSalt));
+
+                trials = TrialBalancer.BalanceAndSample(
+                    trials,
+                    maxTrials,
+                    participantIndex,
+                    taskSalt,
+                    stratumKeyFn,
+                    orderSeed,
+                    out var balanceReport);
+
+                eventBus?.PublishMetric("trial_balancer_sample", "trial", trials.Length, "count", new
+                {
+                    taskId = _task.TaskId,
+                    participantId = effectiveParticipantId,
+                    participantIndex,
+                    target = maxTrials,
+                    poolSize = balanceReport.totalPoolSize,
+                    protectedCount = balanceReport.totalProtected,
+                    sampled = balanceReport.totalSampled,
+                    quotas = balanceReport.stratumQuota,
+                    offsets = balanceReport.stratumOffset,
+                    sizes = balanceReport.stratumSize
+                });
             }
 
             _runCts = new CancellationTokenSource();
@@ -710,6 +760,11 @@ namespace VRPerception.Tasks
             if (!string.IsNullOrWhiteSpace(config.humanInputPrompt))
             {
                 _humanInputPrompt = config.humanInputPrompt;
+            }
+
+            if (!string.IsNullOrWhiteSpace(config.participantId))
+            {
+                _participantId = config.participantId;
             }
 
             var resolvedTaskId = config.taskId;

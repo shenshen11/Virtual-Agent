@@ -21,7 +21,7 @@ MonoBehaviour:
     description: 
     subjectMode: 1
     randomSeed: 12345
-    maxTrials: 0
+    maxTrials: 15
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
@@ -52,7 +52,7 @@ MonoBehaviour:
     description: 
     subjectMode: 1
     randomSeed: 12345
-    maxTrials: 0
+    maxTrials: 18
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
@@ -82,7 +82,7 @@ MonoBehaviour:
     description: 
     subjectMode: 1
     randomSeed: 12345
-    maxTrials: 0
+    maxTrials: 14
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
@@ -98,7 +98,7 @@ MonoBehaviour:
     description: 
     subjectMode: 1
     randomSeed: 12345
-    maxTrials: 0
+    maxTrials: 18
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
@@ -114,7 +114,7 @@ MonoBehaviour:
     description: 
     subjectMode: 1
     randomSeed: 12345
-    maxTrials: 0
+    maxTrials: 18
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
@@ -130,7 +130,7 @@ MonoBehaviour:
     description: 
     subjectMode: 1
     randomSeed: 12345
-    maxTrials: 0
+    maxTrials: 20
     enableActionPlanLoop: 1
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1

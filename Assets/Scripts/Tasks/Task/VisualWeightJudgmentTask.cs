@@ -16,9 +16,17 @@ namespace VRPerception.Tasks
     /// - 核心：冲突题中记录线索偏好（size vs material vs lightness）
     /// - 输出：{"type":"inference","answer":{"heavier":"A"|"B"},"confidence":0..1}
     /// </summary>
-    public class VisualWeightJudgmentTask : ITask, ITaskRunLifecycle
+    public class VisualWeightJudgmentTask : ITask, ITaskRunLifecycle, IStratifiableTask
     {
         public string TaskId => "visual_weight_judgment";
+
+        // IStratifiableTask: 按 weightTrialType 分层（7 类：3 conflict_*/congruent/3 single-cue），
+        // 每类各 4 trial。K=14 时每类取 2，跨被试均衡覆盖。
+        public string GetStratumKey(TrialSpec trial)
+        {
+            return string.IsNullOrEmpty(trial?.weightTrialType) ? "_default" : trial.weightTrialType;
+        }
+        public string GetTaskBalancerSalt() => "visual_weight_judgment/v1";
 
         private TaskRunnerContext _ctx;
         private System.Random _rand = new System.Random(1234);

@@ -16,9 +16,19 @@ namespace VRPerception.Tasks
     /// - 距离范围：2–20 m
     /// - FOV：60度
     /// </summary>
-    public class DistanceCompressionTask : ITask, ITaskRunLifecycle
+    public class DistanceCompressionTask : ITask, ITaskRunLifecycle, IStratifiableTask
     {
         public string TaskId => "distance_compression";
+
+        // IStratifiableTask: 按真实距离分层（6 个距离均衡），保护试次（前 3 个 anchor）
+        // 由 BuildTrials 中 isProtected = true 标记，TrialBalancer 自动排除。
+        public string GetStratumKey(TrialSpec trial)
+        {
+            if (trial == null) return "_default";
+            return trial.trueDistanceM.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        public string GetTaskBalancerSalt() => "distance_compression/v1";
 
         private TaskRunnerContext _ctx;
         private System.Random _rand = new System.Random(12345);
@@ -114,7 +124,8 @@ namespace VRPerception.Tasks
                     textureDensity = anchorTexture,
                     lighting = anchorLighting,
                     occlusion = false,
-                    isAnchor = true
+                    isAnchor = true,
+                    isProtected = true
                 });
             }
 

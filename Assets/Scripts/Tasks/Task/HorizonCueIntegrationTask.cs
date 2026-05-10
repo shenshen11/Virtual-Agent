@@ -25,9 +25,19 @@ namespace VRPerception.Tasks
     /// - 通过旋转 Environment_Rig（俯仰）让地平线在视野中上下移动；
     /// - 红球始终在相机正前方、同高度，仅距离变化。
     /// </summary>
-    public sealed class HorizonCueIntegrationTask : ITask, ITaskRunLifecycle
+    public sealed class HorizonCueIntegrationTask : ITask, ITaskRunLifecycle, IStratifiableTask
     {
         public string TaskId => "horizon_cue_integration";
+
+        // IStratifiableTask: 按 (距离, 地平线角度) 分层；前 3 个 anchor (0°) 受 isProtected 保护
+        public string GetStratumKey(TrialSpec trial)
+        {
+            if (trial == null) return "_default";
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            return trial.trueDistanceM.ToString("F1", ci) + "|" + trial.horizonAngleDeg.ToString("F1", ci);
+        }
+
+        public string GetTaskBalancerSalt() => "horizon_cue_integration/v1";
 
         // 试次切换黑屏保持时长：避免用户看到场景/物体瞬时跳变。
         private const int InterTrialBlackoutHoldMs = 600;
@@ -190,7 +200,8 @@ namespace VRPerception.Tasks
                     trueDistanceM = distance,
                     horizonAngleDeg = 0f,
                     repetitionIndex = 0,
-                    isAnchor = true
+                    isAnchor = true,
+                    isProtected = true
                 });
             }
 

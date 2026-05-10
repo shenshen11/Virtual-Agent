@@ -15,9 +15,24 @@ namespace VRPerception.Tasks
     /// - 被试输出：{"type":"inference","answer":{"letter":"A-Z"},"confidence":0..1}
     /// - 自变量：离心率（deg）× 间距（deg），单帧 one-shot，无 action_plan
     /// </summary>
-    public class VisualCrowdingTask : ITask, ITaskRunLifecycle
+    public class VisualCrowdingTask : ITask, ITaskRunLifecycle, IStratifiableTask
     {
         public string TaskId => "visual_crowding";
+
+        // IStratifiableTask: crowded 试次按 (离心率, 间距) 分层；isolated 单字母作为 baseline 由 isProtected 保护，不进入抽样池。
+        public string GetStratumKey(TrialSpec trial)
+        {
+            if (trial == null) return "_default";
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            // isolated 不进入分层（已 protected），但兜底也按 ecc 分组
+            if (string.Equals(trial.visualCrowdingCondition, "isolated", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return "iso|" + trial.eccentricityDeg.ToString("F1", ci);
+            }
+            return trial.eccentricityDeg.ToString("F1", ci) + "|" + trial.spacingDeg.ToString("F2", ci);
+        }
+
+        public string GetTaskBalancerSalt() => "visual_crowding/v1";
 
         private const float DisplayDistanceM = 1.5f;
         private const float LetterHeightDeg = 5.0f;
@@ -160,6 +175,7 @@ namespace VRPerception.Tasks
                     isolatedTrials.Add(new TrialSpec
                     {
                         taskId = TaskId,
+                        isProtected = true,
                         environment = "open_field",
                         background = "none",
                         fovDeg = 60f,

@@ -61,6 +61,21 @@ namespace VRPerception.Tasks
     }
 
     /// <summary>
+    /// 可选：支持跨被试均匀采样的任务。
+    /// 任务通过 <see cref="GetStratumKey"/> 返回每个 trial 的分层键，
+    /// TrialBalancer 会按层做循环偏移采样，使 ~N 名被试聚合后每个条件被覆盖次数差 ≤ 1。
+    /// 受保护试次（TrialSpec.isProtected = true）不参与采样池，会原样保留并固定在最前。
+    /// </summary>
+    public interface IStratifiableTask
+    {
+        /// <summary>返回 trial 的分层键；同一层内的 trial 视为可互换条件。</summary>
+        string GetStratumKey(TrialSpec trial);
+
+        /// <summary>该任务用于跨被试一致性洗牌的常量盐（与 randomSeed 解耦），可返回固定字符串。</summary>
+        string GetTaskBalancerSalt();
+    }
+
+    /// <summary>
     /// 通用试次规格（不同任务可扩展其字段）
     /// </summary>
     [Serializable]
@@ -75,6 +90,9 @@ namespace VRPerception.Tasks
         public string lighting = "default"; // "bright"|"dim"|"hdr"
         public bool occlusion = false;    // 是否存在遮挡
         public float fovDeg = 60f;        // 50/60/90
+
+        // 跨被试均匀采样：受保护试次（练习/锚定/单字母 baseline 等）不进入抽样池，固定保留并置于序列最前
+        public bool isProtected;
 
         // Distance Compression 专用字段
         public bool isAnchor;             // 是否为锚定试次（不计入正式拟合）

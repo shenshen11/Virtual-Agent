@@ -17,9 +17,16 @@ namespace VRPerception.Tasks
     /// - 人类与 MLLM 共享相同的时序呈现；MLLM 额外抓取 before/after 两帧作为输入
     /// - 目标：判断是否发生变化，并给出变化类别（appearance/disappearance/movement/replacement/none）
     /// </summary>
-    public class ChangeDetectionTask : ITask, ITemporalInferenceTask, ITaskRunLifecycle
+    public class ChangeDetectionTask : ITask, ITemporalInferenceTask, ITaskRunLifecycle, IStratifiableTask
     {
         public string TaskId => "change_detection";
+
+        // IStratifiableTask: 按 changeCategory 分层（5 类 × 5 reps = 25）。K=20 时每类取 4。
+        public string GetStratumKey(TrialSpec trial)
+        {
+            return string.IsNullOrEmpty(trial?.changeCategory) ? "_default" : trial.changeCategory;
+        }
+        public string GetTaskBalancerSalt() => "change_detection/v1";
 
         private const string SceneObjectPrefix = "cd_";
         private const int SceneRenderSettleFrames = 5;
