@@ -18,9 +18,19 @@ namespace VRPerception.Tasks
     /// - For MLLM: enforce low-res by requesting a low-res snapshot via action_plan when needed.
     /// - For Human: stimulus is shown briefly then covered by black screen (handled by TrialBlackoutOverlay).
     /// </summary>
-    public sealed class NumerosityComparisonTask : ITask, ITaskRunLifecycle
+    public sealed class NumerosityComparisonTask : ITask, ITaskRunLifecycle, IStratifiableTask
     {
         public string TaskId => "numerosity_comparison";
+
+        // IStratifiableTask: 按 (baseCountN, ratioR) 分层；3 base × 6 ratio = 18 cell × 2 reps = 36 trial。
+        // K=18 时每 cell 取 1（左/右大小由两被试共同覆盖）。
+        public string GetStratumKey(TrialSpec trial)
+        {
+            if (trial == null) return "_default";
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            return ((int)trial.baseCountN).ToString(ci) + "|" + trial.ratioR.ToString("F2", ci);
+        }
+        public string GetTaskBalancerSalt() => "numerosity_comparison/v1";
 
         private TaskRunnerContext _ctx;
         private System.Random _rand = new System.Random(12345);

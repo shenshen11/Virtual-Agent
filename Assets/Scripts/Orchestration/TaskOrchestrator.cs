@@ -336,7 +336,8 @@ namespace VRPerception.Orchestration
                 enableActionPlanLoop = entry.enableActionPlanLoop,
                 actionPlanLoopTimeoutMs = entry.actionPlanLoopTimeoutMs,
                 preTaskMessage = entry.preTaskMessage,
-                humanInputPrompt = entry.humanInputPrompt
+                humanInputPrompt = entry.humanInputPrompt,
+                participantId = GetParticipantId()
             };
 
             _lastRunConfig = config;
