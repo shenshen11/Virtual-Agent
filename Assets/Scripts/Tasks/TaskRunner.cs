@@ -240,6 +240,14 @@ namespace VRPerception.Tasks
             _runId = LogSessionPaths.GetOrCreateSessionId("VRP_Logs");
 
             var trials = _task.BuildTrials(randomSeed) ?? Array.Empty<TrialSpec>();
+            for (int i = 0; i < trials.Length; i++)
+            {
+                if (trials[i] != null)
+                {
+                    trials[i].originalTrialIndex = i;
+                }
+            }
+
             // 跨被试均匀采样：仅当显式给出 maxTrials > 0 且 trials 多于目标数时启用，
             // 否则保持原行为（全量执行 BuildTrials 返回的全部 trials）。
             if (subjectMode == SubjectMode.Human && maxTrials > 0 && trials.Length > maxTrials)

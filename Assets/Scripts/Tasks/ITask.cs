@@ -83,6 +83,7 @@ namespace VRPerception.Tasks
     {
         public string taskId;
         public int trialId;
+        public int originalTrialIndex = -1;
 
         // 通用条件
         public string environment;        // "open_field" | "corridor" | "none/indoor/street" 等

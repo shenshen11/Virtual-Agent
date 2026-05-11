@@ -350,7 +350,7 @@ namespace VRPerception.Infra
                         // - confidence: 模型置信度（0..1，来自模型输出）
                         // - providerId: 使用的模型/服务提供方ID
                         // - latencyMs: 推理耗时（毫秒）
-                        sw.WriteLine("taskId,trialId,environment,fovDeg,targetKind,isAnchor,trueDistanceM,predictedDistanceM,absError,relError,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,originalTrialIndex,environment,fovDeg,targetKind,isAnchor,trueDistanceM,predictedDistanceM,absError,relError,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -362,6 +362,7 @@ namespace VRPerception.Infra
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
                                 r.trialId,
+                                t.originalTrialIndex,
                                 Escape(t.environment),
                                 t.fovDeg.ToString("F0"),
                                 Escape(t.targetKind),
@@ -395,7 +396,7 @@ namespace VRPerception.Infra
                         // - predictedLetter: 模型预测字母
                         // - isCorrect: 是否正确（1/0）
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,eccentricityDeg,spacingDeg,targetLetter,flankerLetters,predictedLetter,isCorrect,confidence,providerId,latencyMs,displayDistanceM,letterHeightDeg,letterWidthDeg,edgeGapDeg,spacingEccentricityRatio,leftmostLetterEccDeg,rightmostLetterEccDeg,visualCrowdingCondition");
+                        sw.WriteLine("taskId,trialId,originalTrialIndex,eccentricityDeg,spacingDeg,targetLetter,flankerLetters,predictedLetter,isCorrect,confidence,providerId,latencyMs,displayDistanceM,letterHeightDeg,letterWidthDeg,edgeGapDeg,spacingEccentricityRatio,leftmostLetterEccDeg,rightmostLetterEccDeg,visualCrowdingCondition");
 
                         foreach (var r in _completed)
                         {
@@ -411,6 +412,7 @@ namespace VRPerception.Infra
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
                                 r.trialId,
+                                t.originalTrialIndex,
                                 t.eccentricityDeg.ToString("F3"),
                                 t.spacingDeg.ToString("F3"),
                                 Escape(t.targetLetter),
@@ -450,7 +452,7 @@ namespace VRPerception.Infra
                         // - cueFollowed: 冲突题中跟随的线索组合；非冲突题通常为空
                         // - isCorrect: 一致题/控制题正确性；冲突题无客观正确，默认为 0
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,environment,fovDeg,descA,descB,materialVariantA,materialVariantB,scaleA,scaleB,trialType,predictedHeavierSide,evidenceCues,cueFollowed,isCorrect,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,originalTrialIndex,environment,fovDeg,descA,descB,materialVariantA,materialVariantB,scaleA,scaleB,trialType,predictedHeavierSide,evidenceCues,cueFollowed,isCorrect,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -462,6 +464,7 @@ namespace VRPerception.Infra
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
                                 r.trialId,
+                                t.originalTrialIndex,
                                 Escape(t.environment),
                                 t.fovDeg.ToString("F0"),
                                 Escape(t.weightDescA),
@@ -506,7 +509,7 @@ namespace VRPerception.Infra
                         // - reversalCount: 已发生反转次数
                         // - thresholdEstimateM: 当前阈值估计（米）
                         // - groupEnded: 是否达到组结束条件（1/0）
-                        sw.WriteLine("taskId,trialId,environment,fovDeg,depthA,depthB,deltaM,baseDistanceM,trueCloser,predictedCloser,isCorrect,confidence,providerId,latencyMs,groupIndex,trialIndexInGroup,staircaseDeltaNextM,reversalHappened,reversalCount,thresholdEstimateM,groupEnded");
+                        sw.WriteLine("taskId,trialId,originalTrialIndex,environment,fovDeg,depthA,depthB,deltaM,baseDistanceM,trueCloser,predictedCloser,isCorrect,confidence,providerId,latencyMs,groupIndex,trialIndexInGroup,staircaseDeltaNextM,reversalHappened,reversalCount,thresholdEstimateM,groupEnded");
 
                         foreach (var r in _completed)
                         {
@@ -525,6 +528,7 @@ namespace VRPerception.Infra
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
                                 r.trialId,
+                                t.originalTrialIndex,
                                 Escape(t.environment),
                                 t.fovDeg.ToString("F0"),
                                 depthA.ToString("F3"),
@@ -565,7 +569,7 @@ namespace VRPerception.Infra
                         // - sphereScreenY01: 红球中心在屏幕上的 Y（0..1），用于校验“屏幕静止”
                         // - predictedDistanceM/absError/relError: 同 distance_compression
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,fovDeg,trueDistanceM,horizonAngleDeg,repetitionIndex,sphereScreenY01,predictedDistanceM,absError,relError,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,originalTrialIndex,fovDeg,trueDistanceM,horizonAngleDeg,repetitionIndex,sphereScreenY01,predictedDistanceM,absError,relError,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -577,6 +581,7 @@ namespace VRPerception.Infra
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
                                 r.trialId,
+                                t.originalTrialIndex,
                                 t.fovDeg.ToString("F0"),
                                 t.trueDistanceM.ToString("F3"),
                                 t.horizonAngleDeg.ToString("F3"),
@@ -608,7 +613,7 @@ namespace VRPerception.Infra
                         // - isCorrect: 是否正确（1/0）
                         // - exposureDurationMs/dotRadius: 刺激曝光时长/点大小（用于复现实验条件）
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,baseCountN,ratioR,leftCount,rightCount,trueMoreSide,predictedMoreSide,isCorrect,exposureDurationMs,dotRadius,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,originalTrialIndex,baseCountN,ratioR,leftCount,rightCount,trueMoreSide,predictedMoreSide,isCorrect,exposureDurationMs,dotRadius,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -624,6 +629,7 @@ namespace VRPerception.Infra
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
                                 r.trialId,
+                                t.originalTrialIndex,
                                 t.baseCountN.ToString("F0"),
                                 t.ratioR.ToString("F3"),
                                 left,
@@ -655,7 +661,7 @@ namespace VRPerception.Infra
                         // - predictedChanged/predictedChangeCategory: 模型预测
                         // - isCorrect: 正确性（先比较 changed；若 changed=true 再比较类别）
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,background,fovDeg,trueChanged,trueChangeCategory,predictedChanged,predictedChangeCategory,isCorrect,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,originalTrialIndex,background,fovDeg,trueChanged,trueChangeCategory,predictedChanged,predictedChangeCategory,isCorrect,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -671,6 +677,7 @@ namespace VRPerception.Infra
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
                                 r.trialId,
+                                t.originalTrialIndex,
                                 Escape(t.background),
                                 t.fovDeg.ToString("F0"),
                                 trueChanged ? "1" : "0",
@@ -703,7 +710,7 @@ namespace VRPerception.Infra
                         // - roughnessAbsError: 绝对误差 |pred-true|
                         // - roughnessSignedError: 有符号误差 pred-true
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,environment,fovDeg,trueRoughness,requireHeadMotion,predictedRoughness,roughnessAbsError,roughnessSignedError,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,originalTrialIndex,environment,fovDeg,trueRoughness,requireHeadMotion,predictedRoughness,roughnessAbsError,roughnessSignedError,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -715,6 +722,7 @@ namespace VRPerception.Infra
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
                                 r.trialId,
+                                t.originalTrialIndex,
                                 Escape(t.environment),
                                 t.fovDeg.ToString("F0"),
                                 t.roughness.ToString("F3"),
@@ -745,7 +753,7 @@ namespace VRPerception.Infra
                         // - predictedChoice: 模型选择的标签
                         // - submittedR/submittedG/submittedB: 解析出的提交颜色 RGB（Human 模式重点）
                         // - confidence/providerId/latencyMs: 同上
-                        sw.WriteLine("taskId,trialId,phase,background,fovDeg,lighting,trueR,trueG,trueB,predictedChoice,submittedR,submittedG,submittedB,confidence,providerId,latencyMs");
+                        sw.WriteLine("taskId,trialId,originalTrialIndex,phase,background,fovDeg,lighting,trueR,trueG,trueB,predictedChoice,submittedR,submittedG,submittedB,confidence,providerId,latencyMs");
 
                         foreach (var r in _completed)
                         {
@@ -781,6 +789,7 @@ namespace VRPerception.Infra
                             sw.WriteLine(string.Join(",",
                                 Escape(r.taskId),
                                 r.trialId,
+                                t.originalTrialIndex,
                                 Escape(phase),
                                 Escape(t.background),
                                 t.fovDeg.ToString("F0"),
