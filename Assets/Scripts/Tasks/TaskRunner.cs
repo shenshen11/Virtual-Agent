@@ -39,6 +39,7 @@ namespace VRPerception.Tasks
             public string preTaskMessage;
             public string humanInputPrompt;
             // 跨被试均匀采样：被试 ID（用于 TrialBalancer 派生 participantIndex）
+            public string experimentId;
             public string participantId;
         }
 
@@ -106,6 +107,7 @@ namespace VRPerception.Tasks
         private string _humanInputPrompt;
         private string _runId;
         // 跨被试均匀采样：当前被试 ID（由 ApplyRunConfig 注入；为空时回退到设备 ID）
+        private string _experimentId;
         private string _participantId;
  
         public TaskRunnerContext Context { get; private set; } = new TaskRunnerContext();
@@ -240,12 +242,16 @@ namespace VRPerception.Tasks
             var trials = _task.BuildTrials(randomSeed) ?? Array.Empty<TrialSpec>();
             // 跨被试均匀采样：仅当显式给出 maxTrials > 0 且 trials 多于目标数时启用，
             // 否则保持原行为（全量执行 BuildTrials 返回的全部 trials）。
-            if (maxTrials > 0 && trials.Length > maxTrials)
+            if (subjectMode == SubjectMode.Human && maxTrials > 0 && trials.Length > maxTrials)
             {
                 string effectiveParticipantId = !string.IsNullOrWhiteSpace(_participantId)
                     ? _participantId
                     : SystemInfo.deviceUniqueIdentifier;
-                int participantIndex = TrialBalancer.ResolveParticipantIndex(effectiveParticipantId);
+                if (!TryResolveExperimentParticipantIndex(_experimentId, out var experimentNumber, out var participantIndex))
+                {
+                    Debug.LogError("[TaskRunner] Human trial sampling requires a positive numeric experimentId.");
+                    return;
+                }
 
                 Func<TrialSpec, string> stratumKeyFn;
                 string taskSalt;
@@ -262,7 +268,7 @@ namespace VRPerception.Tasks
                 }
 
                 int orderSeed = unchecked(randomSeed
-                    ^ TrialBalancer.StableHash(effectiveParticipantId ?? "")
+                    ^ TrialBalancer.StableHash(_experimentId ?? "")
                     ^ TrialBalancer.StableHash(taskSalt));
 
                 trials = TrialBalancer.BalanceAndSample(
@@ -277,6 +283,8 @@ namespace VRPerception.Tasks
                 eventBus?.PublishMetric("trial_balancer_sample", "trial", trials.Length, "count", new
                 {
                     taskId = _task.TaskId,
+                    experimentId = _experimentId,
+                    experimentNumber,
                     participantId = effectiveParticipantId,
                     participantIndex,
                     target = maxTrials,
@@ -817,6 +825,8 @@ namespace VRPerception.Tasks
                 _humanInputPrompt = config.humanInputPrompt;
             }
 
+            _experimentId = string.IsNullOrWhiteSpace(config.experimentId) ? null : config.experimentId.Trim();
+
             if (!string.IsNullOrWhiteSpace(config.participantId))
             {
                 _participantId = config.participantId;
@@ -852,6 +862,31 @@ namespace VRPerception.Tasks
                 // 未传入 taskId 时，不修改当前 taskMode/_overrideTaskId，由场景内配置决定
                 _overrideTaskId = null;
             }
+        }
+
+        private static bool TryResolveExperimentParticipantIndex(string experimentId, out int experimentNumber, out int participantIndex)
+        {
+            experimentNumber = 0;
+            participantIndex = 0;
+
+            if (string.IsNullOrWhiteSpace(experimentId))
+            {
+                return false;
+            }
+
+            var value = experimentId.Trim();
+            for (int i = 0; i < value.Length; i++)
+            {
+                if (!char.IsDigit(value[i])) return false;
+            }
+
+            if (!int.TryParse(value, out experimentNumber) || experimentNumber < 1)
+            {
+                return false;
+            }
+
+            participantIndex = experimentNumber - 1;
+            return true;
         }
 
         private bool TryCreateTask(TaskMode mode, out ITask task)

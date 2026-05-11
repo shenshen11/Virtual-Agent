@@ -56,12 +56,18 @@ namespace VRPerception.UI
         {
             var playlist = playlistSelector != null ? playlistSelector.GetSelectedPlaylist() : null;
             bool isHumanPlaylist = IsHumanPlaylist(playlist);
-            string experimentId = experimentIdInput != null ? experimentIdInput.text : null;
-            string participantId = participantIdInput != null ? participantIdInput.text : null;
+            string experimentId = experimentIdInput != null ? experimentIdInput.text?.Trim() : null;
+            string participantId = participantIdInput != null ? participantIdInput.text?.Trim() : null;
+
+            if (isHumanPlaylist && !TryParsePositiveExperimentId(experimentId))
+            {
+                SetValidationMessage("请询问实验员您的实验编号。");
+                return;
+            }
 
             if (isHumanPlaylist && string.IsNullOrWhiteSpace(participantId))
             {
-                SetValidationMessage("请填写学号/被试编号。");
+                SetValidationMessage("请填写学号。");
                 return;
             }
 
@@ -106,6 +112,18 @@ namespace VRPerception.UI
             }
 
             return false;
+        }
+
+        private static bool TryParsePositiveExperimentId(string experimentId)
+        {
+            if (string.IsNullOrWhiteSpace(experimentId)) return false;
+            var value = experimentId.Trim();
+            for (int i = 0; i < value.Length; i++)
+            {
+                if (!char.IsDigit(value[i])) return false;
+            }
+
+            return int.TryParse(value, out var experimentNumber) && experimentNumber >= 1;
         }
 
         private void SetValidationMessage(string message)

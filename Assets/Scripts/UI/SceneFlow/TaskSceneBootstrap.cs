@@ -52,6 +52,7 @@ namespace VRPerception.UI
             }
 
             ConfigureLogSessionIfNeeded(playlist, experimentId, participantId);
+            orchestrator.SetRuntimeSessionIdentity(experimentId, participantId);
             _ = orchestrator.StartPlaylistAsync(playlist);
         }
 

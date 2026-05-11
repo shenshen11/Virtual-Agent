@@ -57,6 +57,8 @@ namespace VRPerception.Orchestration
         private TaskRunner.TaskRunConfig _lastRunConfig;
         private int _lastObservedTrialIndex = -1;
         private string _currentTaskId;
+        private string _runtimeExperimentId;
+        private string _runtimeParticipantId;
 
         private bool _pauseRequested;
         private bool _skipRestRequested;
@@ -65,6 +67,12 @@ namespace VRPerception.Orchestration
         public TaskPlaylist CurrentPlaylist => _currentPlaylist;
         public int CurrentEntryIndex => _currentEntryIndex;
         public bool IsRunning => _isRunning;
+
+        public void SetRuntimeSessionIdentity(string experimentId, string participantId)
+        {
+            _runtimeExperimentId = string.IsNullOrWhiteSpace(experimentId) ? null : experimentId.Trim();
+            _runtimeParticipantId = string.IsNullOrWhiteSpace(participantId) ? null : participantId.Trim();
+        }
 
         private void Awake()
         {
@@ -337,6 +345,7 @@ namespace VRPerception.Orchestration
                 actionPlanLoopTimeoutMs = entry.actionPlanLoopTimeoutMs,
                 preTaskMessage = entry.preTaskMessage,
                 humanInputPrompt = entry.humanInputPrompt,
+                experimentId = GetExperimentId(),
                 participantId = GetParticipantId()
             };
 
@@ -445,9 +454,15 @@ namespace VRPerception.Orchestration
         private string GetParticipantId()
         {
             if (!string.IsNullOrWhiteSpace(participantIdOverride)) return participantIdOverride;
+            if (!string.IsNullOrWhiteSpace(_runtimeParticipantId)) return _runtimeParticipantId;
             if (_currentPlaylist != null && !string.IsNullOrWhiteSpace(_currentPlaylist.DefaultParticipantId))
                 return _currentPlaylist.DefaultParticipantId;
             return SystemInfo.deviceUniqueIdentifier;
+        }
+
+        private string GetExperimentId()
+        {
+            return string.IsNullOrWhiteSpace(_runtimeExperimentId) ? null : _runtimeExperimentId;
         }
 
         private void TryQuitApplication()
