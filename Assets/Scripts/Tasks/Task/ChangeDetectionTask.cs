@@ -31,9 +31,9 @@ namespace VRPerception.Tasks
         private const string SceneObjectPrefix = "cd_";
         private const int SceneRenderSettleFrames = 5;
         private const int SceneRenderSettleDelayMs = 50;
-        private const int SceneAExposureMs = 2000;
+        private const int SceneAExposureMs = 3000;
         private const int MaskDurationMs = 500;
-        private const int SceneBExposureMs = 2000;
+        private const int SceneBExposureMs = 3000;
         private const float ClusterDistance = 9f;
         private const int ChangeCategoryRepetitions = 5;
         private const int GridRows = 4;

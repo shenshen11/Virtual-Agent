@@ -26,9 +26,9 @@ MonoBehaviour:
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
     scenePreset: 
-    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A1/8 \n\u8BF7\u89C2\u5BDF\u524D\u65B9\u51FA\u73B0\u7684\u7269\u4F53\uFF0C\n\u5E76\u4F30\u8BA1\u5B83\u5230\u60A8\u7684\u8DDD\u79BB\u3002"
-    postTaskMessage: 
-    restSeconds: 60
+    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A1/8 \n\u8BF7\u89C2\u5BDF\u524D\u65B9\u51FA\u73B0\u7684\u7269\u4F53\uFF0C\u5E76\u4F30\u8BA1\u5B83\u5230\u60A8\u7684\u8DDD\u79BB\u3002"
+    postTaskMessage: "\u5B9E\u9A8C1\u5DF2\u5B8C\u6210\uFF01"
+    restSeconds: 5
     operatorNotes: 
     humanInputPrompt: 
   - taskId: depth_jnd_staircase
@@ -41,10 +41,10 @@ MonoBehaviour:
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
     scenePreset: 
-    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A2/8 \n\u524D\u65B9\u5C06\u540C\u65F6\u51FA\u73B0\u5DE6\u53F3\u4E24\u4E2A\u76F8\u540C\u7684\n\u7269\u4F53\uFF0C\u4EC5\u6DF1\u5EA6\u4E0D\u540C\u3002\u8BF7\u5224\u65AD\u5DE6\u4FA7
-      A\n \u4E0E\u53F3\u4FA7 B \u54EA\u4E00\u4E2A\u8DDD\u79BB\u60A8\u66F4\u8FD1\u3002"
-    postTaskMessage: 
-    restSeconds: 60
+    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A2/8 \n\u524D\u65B9\u5C06\u540C\u65F6\u51FA\u73B0\u5DE6\u53F3\u4E24\u4E2A\u76F8\u540C\u7684\u7269\u4F53\uFF0C\u4EC5\u6DF1\u5EA6\u4E0D\u540C\u3002\u8BF7\u5224\u65AD\u5DE6\u4FA7
+      A\u4E0E\u53F3\u4FA7 B \u54EA\u4E00\u4E2A\u8DDD\u79BB\u60A8\u66F4\u8FD1\u3002"
+    postTaskMessage: "\u5B9E\u9A8C2\u5DF2\u5B8C\u6210\uFF01"
+    restSeconds: 5
     operatorNotes: 
     humanInputPrompt: 
   - taskId: horizon_cue_integration
@@ -57,9 +57,9 @@ MonoBehaviour:
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
     scenePreset: 
-    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A3/8 \n\u524D\u65B9\u5C06\u51FA\u73B0\u4E00\u4E2A\u7EA2\u8272\u5C0F\u7403\uFF0C\n\u8BF7\u4F30\u8BA1\u7EA2\u7403\u5230\u60A8\u7684\u8DDD\u79BB\u3002"
-    postTaskMessage: 
-    restSeconds: 120
+    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A3/8 \n\u524D\u65B9\u5C06\u51FA\u73B0\u4E00\u4E2A\u7EA2\u8272\u5C0F\u7403\uFF0C\u8BF7\u4F30\u8BA1\u7EA2\u7403\u5230\u60A8\u7684\u8DDD\u79BB\u3002"
+    postTaskMessage: "\u5B9E\u9A8C3\u5DF2\u5B8C\u6210\uFF01"
+    restSeconds: 5
     operatorNotes: 
     humanInputPrompt: 
   - taskId: color_constancy_adjustment
@@ -72,9 +72,9 @@ MonoBehaviour:
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
     scenePreset: 
-    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A4/8 \n\u73AF\u5883\u5149\u4F1A\u8FDB\u884C\u5207\u6362\uFF0C\u8BF7\u5148\u9002\u5E94\n\u5F53\u524D\u5149\u7167\u3002\u7136\u540E\u5C06\u4E2D\u592E\u7403\u4F53\u8C03\n\u8282\u5230\u60A8\u770B\u4E0A\u53BB\u4E3A\u201C\u4E2D\u6027\u7070\u201D\u7684\u989C\u8272\u3002"
-    postTaskMessage: 
-    restSeconds: 60
+    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A4/8 \n\u73AF\u5883\u5149\u4F1A\u8FDB\u884C\u5207\u6362\uFF0C\u8BF7\u5148\u9002\u5E94\u5F53\u524D\u5149\u7167\u3002\u7136\u540E\u5C06\u4E2D\u592E\u7403\u4F53\u8C03\u8282\u5230\u60A8\u770B\u4E0A\u53BB\u4E3A\u201C\u4E2D\u6027\u7070\u201D\u7684\u989C\u8272\u3002"
+    postTaskMessage: "\u5B9E\u9A8C4\u5DF2\u5B8C\u6210\uFF01"
+    restSeconds: 5
     operatorNotes: 
     humanInputPrompt: 
   - taskId: visual_weight_judgment
@@ -87,10 +87,10 @@ MonoBehaviour:
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
     scenePreset: 
-    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A5/8 \n\u524D\u65B9\u5C06\u540C\u65F6\u5448\u73B0\u4E24\u4E2A\u7ACB\u65B9\u4F53\uFF0C\n\u8BF7\u4EC5\u51ED\u89C6\u89C9\u5224\u65AD\u54EA\u4E00\u4E2A\u770B\u8D77\n\u6765\u66F4\u91CD\uFF08\u5DE6A
-      \u6216 \u53F3B\uFF09\u3002"
-    postTaskMessage: 
-    restSeconds: 120
+    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A5/8 \n\u524D\u65B9\u5C06\u540C\u65F6\u5448\u73B0\u4E24\u4E2A\u7ACB\u65B9\u4F53\uFF0C\u8BF7\u4EC5\u51ED\u89C6\u89C9\u5224\u65AD\u54EA\u4E00\u4E2A\u770B\u8D77\u6765\u66F4\u91CD\uFF08\u5DE6A
+      \u6216 \u53F3B\u6216\u4E00\u6837\u91CD\uFF09\uFF0C\u5E76\u9009\u62E9\u5224\u65AD\u4F9D\u636E\u3002"
+    postTaskMessage: "\u5B9E\u9A8C5\u5DF2\u5B8C\u6210\uFF01"
+    restSeconds: 5
     operatorNotes: 
     humanInputPrompt: 
   - taskId: visual_crowding
@@ -103,10 +103,10 @@ MonoBehaviour:
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
     scenePreset: 
-    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A6/8 \n\u8BF7\u59CB\u7EC8\u6CE8\u89C6\u5C4F\u5E55\u4E2D\u592E\u7684\u6CE8\u89C6\u70B9\uFF0C\n\u5E76\u7528\u4F59\u5149\u8BC6\u522B\u53F3\u4FA7
-      5 \u4E2A\u5B57\u6BCD\u4E32\n\u201C\u6B63\u4E2D\u95F4\u201D\u7684\u76EE\u6807\u5B57\u6BCD\u3002"
-    postTaskMessage: 
-    restSeconds: 60
+    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A6/8 \n\u8BF7\u59CB\u7EC8\u6CE8\u89C6\u5C4F\u5E55\u4E2D\u592E\u7684\u7EA2\u8272\u6CE8\u89C6\u70B9\uFF0C\u5E76\u7528\u4F59\u5149\u8BC6\u522B\u53F3\u4FA7
+      5 \u4E2A\u5B57\u6BCD\u4E32\n\u201C\u6B63\u4E2D\u95F4\u201D\u7684\u76EE\u6807\u5B57\u6BCD\u6216\u5355\u4E2A\u76EE\u6807\u5B57\u6BCD\u3002"
+    postTaskMessage: "\u5B9E\u9A8C6\u5DF2\u5B8C\u6210\uFF01"
+    restSeconds: 5
     operatorNotes: 
     humanInputPrompt: 
   - taskId: numerosity_comparison
@@ -119,10 +119,10 @@ MonoBehaviour:
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
     scenePreset: 
-    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A7/8 \n\u5DE6\u53F3\u4E24\u4FA7\u5C06\u77ED\u6682\u5448\u73B0\u4E00\u7EC4\u5706\u70B9\uFF0C\n\u968F\u5373\u88AB\u906E\u6321\u3002\u8BF7\u5FEB\u901F\u5224\u65AD\u54EA\u4E00\n\u4FA7\u7684\u70B9\u6570\u66F4\u591A\uFF08\u5DE6
+    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A7/8 \n\u5DE6\u53F3\u4E24\u4FA7\u5C06\u77ED\u6682\u5448\u73B0\u4E00\u7EC4\u5706\u70B9\uFF0C\u968F\u5373\u6D88\u5931\u3002\u8BF7\u5FEB\u901F\u5224\u65AD\u54EA\u4E00\u4FA7\u7684\u70B9\u6570\u66F4\u591A\uFF08\u5DE6
       / \u53F3\uFF09\u3002"
-    postTaskMessage: 
-    restSeconds: 60
+    postTaskMessage: "\u5B9E\u9A8C7\u5DF2\u5B8C\u6210\uFF01"
+    restSeconds: 5
     operatorNotes: 
     humanInputPrompt: 
   - taskId: change_detection
@@ -135,12 +135,12 @@ MonoBehaviour:
     actionPlanLoopTimeoutMs: 20000
     requireHumanInput: 1
     scenePreset: 
-    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A8/8 \n\u60A8\u5C06\u770B\u5230\u753B\u9762A
-      \u2192 \u9ED1\u5C4F \u2192 \u753B\u9762B\n\u7684\u65F6\u5E8F\u5448\u73B0\u3002\u8BF7\u5224\u65AD
-      A \u4E0E B \u4E4B\u95F4\n\u662F\u5426\u53D1\u751F\u53D8\u5316\uFF0C\u5E76\u8BF4\u660E\u53D8\u5316\u7C7B\u578B\n\uFF08\u51FA\u73B0
-      / \u6D88\u5931 / \u79FB\u52A8 / \u66FF\u6362 / \u65E0\u53D8\u5316\uFF09\u3002"
-    postTaskMessage: 
-    restSeconds: 2
+    preTaskMessage: "\u5B9E\u9A8C\u8FDB\u5EA6\uFF1A8/8 \n\u60A8\u5C06\u770B\u5230
+      \"\u753B\u9762A 2s\u2192 \u7A7A\u767D 0.5s\u2192 \u753B\u9762B 2s\" \u7684\u65F6\u5E8F\u5448\u73B0\u3002\u8BF7\u5224\u65AD
+      A \u4E0E B \u4E4B\u95F4\u662F\u5426\u53D1\u751F\u53D8\u5316\uFF0C\u5E76\u8BF4\u660E\u53D8\u5316\u7C7B\u578B\uFF08\u589E\u52A0
+      / \u51CF\u5C11 / \u79FB\u52A8 / \u66FF\u6362 / \u65E0\u53D8\u5316\uFF09\u3002"
+    postTaskMessage: "\u5B9E\u9A8C\u7ED3\u675F\uFF01\u611F\u8C22\u60A8\u7684\u53C2\u4E0E\uFF01"
+    restSeconds: 5
     operatorNotes: 
     humanInputPrompt: 
   defaultParticipantId: 

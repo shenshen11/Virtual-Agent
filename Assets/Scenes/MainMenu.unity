@@ -1667,7 +1667,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6803edce0201f574f923fd9d10e5b30a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_InteractionManager: {fileID: 0}
+  m_InteractionManager: {fileID: 292276179}
   m_InteractionLayerMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -4507,7 +4507,7 @@ MonoBehaviour:
   m_Camera: {fileID: 741800784}
   m_OriginBaseGameObject: {fileID: 1921976169}
   m_CameraFloorOffsetObject: {fileID: 1802158417}
-  m_RequestedTrackingOriginMode: 1
+  m_RequestedTrackingOriginMode: 2
   m_CameraYOffset: 1.1176
 --- !u!4 &1921976173
 Transform:
@@ -4839,7 +4839,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6803edce0201f574f923fd9d10e5b30a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_InteractionManager: {fileID: 0}
+  m_InteractionManager: {fileID: 292276179}
   m_InteractionLayerMask:
     serializedVersion: 2
     m_Bits: 4294967295

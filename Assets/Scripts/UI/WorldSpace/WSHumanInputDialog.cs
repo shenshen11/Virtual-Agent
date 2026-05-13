@@ -710,6 +710,7 @@ namespace VRPerception.UI
             if (distanceGroup != null) distanceGroup.SetActive(false);
             if (distanceKeypadGroup != null) distanceKeypadGroup.SetActive(false);
             if (sizeBiasGroup != null) sizeBiasGroup.SetActive(false);
+            if (visualWeightGroup != null) visualWeightGroup.SetActive(false);
             if (visualCrowdingGroup != null) visualCrowdingGroup.SetActive(false);
             if (changeDetectionGroup != null) changeDetectionGroup.SetActive(false);
             if (depthJndGroup != null) depthJndGroup.SetActive(false);

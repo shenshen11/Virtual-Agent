@@ -22,8 +22,8 @@ namespace VRPerception.Tasks
         private const float DefaultFovDeg = 60f;
         private const int DefaultTrialsPerLighting = 3;
         private const int DefaultCandidateCount = 9;
-        private const float DefaultAdaptSeconds = 30f;
-        private const float DefaultRestSeconds = 15f;
+        private const float DefaultAdaptSeconds = 5f;
+        private const float DefaultRestSeconds = 3f;
         private const float AdjustableSphereScale = 0.2f;
         private const float AdjustableSphereDistance = 1.2f;
         private const float AdjustableSphereYOffset = -0.1f;

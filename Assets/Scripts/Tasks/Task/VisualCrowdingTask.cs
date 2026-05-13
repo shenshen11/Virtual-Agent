@@ -60,7 +60,7 @@ namespace VRPerception.Tasks
         private int _activeTrialId = -1;
 
         // 字母消除延迟（秒），注视点保留
-        private const float LetterHideDelaySec = 3f;
+        private const float LetterHideDelaySec = 2f;
         private const float FixationPreparationDelaySec = 2f;
         private bool _referenceFrameInitialized;
         private Vector3 _referenceOrigin;
