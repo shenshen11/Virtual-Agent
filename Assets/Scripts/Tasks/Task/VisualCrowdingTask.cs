@@ -56,12 +56,18 @@ namespace VRPerception.Tasks
         private readonly List<GameObject> _spawned = new List<GameObject>();
         private readonly List<GameObject> _letterSpawned = new List<GameObject>();
         private GameObject _fixationRoot;
+        private GameObject _fixationInstructionRoot;
         private readonly Dictionary<string, int> _snapshotObjectCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private int _activeTrialId = -1;
 
         // 字母消除延迟（秒），注视点保留
         private const float LetterHideDelaySec = 2f;
+        private const float FixationInstructionDelaySec = 2f;
         private const float FixationPreparationDelaySec = 2f;
+        private const float FixationInstructionTextHeightDeg = 3.0f;
+        private const float FixationInstructionVerticalOffsetDeg = 4.0f;
+        private const string FixationInstructionText = "请全程注视红色十字";
+        private static readonly Color FixationInstructionColor = new Color(1f, 0.95f, 0.2f, 1f);
         private bool _referenceFrameInitialized;
         private Vector3 _referenceOrigin;
         private Vector3 _referenceForward;
@@ -284,30 +290,52 @@ namespace VRPerception.Tasks
 
         public async Task RunFixedExposureHumanPresentationAsync(TrialSpec trial, CancellationToken ct)
         {
-            _ctx?.runner?.SetHumanTelemetryTrialSubphase("fixation_preparation");
-
-            if (FixationPreparationDelaySec > 0f)
+            try
             {
-                await Task.Delay(TimeSpan.FromSeconds(FixationPreparationDelaySec), ct);
+                _ctx?.runner?.SetHumanTelemetryTrialSubphase("fixation_instruction");
+
+                if (_trialPlacementReady)
+                {
+                    ShowFixationInstruction(_trialOrigin, _trialForward, _trialEyeY, _trialDisplayDistance);
+                }
+
+                if (FixationInstructionDelaySec > 0f)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(FixationInstructionDelaySec), ct);
+                }
+
+                ct.ThrowIfCancellationRequested();
+                HideFixationInstruction();
+
+                _ctx?.runner?.SetHumanTelemetryTrialSubphase("fixation_preparation");
+
+                if (FixationPreparationDelaySec > 0f)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(FixationPreparationDelaySec), ct);
+                }
+
+                ct.ThrowIfCancellationRequested();
+
+                if (_trialPlacementReady)
+                {
+                    PlaceLetters(_trialOrigin, _trialForward, _trialRight, _trialEyeY, _trialDisplayDistance, trial);
+                }
+
+                _ctx?.runner?.SetHumanTelemetryTrialSubphase("letter_exposure");
+
+                if (LetterHideDelaySec > 0f)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(LetterHideDelaySec), ct);
+                }
+
+                ct.ThrowIfCancellationRequested();
+                HideLetters();
+                await Task.Yield();
             }
-
-            ct.ThrowIfCancellationRequested();
-
-            if (_trialPlacementReady)
+            finally
             {
-                PlaceLetters(_trialOrigin, _trialForward, _trialRight, _trialEyeY, _trialDisplayDistance, trial);
+                HideFixationInstruction();
             }
-
-            _ctx?.runner?.SetHumanTelemetryTrialSubphase("letter_exposure");
-
-            if (LetterHideDelaySec > 0f)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(LetterHideDelaySec), ct);
-            }
-
-            ct.ThrowIfCancellationRequested();
-            HideLetters();
-            await Task.Yield();
         }
 
         /// <summary>
@@ -323,6 +351,44 @@ namespace VRPerception.Tasks
                 if (go != null) go.SetActive(false);
             }
             // 不清空 _letterSpawned，留给 ClearSpawned 销毁
+        }
+
+        private void ShowFixationInstruction(Vector3 origin, Vector3 forward, float eyeY, float depth)
+        {
+            HideFixationInstruction();
+
+            var pos = origin + forward * depth;
+            pos.y = eyeY - AngleToWorldSize(FixationInstructionVerticalOffsetDeg, depth);
+
+            var go = new GameObject("vc_fixation_instruction", typeof(TextMesh));
+            go.transform.position = pos;
+            go.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+
+            var tm = go.GetComponent<TextMesh>();
+            tm.text = FixationInstructionText;
+            tm.anchor = TextAnchor.MiddleCenter;
+            tm.alignment = TextAlignment.Center;
+            tm.characterSize = 1f;
+            tm.fontSize = 80;
+            tm.color = FixationInstructionColor;
+
+            FitTextMeshToHeight(go, AngleToWorldSize(FixationInstructionTextHeightDeg, depth));
+            _fixationInstructionRoot = go;
+            _spawned.Add(go);
+        }
+
+        private void HideFixationInstruction()
+        {
+            var go = _fixationInstructionRoot;
+            _fixationInstructionRoot = null;
+            if (go == null) return;
+
+            _spawned.Remove(go);
+#if UNITY_EDITOR
+            UnityEngine.Object.DestroyImmediate(go);
+#else
+            UnityEngine.Object.Destroy(go);
+#endif
         }
 
         public async Task OnAfterTrialAsync(TrialSpec trial, LLMResponse response, CancellationToken ct)
@@ -673,6 +739,7 @@ namespace VRPerception.Tasks
             _spawned.Clear();
             _letterSpawned.Clear(); // 字母可能已被 HideLettersAfterDelayAsync 提前清除，确保同步
             _fixationRoot = null;
+            _fixationInstructionRoot = null;
             _snapshotObjectCounts.Clear();
             _activeTrialId = -1;
             _trialPlacementReady = false;
