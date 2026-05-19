@@ -8506,7 +8506,7 @@ MonoBehaviour:
   showHumanPreFixationPrompt: 1
   humanPreFixationPromptSeconds: 6
   humanPreFixationTitle: "\u6CE8\u89C6\u6807\u5B9A\u51C6\u5907"
-  humanPreFixationMessage: "\u8BF7\u770B\u5411\u5373\u5C06\u51FA\u73B0\u7684\u7EA2\u8272\n\u6CE8\u89C6\u70B9\uFF0C\u5E76\u4FDD\u6301\u5934\u90E8\u7A33\u5B9A\u3002"
+  humanPreFixationMessage: "\u8BF7\u770B\u5411\u6B63\u524D\u65B9\u5373\u5C06\u51FA\u73B0\u7684\u7EA2\u8272\u6CE8\u89C6\u70B9\uFF0C\u5E76\u4FDD\u6301\u5934\u90E8\u7A33\u5B9A\u3002"
   waitForHumanStartConfirmationAfterFixation: 1
   editorStartKey: 32
   humanStartConfirmationTitle: "\u51C6\u5907\u5F00\u59CB\u6B63\u5F0F\u5B9E\u9A8C"

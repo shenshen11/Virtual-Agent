@@ -38,6 +38,7 @@ namespace VRPerception.Tasks
         private Vector3 _referenceOrigin;
         private Vector3 _referenceForward;
         private float _referenceEyeY;
+        private const int PostAnswerBufferMs = 1000;
 
         public DistanceCompressionTask(TaskRunnerContext ctx)
         {
@@ -255,6 +256,10 @@ namespace VRPerception.Tasks
             }
 
             await Task.Yield();
+            if (_ctx?.runner != null && _ctx.runner.CurrentSubjectMode == SubjectMode.Human)
+            {
+                await Task.Delay(PostAnswerBufferMs, ct);
+            }
         }
 
         public TrialEvaluation Evaluate(TrialSpec trial, LLMResponse response)

@@ -306,7 +306,8 @@ namespace VRPerception.UI
             if (errorHint != null) errorHint.text = string.Empty;
             if (motionGateHint != null) motionGateHint.text = string.Empty;
             if (submitButton != null) submitButton.interactable = true;
-            if (skipButton != null) skipButton.gameObject.SetActive(!_isDistanceAnchorTrial && !isDepthJnd);
+            // Skip is currently disabled via prefab; keep it hidden at runtime.
+            if (skipButton != null) skipButton.gameObject.SetActive(false);
             SetSubmitButtonText(_isDistanceAnchorTrial ? "继续" : null);
 
             if (taskPromptText != null)
@@ -314,8 +315,8 @@ namespace VRPerception.UI
                 if (isDistance && _isDistanceAnchorTrial)
                 {
                     taskPromptText.text = isHorizonCue
-                        ? $"校准试次：当前红色球体的真实距离为 {_currentTrueDistanceM:0.##} 米。\n请观察并记住该距离感，然后点击继续。"
-                        : $"校准试次：当前目标物体的真实距离为 {_currentTrueDistanceM:0.##} 米。\n请观察并记住该距离感，然后点击继续。";
+                        ? $"当前红色球体的真实距离为 {_currentTrueDistanceM:0.##} 米。请观察并记住该距离感，然后点击继续。"
+                        : $"当前目标物体的真实距离为 {_currentTrueDistanceM:0.##} 米。请观察并记住该距离感，然后点击继续。";
                 }
                 else if (isDepthJnd)
                 {
@@ -329,7 +330,7 @@ namespace VRPerception.UI
                 {
                     taskPromptText.text = !string.IsNullOrWhiteSpace(customPrompt)
                         ? customPrompt
-                        : "字母已隐藏。请回忆右侧外周显示的字母；若为 5 字母串，请选择中间目标字母，并设置置信度。";
+                        : "请选择目标字母；若为 5 字母串，请选择正中间字母，并设置置信度。";
                 }
                 else if (isChangeDetection)
                 {
@@ -361,11 +362,11 @@ namespace VRPerception.UI
                 }
                 else if (isColor)
                 {
-                    taskPromptText.text = "请调节球体颜色至您认为的“视觉灰色”，并提交当前 RGB。";
+                    taskPromptText.text = "请调节球体颜色至您认为的“视觉灰色”，并设置置信度。";
                 }
                 else if (isNumerosity)
                 {
-                    taskPromptText.text = "请选择哪一侧点更多，并设置置信度（A=左侧 Left，B=右侧 Right）。";
+                    taskPromptText.text = "请选择哪一侧点更多，并设置置信度。";
                 }
                 else
                 {
@@ -440,12 +441,10 @@ namespace VRPerception.UI
             }
             else if (isVisualWeight && visualWeightToggleGroup != null)
             {
-                if (visualWeightAToggle != null)
-                {
-                    visualWeightAToggle.isOn = true;
-                    if (visualWeightBToggle != null) visualWeightBToggle.isOn = false;
-                    if (visualWeightCToggle != null) visualWeightCToggle.isOn = false;
-                }
+                visualWeightToggleGroup.allowSwitchOff = true;
+                if (visualWeightAToggle != null) visualWeightAToggle.isOn = false;
+                if (visualWeightBToggle != null) visualWeightBToggle.isOn = false;
+                if (visualWeightCToggle != null) visualWeightCToggle.isOn = false;
                 if (visualWeightMaterialToggle != null) visualWeightMaterialToggle.isOn = false;
                 if (visualWeightSizeToggle != null) visualWeightSizeToggle.isOn = false;
                 if (visualWeightLightnessToggle != null) visualWeightLightnessToggle.isOn = false;
@@ -460,11 +459,9 @@ namespace VRPerception.UI
             }
             else if (isDepthJnd && depthJndToggleGroup != null)
             {
-                if (depthJndLeftToggle != null)
-                {
-                    depthJndLeftToggle.isOn = true;
-                    if (depthJndRightToggle != null) depthJndRightToggle.isOn = false;
-                }
+                depthJndToggleGroup.allowSwitchOff = true;
+                if (depthJndLeftToggle != null) depthJndLeftToggle.isOn = false;
+                if (depthJndRightToggle != null) depthJndRightToggle.isOn = false;
             }
         }
 
@@ -716,7 +713,8 @@ namespace VRPerception.UI
             if (depthJndGroup != null) depthJndGroup.SetActive(false);
             if (roughnessGroup != null) roughnessGroup.SetActive(false);
             if (colorGroup != null) colorGroup.SetActive(false);
-            if (skipButton != null) skipButton.gameObject.SetActive(true);
+            // Do not reactivate Skip here; it is intentionally hidden in the prefab.
+            if (skipButton != null) skipButton.gameObject.SetActive(false);
             if (confidenceRatingGroup != null) confidenceRatingGroup.SetActive(true);
             if (distanceInput != null) distanceInput.readOnly = false;
             SetSubmitButtonText(null);
@@ -1213,6 +1211,13 @@ namespace VRPerception.UI
             }
             else if (visualWeightGroup != null && visualWeightGroup.activeSelf)
             {
+                string choice = GetVisualWeightChoice();
+                if (string.IsNullOrEmpty(choice))
+                {
+                    if (errorHint != null) errorHint.text = "请选择看起来更重的物体。";
+                    return;
+                }
+
                 string[] evidenceCues = GetVisualWeightEvidenceCues();
                 if (evidenceCues.Length == 0)
                 {
@@ -1220,7 +1225,7 @@ namespace VRPerception.UI
                     return;
                 }
 
-                PublishVisualWeight(GetVisualWeightChoice(), evidenceCues, confidence, reactionMs);
+                PublishVisualWeight(choice, evidenceCues, confidence, reactionMs);
             }
             else if (visualCrowdingGroup != null && visualCrowdingGroup.activeSelf)
             {
@@ -1244,7 +1249,16 @@ namespace VRPerception.UI
             }
             else if (depthJndGroup != null && depthJndGroup.activeSelf)
             {
-                string closer = depthJndLeftToggle != null && depthJndLeftToggle.isOn ? "A" : "B";
+                string closer = string.Empty;
+                if (depthJndLeftToggle != null && depthJndLeftToggle.isOn) closer = "A";
+                else if (depthJndRightToggle != null && depthJndRightToggle.isOn) closer = "B";
+
+                if (string.IsNullOrEmpty(closer))
+                {
+                    if (errorHint != null) errorHint.text = "请选择看起来更近的物体。";
+                    return;
+                }
+
                 PublishDepthJnd(closer, confidence, reactionMs);
             }
             else if (roughnessGroup != null && roughnessGroup.activeSelf)
@@ -1366,9 +1380,10 @@ namespace VRPerception.UI
 
         private string GetVisualWeightChoice()
         {
+            if (visualWeightAToggle != null && visualWeightAToggle.isOn) return "A";
             if (visualWeightBToggle != null && visualWeightBToggle.isOn) return "B";
             if (visualWeightCToggle != null && visualWeightCToggle.isOn) return "C";
-            return "A";
+            return string.Empty;
         }
 
         private string[] GetVisualWeightEvidenceCues()

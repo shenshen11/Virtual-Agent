@@ -42,7 +42,7 @@ namespace VRPerception.Tasks
         private const float Kappa = 1.4142135f; // sqrt(2)
         private const int ReversalTargetPerGroup = 8;
         private const int ThresholdUseLastReversals = 4;
-        private const int PostAnswerBufferMs = 1500;
+        private const int PostAnswerBufferMs = 1000;
 
         // ---- Runtime staircase state ----
         private float _deltaM = DeltaStartM;
